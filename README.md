@@ -30,9 +30,18 @@ not granted by the license (see `NOTICE`).
 
 You need Docker Engine + Compose and a machine your phones can reach. Then:
 
+**Easiest — let the installer do it:**
+
 ```bash
 ./install.sh          # checks prerequisites, writes .env, brings the stack up
-docker compose up -d  # pulls the prebuilt images and starts everything
+```
+
+**Or copy the ready-made example and run it by hand** — `compose.example.yml` has
+example values inlined (no `.env` needed); just edit them:
+
+```bash
+cp compose.example.yml compose.yml   # then edit SIP_DOMAIN, APP_URL, passwords, APP_KEY, TZ
+docker compose up -d                 # pulls the prebuilt images and starts everything
 ```
 
 `docker compose up` pulls the images from Docker Hub (`hamletdigital/...`) — the
@@ -127,7 +136,8 @@ grep -rn "TODO(wire)" backend/
 
 ## Running it
 
-Clone it anywhere and run the installer:
+Clone it anywhere and run the installer — or copy the example compose
+(`cp compose.example.yml compose.yml`), edit the example values, and `docker compose up -d`:
 
 ```bash
 ./install.sh
@@ -182,7 +192,9 @@ docker run --rm -p 8123:8080 -v "$PWD/backend:/app" -w /app php:8.3-cli-alpine p
 
 `./install.sh` is the easiest path — it picks your LAN address, generates the
 secrets and installs Asterisk's sound prompts. If you'd rather drive Compose
-yourself, do the same things by hand:
+yourself, do the same things by hand. The fastest way is to copy the ready-made
+example (`cp compose.example.yml compose.yml`) and just edit the example values —
+everything here is the same, step by step:
 
 ```bash
 # 1. Clone the repo and get a config file.
