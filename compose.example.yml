@@ -1,7 +1,6 @@
 # TwoCans example compose. Edit the values, then: docker compose up -d
 # (copy with: cp compose.example.yml compose.yml)
 
-
 services:
   asterisk:
     image: andrius/asterisk:22
