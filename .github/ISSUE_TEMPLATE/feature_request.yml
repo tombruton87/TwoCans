@@ -1,0 +1,20 @@
+name: Feature request
+description: Suggest an idea for TwoCans
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement!
+  - type: textarea
+    id: idea
+    attributes:
+      label: The problem or idea
+      description: What are you trying to do, and what would be better?
+    validations:
+      required: true
+  - type: textarea
+    id: alternative
+    attributes:
+      label: Alternatives considered

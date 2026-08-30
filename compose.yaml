@@ -1,0 +1,278 @@
+# twocans — self-hosted phone line for kids.
+#
+# Everything here is relative to this file, so the repo can be cloned anywhere.
+# Machine-specific values live in .env, which install.sh generates.
+#
+# Dockge is optional: it only reads compose files from a directory. Symlink this
+# repo into its stacks folder if you use it, or run `docker compose up -d`.
+
+services:
+  # ---------------------------------------------------------------------------
+  # Asterisk — SIP signalling, RTP media, call rules
+  #
+  # These ports are not negotiable: every SIP client defaults to 5060, and RTP
+  # needs its range. Nothing else on the host may hold them.
+  # ---------------------------------------------------------------------------
+  asterisk:
+    image: andrius/asterisk:22
+    container_name: twocans-asterisk
+    restart: unless-stopped
+    ports:
+      - "${SIP_PORT:-5060}:5060/udp"
+      - "${SIP_PORT:-5060}:5060/tcp"
+      - "${RTP_PORT_START:-10000}-${RTP_PORT_END:-10100}:10000-10100/udp"
+    volumes:
+      - ./docker/asterisk/etc:/etc/asterisk
+      - ./docker/asterisk/cdr:/var/log/asterisk/cdr-csv
+      - ./docker/asterisk/recordings:/var/spool/asterisk/monitor
+      - ./docker/asterisk/voicemail:/var/spool/asterisk/voicemail
+      # "Who were you trying to call?" notes, left when a child dials a number
+      # that isn't on the list. The app reads and deletes them.
+      - ./docker/asterisk/asks:/var/spool/asterisk/asks
+      # Joke audio, read-only. Deliberately not under /var/lib/asterisk or
+      # /var/spool/asterisk — both are named volumes, and nesting a bind mount
+      # inside one is asking for trouble. The dialplan plays it by absolute path.
+      - ./storage/jokes:/var/lib/twocans/jokes:ro
+      - asterisk-lib:/var/lib/asterisk
+      - asterisk-spool:/var/spool/asterisk
+      - asterisk-log:/var/log/asterisk
+    environment:
+      TZ: ${TZ:-Europe/London}
+    networks: [twocans]
+    healthcheck:
+      test: ["CMD", "asterisk", "-rx", "core show version"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # MariaDB
+  #
+  # Not published by default — only the PHP container talks to it. Set
+  # DB_PORT in .env if you want Adminer or a client from another machine.
+  # ---------------------------------------------------------------------------
+  mariadb:
+    image: mariadb:11.4
+    container_name: twocans-mariadb
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?set in .env}
+      MARIADB_DATABASE: ${DB_NAME:-twocans}
+      MARIADB_USER: ${DB_USER:-twocans}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?set in .env}
+      TZ: ${TZ:-Europe/London}
+    volumes:
+      - mariadb-data:/var/lib/mysql
+      - ./docker/mariadb/log:/var/log/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [twocans]
+
+  # ---------------------------------------------------------------------------
+  # PHP-FPM — the web app
+  # ---------------------------------------------------------------------------
+  php:
+    build:
+      context: ./docker/php
+      args:
+        UID: ${HOST_UID:-1000}
+        GID: ${HOST_GID:-1000}
+    image: twocans-php
+    container_name: twocans-php
+    restart: unless-stopped
+    depends_on:
+      mariadb: {condition: service_healthy}
+    environment:
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-twocans}
+      DB_USER: ${DB_USER:-twocans}
+      DB_PASSWORD: ${DB_PASSWORD:?set in .env}
+      # Asterisk control. Reached over the internal network only.
+      ARI_BASE_URL: http://asterisk:8088
+      ARI_USERNAME: ${ARI_USERNAME:-twocans}
+      ARI_PASSWORD: ${ARI_PASSWORD:?set in .env}
+      AMI_HOST: asterisk
+      AMI_PORT: 5038
+      AMI_USERNAME: ${AMI_USERNAME:-twocans}
+      AMI_PASSWORD: ${AMI_PASSWORD:?set in .env}
+      ASTERISK_GENERATED_DIR: /etc/asterisk/generated
+      APP_KEY: ${APP_KEY:?set in .env}
+      # SIP_DOMAIN is the address phones register to and must be the LAN IP —
+      # SIP and RTP do not follow a web hostname. APP_URL is what a browser and
+      # the provisioning QR code use, and may be a domain once TLS is set up.
+      SIP_DOMAIN: ${SIP_DOMAIN:?set in .env}
+      APP_URL: ${APP_URL:?set in .env}
+      DEFAULT_COUNTRY_CODE: ${DEFAULT_COUNTRY_CODE:-44}
+      CDR_CSV_PATH: /var/log/asterisk/cdr-csv/Master.csv
+      RECORDINGS_PATH: /var/spool/asterisk/monitor
+      VOICEMAIL_PATH: /var/spool/asterisk/voicemail
+      ASK_RECORDINGS_PATH: /var/spool/asterisk/asks
+      PHOTO_PATH: /var/lib/twocans/photos
+      JOKES_PATH: /var/lib/twocans/jokes
+      BACKUPS_PATH: /var/lib/twocans/backups
+      WHISPER_URL: http://whisper:9000
+      WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-en}
+      # The once-a-minute dynamic DNS check runs inside this container — see
+      # docker/php/entrypoint.sh for why it is not a service of its own. Set to 0
+      # to stop it; the setup itself lives in the database, not here.
+      DDNS_WATCH: "1"
+      TZ: ${TZ:-Europe/London}
+    volumes:
+      - ./backend:/var/www/html
+      - ./docker/asterisk/etc:/etc/asterisk
+      - ./docker/asterisk/cdr:/var/log/asterisk/cdr-csv:ro
+      # Recordings are writable, not read-only: the retention sweep deletes
+      # expired audio, and only the app knows when a recording is past its
+      # keep-until date. Asterisk still owns writing them.
+      - ./docker/asterisk/recordings:/var/spool/asterisk/monitor
+      - ./docker/asterisk/voicemail:/var/spool/asterisk/voicemail
+      - ./docker/asterisk/asks:/var/spool/asterisk/asks
+      - ./docker/php/log:/var/log/php-fpm
+      - ./storage/photos:/var/lib/twocans/photos
+      - ./storage/jokes:/var/lib/twocans/jokes
+      - ./storage/backups:/var/lib/twocans/backups
+      # Certificate status (read) and certbot requests/results (write) are shared
+      # with the nginx container.
+      - ./docker/nginx/certs:/certs:ro
+      - ./docker/nginx/acme:/acme
+    networks: [twocans]
+
+  # ---------------------------------------------------------------------------
+  # Transcription worker — same image as php-fpm, different command
+  # ---------------------------------------------------------------------------
+  transcriber:
+    image: twocans-php
+    container_name: twocans-transcriber
+    restart: unless-stopped
+    depends_on:
+      mariadb: {condition: service_healthy}
+    command: ["php", "/var/www/html/bin/transcribe.php", "--watch"]
+    environment:
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-twocans}
+      DB_USER: ${DB_USER:-twocans}
+      DB_PASSWORD: ${DB_PASSWORD:?set in .env}
+      RECORDINGS_PATH: /var/spool/asterisk/monitor
+      VOICEMAIL_PATH: /var/spool/asterisk/voicemail
+      ASK_RECORDINGS_PATH: /var/spool/asterisk/asks
+      JOKES_PATH: /var/lib/twocans/jokes
+      WHISPER_URL: http://whisper:9000
+      WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-en}
+      WHISPER_MODEL: ${WHISPER_MODEL:-base}
+      TZ: ${TZ:-Europe/London}
+    volumes:
+      - ./backend:/var/www/html:ro
+      - ./docker/asterisk/recordings:/var/spool/asterisk/monitor:ro
+      - ./docker/asterisk/voicemail:/var/spool/asterisk/voicemail:ro
+      - ./docker/asterisk/asks:/var/spool/asterisk/asks:ro
+      - ./storage/jokes:/var/lib/twocans/jokes:ro
+    networks: [twocans]
+
+  # ---------------------------------------------------------------------------
+  # Whisper — speech to text, on this box only. No published ports.
+  # ---------------------------------------------------------------------------
+  whisper:
+    build:
+      context: ./docker/whisper
+    image: twocans-whisper
+    container_name: twocans-whisper
+    restart: unless-stopped
+    environment:
+      WHISPER_MODEL: ${WHISPER_MODEL:-base}
+      WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-en}
+      WHISPER_COMPUTE_TYPE: int8
+      WHISPER_THREADS: ${WHISPER_THREADS:-4}
+      TZ: ${TZ:-Europe/London}
+    volumes:
+      - whisper-models:/data/whisper
+    cpus: ${WHISPER_CPUS:-4.0}
+    mem_limit: ${WHISPER_MEMORY:-2g}
+    networks: [twocans]
+
+  # ---------------------------------------------------------------------------
+  # nginx — the web UI
+  # ---------------------------------------------------------------------------
+  nginx:
+    build:
+      context: ./docker/nginx
+    image: twocans-nginx
+    container_name: twocans-nginx
+    restart: unless-stopped
+    depends_on: [php]
+    ports:
+      - "${HTTP_PORT:-8083}:80"
+      - "${HTTPS_PORT:-443}:443"
+    environment:
+      # Used only to name the default self-signed certificate; the real one is
+      # requested per-domain through certbot from the web interface.
+      SIP_DOMAIN: ${SIP_DOMAIN:?set in .env}
+      APP_URL: ${APP_URL:?set in .env}
+      TZ: ${TZ:-Europe/London}
+    volumes:
+      - ./backend:/var/www/html:ro
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./docker/nginx/log:/var/log/nginx
+      # Certificates and certbot state are shared with the php container, which
+      # requests certificates and reports their status.
+      - ./docker/nginx/certs:/certs
+      - ./docker/nginx/acme:/acme
+    networks: [twocans]
+    healthcheck:
+      # 127.0.0.1, not localhost: nginx listens on IPv4 only and busybox wget
+      # resolves localhost to ::1 first, which would refuse the connection.
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # Cloudflare Tunnel — the outside world, when the box is behind CGNAT or
+  # double NAT and no amount of port forwarding will reach it.
+  #
+  # cloudflared makes an outbound-only connection to Cloudflare's edge, so
+  # phone.example.com can be served over HTTPS with no inbound ports at all.
+  # Opt-in: set CLOUDFLARE_TUNNEL_TOKEN in .env (from Zero Trust → Tunnels in the
+  # Cloudflare dashboard) then `docker compose --profile tunnel up -d`.
+  # ---------------------------------------------------------------------------
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: twocans-cloudflared
+    restart: unless-stopped
+    profiles: ["tunnel"]
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+      TZ: ${TZ:-Europe/London}
+    networks: [twocans]
+
+  # ---------------------------------------------------------------------------
+  # Adminer — database UI. Opt-in, because it is a second way into everything:
+  #   docker compose --profile tools up -d
+  # ---------------------------------------------------------------------------
+  adminer:
+    image: adminer:5
+    container_name: twocans-adminer
+    restart: unless-stopped
+    profiles: [tools]
+    depends_on: [mariadb]
+    ports:
+      - "${ADMINER_PORT:-8089}:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: mariadb
+    networks: [twocans]
+
+volumes:
+  mariadb-data:
+  whisper-models:
+  asterisk-lib:
+  asterisk-spool:
+  asterisk-log:
+
+networks:
+  twocans:
+    driver: bridge

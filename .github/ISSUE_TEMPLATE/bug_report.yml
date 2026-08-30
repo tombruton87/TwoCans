@@ -1,0 +1,36 @@
+name: Bug report
+description: Report a problem with TwoCans
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. If this is a **security** issue, don't post it
+        publicly — see [SECURITY.md](../../SECURITY.md).
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      description: What version or commit are you running?
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you expect, and what actually happened?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      placeholder: "1. ...\n2. ...\n3. ..."
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: OS, Docker version, phones/ATA involved.

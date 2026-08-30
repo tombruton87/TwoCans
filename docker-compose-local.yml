@@ -1,0 +1,171 @@
+name: twocans-local
+
+services:
+  # ---------------------------------------------------------------------------
+  # Asterisk PBX — PJSIP + ARI + AMI for call control and provisioning
+  # Handles SIP signalling, RTP media, and call enforcement
+  # ---------------------------------------------------------------------------
+  asterisk:
+    image: andrius/asterisk:22
+    container_name: twocans-asterisk
+    restart: unless-stopped
+    ports:
+      - "5060:5060/udp"       # SIP signalling
+      - "5060:5060/tcp"
+      - "8088:8088/tcp"       # ARI HTTP interface for call control
+      - "5038:5038/tcp"       # AMI for provisioning/reloads
+      - "10000-10100:10000-10100/udp"  # RTP media
+    volumes:
+      # Asterisk config - PHP backend writes generated config here
+      - ./docker/asterisk/etc:/etc/asterisk
+      - asterisk-lib:/var/lib/asterisk
+      - asterisk-spool:/var/spool/asterisk
+      - asterisk-log:/var/log/asterisk
+    environment:
+      # Optional: set timezone
+      TZ: Europe/London
+    networks:
+      - twocans
+    healthcheck:
+      test: ["CMD", "asterisk", "-rx", "core show version"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # MariaDB — stores contacts, devices, call logs, rules
+  # ---------------------------------------------------------------------------
+  mariadb:
+    image: mariadb:11.4-alpine
+    container_name: twocans-mariadb
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootsecret}
+      MARIADB_DATABASE: ${DB_NAME:-twocans}
+      MARIADB_USER: ${DB_USER:-twocans}
+      MARIADB_PASSWORD: ${DB_PASSWORD:-twocans}
+      TZ: Europe/London
+    ports:
+      - "3306:3306"
+    volumes:
+      - mariadb-data:/var/lib/mysql
+      # Schema bootstrap
+      - ./docker/mariadb/initdb:/docker-entrypoint-initdb.d
+      # Logs
+      - ./docker/mariadb/log:/var/log/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - twocans
+
+  # ---------------------------------------------------------------------------
+  # PHP-FPM — backend: provisioning, config generation, whitelist enforcement
+  # Provides REST API and web UI
+  # ---------------------------------------------------------------------------
+  php:
+    build:
+      context: ./docker/php
+      dockerfile: Dockerfile
+      args:
+        UID: 1000
+        GID: 1000
+    container_name: twocans-php
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    environment:
+      # Database
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-twocans}
+      DB_USER: ${DB_USER:-twocans}
+      DB_PASSWORD: ${DB_PASSWORD:-twocans}
+      # Asterisk ARI (call control)
+      ARI_BASE_URL: http://asterisk:8088
+      ARI_USERNAME: ${ARI_USERNAME:-twocans}
+      ARI_PASSWORD: ${ARI_PASSWORD:-twocans-ari-secret}
+      # Asterisk AMI (provisioning/reload)
+      AMI_HOST: asterisk
+      AMI_PORT: 5038
+      AMI_USERNAME: ${AMI_USERNAME:-twocans}
+      AMI_PASSWORD: ${AMI_PASSWORD:-twocans-ami-secret}
+      # Where to write generated PJSIP config
+      ASTERISK_GENERATED_DIR: /etc/asterisk/generated
+      # Encrypts the Twilio auth token at rest (trunk.auth_token_enc).
+      APP_KEY: ${APP_KEY:-}
+      # PHP settings
+      PHP_MEMORY_LIMIT: 512M
+      PHP_MAX_EXECUTION_TIME: 300
+    volumes:
+      # Application code - bind mount for live editing
+      - ./backend:/var/www/html
+      # Shared with Asterisk for generated config
+      - ./docker/asterisk/etc:/etc/asterisk
+      # Logs
+      - ./docker/php/log:/var/log/php-fpm
+    networks:
+      - twocans
+
+  # ---------------------------------------------------------------------------
+  # nginx — serves the web UI and REST API
+  # Simple reverse proxy to PHP-FPM
+  # ---------------------------------------------------------------------------
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: twocans-nginx
+    restart: unless-stopped
+    depends_on:
+      - php
+    ports:
+      - "8080:80"
+      # Optionally add 443 if you want to mount TLS certs
+      # - "443:443"
+    volumes:
+      # Application code - read-only for nginx
+      - ./backend:/var/www/html:ro
+      # nginx config
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      # Logs
+      - ./docker/nginx/log:/var/log/nginx
+    networks:
+      - twocans
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # Adminer — lightweight DB UI for dev/admin
+  # Visit http://localhost:8081
+  # ---------------------------------------------------------------------------
+  adminer:
+    image: adminer:5-alpine
+    container_name: twocans-adminer
+    restart: unless-stopped
+    depends_on:
+      - mariadb
+    ports:
+      - "8081:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: mariadb
+    networks:
+      - twocans
+
+volumes:
+  mariadb-data:
+    driver: local
+  asterisk-lib:
+    driver: local
+  asterisk-spool:
+    driver: local
+  asterisk-log:
+    driver: local
+
+networks:
+  twocans:
+    driver: bridge

@@ -1,0 +1,32 @@
+# Machine-specific settings and secrets.
+.env
+
+# Recordings, voicemail and call logs — real conversations between real
+# children. These never belong in a repository.
+docker/asterisk/cdr/*
+docker/asterisk/recordings/*
+docker/asterisk/voicemail/*
+storage/photos/*
+storage/jokes/*
+
+# Backups are the same recordings and photos, plus the database — never commit.
+storage/backups/*
+
+# Generated Asterisk config, written from the database at runtime. The
+# placeholders stay: pjsip.conf and extensions.conf include generated/*.conf,
+# and an include that matches nothing makes Asterisk reject the whole file.
+docker/asterisk/etc/generated/*
+!docker/asterisk/etc/generated/*-00-placeholder.conf
+
+# Logs
+docker/*/log/*
+!docker/*/log/.gitkeep
+
+# TLS keys and certbot account state — the private key and the Let's Encrypt
+# account credentials are secrets and never belong in a repository.
+docker/nginx/certs/*
+docker/nginx/acme/*
+!docker/nginx/acme/.gitkeep
+
+# A copy of the state from before the repo was made portable.
+.backup/
