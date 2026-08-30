@@ -1,12 +1,16 @@
 # EXAMPLE docker-compose for TwoCans.
 #
-# The same stack as compose.yaml, but with EXAMPLE values inlined (no .env)# so you can copy it and run straight away. Edit the values below before you# start — in particular SIP_DOMAIN and APP_URL (your LAN address), the# passwords, APP_KEY (64 hex chars), and TZ.
+# The same stack as compose.yaml, but with EXAMPLE values inlined (no .env) so
+# you can copy it and run straight away. Edit the values below before you start --
+# in particular SIP_DOMAIN and APP_URL (your LAN address), the passwords, APP_KEY
+# (64 hex chars), and TZ.
 #
 #   cp compose.example.yml compose.yml    # then edit, then:
 #   docker compose up -d
 #
 # The web/transcriber/whisper images are pulled from Docker Hub; nothing to build.
 # The optional cloudflared / adminer services are behind --profile tunnel / --profile tools.
+#
 # twocans — self-hosted phone line for kids.
 #
 # Everything here is relative to this file, so the repo can be cloned anywhere.
