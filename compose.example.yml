@@ -1,6 +1,7 @@
 # TwoCans example compose. Edit the values, then: docker compose up -d
 # (copy with: cp compose.example.yml compose.yml)
 
+
 services:
   asterisk:
     image: andrius/asterisk:22
@@ -16,7 +17,7 @@ services:
       - ./docker/asterisk/recordings:/var/spool/asterisk/monitor
       - ./docker/asterisk/voicemail:/var/spool/asterisk/voicemail
       - ./docker/asterisk/asks:/var/spool/asterisk/asks
-      - ./storage/jokes:/var/lib/twocans/jokes:ro
+      - ./storage:/var/lib/twocans:ro
       - asterisk-lib:/var/lib/asterisk
       - asterisk-spool:/var/spool/asterisk
       - asterisk-log:/var/log/asterisk
@@ -94,9 +95,7 @@ services:
       - ./docker/asterisk/asks:/var/spool/asterisk/asks
       - ./docker/php/log:/var/log/php-fpm
       - ./docker/nginx/log:/var/log/nginx
-      - ./storage/photos:/var/lib/twocans/photos
-      - ./storage/jokes:/var/lib/twocans/jokes
-      - ./storage/backups:/var/lib/twocans/backups
+      - ./storage:/var/lib/twocans
       - ./docker/nginx/certs:/certs
       - ./docker/nginx/acme:/acme
       - ./docker/web/nginx.conf:/etc/nginx/http.d/default.conf:ro
@@ -133,7 +132,7 @@ services:
       - ./docker/asterisk/recordings:/var/spool/asterisk/monitor:ro
       - ./docker/asterisk/voicemail:/var/spool/asterisk/voicemail:ro
       - ./docker/asterisk/asks:/var/spool/asterisk/asks:ro
-      - ./storage/jokes:/var/lib/twocans/jokes:ro
+      - ./storage:/var/lib/twocans:ro
     networks: [twocans]
 
   whisper:

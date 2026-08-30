@@ -32,7 +32,7 @@ services:
       # Joke audio, read-only. Deliberately not under /var/lib/asterisk or
       # /var/spool/asterisk — both are named volumes, and nesting a bind mount
       # inside one is asking for trouble. The dialplan plays it by absolute path.
-      - ./storage/jokes:/var/lib/twocans/jokes:ro
+      - ./storage:/var/lib/twocans:ro
       - asterisk-lib:/var/lib/asterisk
       - asterisk-spool:/var/spool/asterisk
       - asterisk-log:/var/log/asterisk
@@ -123,9 +123,7 @@ services:
       - ./docker/asterisk/asks:/var/spool/asterisk/asks
       - ./docker/php/log:/var/log/php-fpm
       - ./docker/nginx/log:/var/log/nginx
-      - ./storage/photos:/var/lib/twocans/photos
-      - ./storage/jokes:/var/lib/twocans/jokes
-      - ./storage/backups:/var/lib/twocans/backups
+      - ./storage:/var/lib/twocans
       # Certificate status (read) and certbot requests/results (write) are shared
       # with the certbot loop inside this same container.
       - ./docker/nginx/certs:/certs
@@ -170,7 +168,7 @@ services:
       - ./docker/asterisk/recordings:/var/spool/asterisk/monitor:ro
       - ./docker/asterisk/voicemail:/var/spool/asterisk/voicemail:ro
       - ./docker/asterisk/asks:/var/spool/asterisk/asks:ro
-      - ./storage/jokes:/var/lib/twocans/jokes:ro
+      - ./storage:/var/lib/twocans:ro
     networks: [twocans]
 
   # ---------------------------------------------------------------------------
