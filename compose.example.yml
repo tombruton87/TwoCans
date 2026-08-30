@@ -1,31 +1,7 @@
-# EXAMPLE docker-compose for TwoCans.
-#
-# The same stack as compose.yaml, but with EXAMPLE values inlined (no .env) so
-# you can copy it and run straight away. Edit the values below before you start --
-# in particular SIP_DOMAIN and APP_URL (your LAN address), the passwords, APP_KEY
-# (64 hex chars), and TZ.
-#
-#   cp compose.example.yml compose.yml    # then edit, then:
-#   docker compose up -d
-#
-# The web/transcriber/whisper images are pulled from Docker Hub; nothing to build.
-# The optional cloudflared / adminer services are behind --profile tunnel / --profile tools.
-#
-# twocans — self-hosted phone line for kids.
-#
-# Everything here is relative to this file, so the repo can be cloned anywhere.
-# Machine-specific values live in .env, which install.sh generates.
-#
-# Dockge is optional: it only reads compose files from a directory. Symlink this
-# repo into its stacks folder if you use it, or run `docker compose up -d`.
+# TwoCans example compose. Edit the values, then: docker compose up -d
+# (copy with: cp compose.example.yml compose.yml)
 
 services:
-  # ---------------------------------------------------------------------------
-  # Asterisk — SIP signalling, RTP media, call rules
-  #
-  # These ports are not negotiable: every SIP client defaults to 5060, and RTP
-  # needs its range. Nothing else on the host may hold them.
-  # ---------------------------------------------------------------------------
   asterisk:
     image: andrius/asterisk:22
     container_name: twocans-asterisk
@@ -39,12 +15,7 @@ services:
       - ./docker/asterisk/cdr:/var/log/asterisk/cdr-csv
       - ./docker/asterisk/recordings:/var/spool/asterisk/monitor
       - ./docker/asterisk/voicemail:/var/spool/asterisk/voicemail
-      # "Who were you trying to call?" notes, left when a child dials a number
-      # that isn't on the list. The app reads and deletes them.
       - ./docker/asterisk/asks:/var/spool/asterisk/asks
-      # Joke audio, read-only. Deliberately not under /var/lib/asterisk or
-      # /var/spool/asterisk — both are named volumes, and nesting a bind mount
-      # inside one is asking for trouble. The dialplan plays it by absolute path.
       - ./storage/jokes:/var/lib/twocans/jokes:ro
       - asterisk-lib:/var/lib/asterisk
       - asterisk-spool:/var/spool/asterisk
@@ -58,12 +29,6 @@ services:
       timeout: 5s
       retries: 3
 
-  # ---------------------------------------------------------------------------
-  # MariaDB
-  #
-  # Not published by default — only the PHP container talks to it. Set
-  # DB_PORT in .env if you want Adminer or a client from another machine.
-  # ---------------------------------------------------------------------------
   mariadb:
     image: mariadb:11.4
     container_name: twocans-mariadb
@@ -84,9 +49,6 @@ services:
       retries: 5
     networks: [twocans]
 
-  # ---------------------------------------------------------------------------
-  # PHP-FPM — the web app
-  # ---------------------------------------------------------------------------
   web:
     image: docker.io/hamletdigital/twocans-web:latest
     container_name: twocans-web
@@ -102,7 +64,6 @@ services:
       DB_NAME: twocans
       DB_USER: twocans
       DB_PASSWORD: change-me
-      # Asterisk control. Reached over the internal network only.
       ARI_BASE_URL: http://asterisk:8088
       ARI_USERNAME: twocans
       ARI_PASSWORD: change-me
@@ -112,9 +73,6 @@ services:
       AMI_PASSWORD: change-me
       ASTERISK_GENERATED_DIR: /etc/asterisk/generated
       APP_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-      # SIP_DOMAIN is the address phones register to and must be the LAN IP —
-      # SIP and RTP do not follow a web hostname. APP_URL is what a browser and
-      # the provisioning QR code use, and may be a domain once TLS is set up.
       SIP_DOMAIN: 192.168.1.10
       APP_URL: http://192.168.1.10:8083
       DEFAULT_COUNTRY_CODE: 44
@@ -139,30 +97,22 @@ services:
       - ./storage/photos:/var/lib/twocans/photos
       - ./storage/jokes:/var/lib/twocans/jokes
       - ./storage/backups:/var/lib/twocans/backups
-      # Certificate status (read) and certbot requests/results (write) are shared
-      # with the certbot loop inside this same container.
       - ./docker/nginx/certs:/certs
       - ./docker/nginx/acme:/acme
       - ./docker/web/nginx.conf:/etc/nginx/http.d/default.conf:ro
     networks: [twocans]
     healthcheck:
-      # 127.0.0.1, not localhost: nginx listens on IPv4 only and busybox wget
-      # resolves localhost to ::1 first, which would refuse the connection.
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/"]
       interval: 10s
       timeout: 5s
       retries: 3
 
-  # ---------------------------------------------------------------------------
-  # Transcription worker — runs the transcribe script from the twocans-web image
-  # ---------------------------------------------------------------------------
   transcriber:
     image: docker.io/hamletdigital/twocans-web:latest
     container_name: twocans-transcriber
     restart: unless-stopped
     depends_on:
       mariadb: {condition: service_healthy}
-    # The app is baked into twocans-web; this worker just runs one script from it.
     entrypoint: ["php"]
     command: ["/var/www/html/bin/transcribe.php", "--watch"]
     environment:
@@ -186,9 +136,6 @@ services:
       - ./storage/jokes:/var/lib/twocans/jokes:ro
     networks: [twocans]
 
-  # ---------------------------------------------------------------------------
-  # Whisper — speech to text, on this box only. No published ports.
-  # ---------------------------------------------------------------------------
   whisper:
     image: docker.io/hamletdigital/twocans-whisper:latest
     container_name: twocans-whisper
@@ -205,15 +152,6 @@ services:
     mem_limit: 2g
     networks: [twocans]
 
-  # ---------------------------------------------------------------------------
-  # Cloudflare Tunnel — the outside world, when the box is behind CGNAT or
-  # double NAT and no amount of port forwarding will reach it.
-  #
-  # cloudflared makes an outbound-only connection to Cloudflare's edge, so
-  # phone.example.com can be served over HTTPS with no inbound ports at all.
-  # Opt-in: set CLOUDFLARE_TUNNEL_TOKEN in .env (from Zero Trust → Tunnels in the
-  # Cloudflare dashboard) then `docker compose --profile tunnel up -d`.
-  # ---------------------------------------------------------------------------
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: twocans-cloudflared
@@ -225,10 +163,6 @@ services:
       TZ: Europe/London
     networks: [twocans]
 
-  # ---------------------------------------------------------------------------
-  # Adminer — database UI. Opt-in, because it is a second way into everything:
-  #   docker compose --profile tools up -d
-  # ---------------------------------------------------------------------------
   adminer:
     image: adminer:5
     container_name: twocans-adminer
