@@ -30,20 +30,20 @@ status: ## Show container health
 	$(COMPOSE) ps
 
 migrate: ## Apply database schema changes (safe to re-run)
-	$(COMPOSE) exec php php /var/www/html/bin/migrate.php
+	$(COMPOSE) exec web php /var/www/html/bin/migrate.php
 
 password: ## Set/reset a guardian password (prompts): make password EMAIL=you@home.co
 	@test -n "$(EMAIL)" || (echo "Usage: make password EMAIL=you@home.co" >&2; exit 1)
-	$(COMPOSE) exec -it php php /var/www/html/bin/set-password.php "$(EMAIL)"
+	$(COMPOSE) exec -it web php /var/www/html/bin/set-password.php "$(EMAIL)"
 
 passwords: ## List guardians and whether each has a password
-	$(COMPOSE) exec php php /var/www/html/bin/set-password.php --list
+	$(COMPOSE) exec web php /var/www/html/bin/set-password.php --list
 
 backup: ## Create a backup of the database, recordings and photos
-	$(COMPOSE) exec php php /var/www/html/bin/backup.php
+	$(COMPOSE) exec web php /var/www/html/bin/backup.php
 
 backups: ## List existing backups
-	$(COMPOSE) exec php php /var/www/html/bin/backup.php --list
+	$(COMPOSE) exec web php /var/www/html/bin/backup.php --list
 
 clean: ## Stop and remove the stack's containers (volumes are kept)
 	$(COMPOSE) down --remove-orphans

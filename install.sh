@@ -246,10 +246,10 @@ done
 
 install_sounds
 
-docker compose exec -T php php /var/www/html/bin/migrate.php
+docker compose exec -T web php /var/www/html/bin/migrate.php
 # Writes SIP transports carrying this machine's address. Transports are not
 # reloadable, so Asterisk is restarted rather than reloaded.
-docker compose exec -T php php /var/www/html/bin/apply-config.php || true
+docker compose exec -T web php /var/www/html/bin/apply-config.php || true
 docker compose restart asterisk >/dev/null
 
 echo
@@ -259,5 +259,5 @@ echo "    Open ${bold}${APP_URL}${off} and create your account."
 echo
 echo "    Phones register to ${bold}${SIP_DOMAIN}${off} and must be on the same"
 echo "    network. Check everything is talking with:"
-echo "      docker compose exec php php /var/www/html/bin/check-asterisk.php"
+echo "      docker compose exec web php /var/www/html/bin/check-asterisk.php"
 echo

@@ -59,11 +59,11 @@ instead of a login screen — that creates the household Owner. After that:
 
 ```bash
 # apply schema changes (safe to re-run)
-docker exec twocans-php php /var/www/html/bin/migrate.php
+docker exec twocans-web php /var/www/html/bin/migrate.php
 
 # set or reset a password (recovery path, and how invited guardians get one)
-docker exec -it twocans-php php /var/www/html/bin/set-password.php you@home.co
-docker exec twocans-php php /var/www/html/bin/set-password.php --list
+docker exec -it twocans-web php /var/www/html/bin/set-password.php you@home.co
+docker exec twocans-web php /var/www/html/bin/set-password.php --list
 ```
 
 The Twilio auth token is encrypted at rest with `APP_KEY` (a 64-hex-char
@@ -173,6 +173,40 @@ To iterate on the PHP without the full stack:
 docker run --rm -p 8123:8080 -v "$PWD/backend:/app" -w /app php:8.3-cli-alpine php -S 0.0.0.0:8080 -t /app
 ```
 
+### Run with Docker Compose by hand (no installer)
+
+`./install.sh` is the easiest path — it picks your LAN address, generates the
+secrets and installs Asterisk's sound prompts. If you'd rather drive Compose
+yourself, do the same things by hand:
+
+```bash
+# 1. Clone the repo and get a config file.
+git clone https://github.com/tombruton87/TwoCans.git && cd TwoCans
+cp .env.example .env
+
+# 2. Edit .env before it will start. At minimum set:
+#      SIP_DOMAIN  — the address phones register to (your LAN IP)
+#      APP_URL     — http://<SIP_DOMAIN>:<HTTP_PORT>
+#      HTTP_PORT   — the web port nginx publishes (default 8083)
+#      DB_PASSWORD, DB_ROOT_PASSWORD, ARI_PASSWORD, AMI_PASSWORD, APP_KEY
+#        — generate each with:  php -r "echo bin2hex(random_bytes(16)), PHP_EOL;"
+
+# 3. Build and start the whole stack.
+docker compose up -d --build
+
+# 4. Apply the schema, write the SIP transports, then reload Asterisk.
+docker compose exec web php /var/www/html/bin/migrate.php
+docker compose exec web php /var/www/html/bin/apply-config.php
+docker compose restart asterisk
+```
+
+Then open `$APP_URL` (default http://192.168.1.10:8083) and create your account.
+
+> **Sound prompts:** Compose alone does not install Asterisk's English prompt
+> files, so spoken prompts and group-call announcements stay silent until they
+> are added. `./install.sh` fetches them; you can run it later on top of an
+> existing `.env` to pick them up. Calls still connect without them.
+
 ### Moving it to another machine
 
 Copy the repo, copy `.env`, and change `SIP_DOMAIN` and `APP_URL` to the new
@@ -180,7 +214,7 @@ address. Then:
 
 ```bash
 docker compose up -d
-docker compose exec php php /var/www/html/bin/apply-config.php
+docker compose exec web php /var/www/html/bin/apply-config.php
 docker compose restart asterisk
 ```
 
@@ -214,8 +248,9 @@ backend/                     nginx docroot (bind-mounted, edit live)
                              transcribe (the worker), sip-register-test
 
 docker/
+  web/                       nginx + PHP-FPM in one container (the web server)
   nginx/default.conf         only index.php executes; src/ and views/ are denied
-  php/                       Dockerfile, php.ini, www.conf (FPM pool)
+  php/                       Dockerfile, php.ini, www.conf — builds the transcriber
   whisper/                   faster-whisper image, ~720MB, no GPU needed
   asterisk/etc/              hand-written config; generated/ is written at runtime
 
@@ -273,7 +308,7 @@ auto-provisioning, which isn't built.
 
 ```bash
 # prove a device's credentials work without touching a phone
-docker exec twocans-php php /var/www/html/bin/sip-register-test.php 101
+docker exec twocans-web php /var/www/html/bin/sip-register-test.php 101
 ```
 
 > **Docker networking matters here.** Asterisk sits on a bridge network (172.x)
@@ -298,7 +333,7 @@ OpenAI reference engine — PyTorch plus CUDA libraries — alongside faster-whi
 and picks at runtime. With no GPU here, none of that is ever used.
 
 ```bash
-docker exec twocans-php php /var/www/html/bin/transcribe.php   # one pass, by hand
+docker exec twocans-web php /var/www/html/bin/transcribe.php   # one pass, by hand
 docker logs -f twocans-transcriber                             # watch the worker
 ```
 
@@ -372,10 +407,10 @@ as, and a re-added folder is recognised for what it is.
 
 ```bash
 # bring in a folder of audio files all at once; repeats are skipped
-docker compose exec php php /var/www/html/bin/import-jokes.php /path/to/folder
+docker compose exec web php /var/www/html/bin/import-jokes.php /path/to/folder
 
 # one-off, for jokes added before dedupe existed
-docker compose exec php php /var/www/html/bin/backfill-joke-hashes.php
+docker compose exec web php /var/www/html/bin/backfill-joke-hashes.php
 ```
 
 ## Asks to call
@@ -469,10 +504,10 @@ knows when one is past its keep-until date.
 
 ```bash
 # see what would go, without doing it
-docker compose exec php php /var/www/html/bin/retention.php
+docker compose exec web php /var/www/html/bin/retention.php
 
 # sweep right now
-docker compose exec php php /var/www/html/bin/retention.php --run
+docker compose exec web php /var/www/html/bin/retention.php --run
 ```
 
 ## Listening in
@@ -500,7 +535,7 @@ that gap rather than depend on the call ending normally.
 ## Checking Asterisk
 
 ```bash
-docker exec twocans-php php /var/www/html/bin/check-asterisk.php
+docker exec twocans-web php /var/www/html/bin/check-asterisk.php
 ```
 
 Verifies, from inside the PHP container and using the app's own env vars: ARI
@@ -532,11 +567,11 @@ world finds you"*:
   and an API token; it verifies the token, creates or adopts the record, and
   keeps it right. Skip this if you use another DDNS provider or have a static IP.
 
-The check runs **inside the app's own container**, once a minute — not in a
+The check runs **inside the app's own web container**, once a minute — not in a
 second container and not in cron, so there is nothing extra to install. Each
 pass is a fresh short-lived PHP process; a wedged run costs one minute, not a
-service. Logs go to `docker/php/log/ddns.log` and `docker logs twocans-php`.
-`DDNS_WATCH=0` in the `php` service's environment turns the checks off.
+service. It is supervised alongside PHP-FPM and nginx, and its logs go to
+`docker/php/log/ddns.log` and `docker logs twocans-web`.
 
 For the Cloudflare option, the token needs the bare minimum, scoped to the one zone:
 
@@ -551,9 +586,9 @@ used for nothing else.
 From the command line:
 
 ```bash
-docker exec twocans-php php /var/www/html/bin/ddns.php --status    # what is stored
-docker exec twocans-php php /var/www/html/bin/ddns.php             # check once
-docker exec twocans-php php /var/www/html/bin/ddns.php --force     # check, ignoring the guard
+docker exec twocans-web php /var/www/html/bin/ddns.php --status    # what is stored
+docker exec twocans-web php /var/www/html/bin/ddns.php             # check once
+docker exec twocans-web php /var/www/html/bin/ddns.php --force     # check, ignoring the guard
 ```
 
 Things worth knowing before you rely on it:
@@ -588,7 +623,7 @@ browsers show a warning until a real certificate is installed.
 
 To replace it, open **Phone line → "Where the outside world finds you" → HTTPS
 certificate** and press **Get a Let's Encrypt certificate**. That runs certbot
-inside the nginx container against the external address, installs the issued
+inside the app's web container against the external address, installs the issued
 certificate, and reloads nginx. It proves ownership with a **DNS-01** challenge
 through the Cloudflare token (so no inbound port 80 is needed), plus the name
 already pointing at this box, which the dynamic DNS step above sets up.
@@ -629,7 +664,7 @@ remaining gap is integration coverage against a real Asterisk and provider.
 Run them inside the php container:
 
 ```bash
-docker compose exec php php /var/www/html/bin/test.php
+docker compose exec web php /var/www/html/bin/test.php
 ```
 
 A tiny runner (`bin/test.php`, no PHPUnit, matching the project's no-build-step
@@ -652,8 +687,8 @@ Backups bundle the database plus every recording, voicemail, photo and joke
 into one tarball in `storage/backups/`:
 
 ```bash
-docker compose exec php php /var/www/html/bin/backup.php          # create
-docker compose exec php php /var/www/html/bin/backup.php --list
+docker compose exec web php /var/www/html/bin/backup.php          # create
+docker compose exec web php /var/www/html/bin/backup.php --list
 ```
 
 Restore is Owner-only. From the System screen, pick the downloaded `.tgz` and
@@ -662,8 +697,8 @@ enforced server-side, and a safety dump of the current database is written
 before anything is touched. The command-line form is also available:
 
 ```bash
-docker compose exec php php /var/www/html/bin/restore.php --dry-run twocans-….tgz
-docker compose exec php php /var/www/html/bin/restore.php twocans-….tgz
+docker compose exec web php /var/www/html/bin/restore.php --dry-run twocans-….tgz
+docker compose exec web php /var/www/html/bin/restore.php twocans-….tgz
 ```
 
 A backup only restores onto a box with the same `APP_KEY`: the trunk and DDNS
@@ -686,8 +721,8 @@ The notifier runs inside the php container once a minute, alongside the dynamic
 DNS check:
 
 ```bash
-docker compose exec php php /var/www/html/bin/notify.php --status
-docker compose exec php php /var/www/html/bin/notify.php          # run once
+docker compose exec web php /var/www/html/bin/notify.php --status
+docker compose exec web php /var/www/html/bin/notify.php          # run once
 ```
 
 Each event is emailed only once: new asks are watermarked, offline detection

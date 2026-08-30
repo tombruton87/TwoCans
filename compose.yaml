@@ -74,17 +74,20 @@ services:
   # ---------------------------------------------------------------------------
   # PHP-FPM — the web app
   # ---------------------------------------------------------------------------
-  php:
+  web:
     build:
-      context: ./docker/php
+      context: ./docker/web
       args:
         UID: ${HOST_UID:-1000}
         GID: ${HOST_GID:-1000}
-    image: twocans-php
-    container_name: twocans-php
+    image: twocans-web
+    container_name: twocans-web
     restart: unless-stopped
     depends_on:
       mariadb: {condition: service_healthy}
+    ports:
+      - "${HTTP_PORT:-8083}:80"
+      - "${HTTPS_PORT:-443}:443"
     environment:
       DB_HOST: mariadb
       DB_PORT: 3306
@@ -116,35 +119,39 @@ services:
       BACKUPS_PATH: /var/lib/twocans/backups
       WHISPER_URL: http://whisper:9000
       WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-en}
-      # The once-a-minute dynamic DNS check runs inside this container — see
-      # docker/php/entrypoint.sh for why it is not a service of its own. Set to 0
-      # to stop it; the setup itself lives in the database, not here.
-      DDNS_WATCH: "1"
       TZ: ${TZ:-Europe/London}
     volumes:
       - ./backend:/var/www/html
       - ./docker/asterisk/etc:/etc/asterisk
       - ./docker/asterisk/cdr:/var/log/asterisk/cdr-csv:ro
-      # Recordings are writable, not read-only: the retention sweep deletes
-      # expired audio, and only the app knows when a recording is past its
-      # keep-until date. Asterisk still owns writing them.
       - ./docker/asterisk/recordings:/var/spool/asterisk/monitor
       - ./docker/asterisk/voicemail:/var/spool/asterisk/voicemail
       - ./docker/asterisk/asks:/var/spool/asterisk/asks
       - ./docker/php/log:/var/log/php-fpm
+      - ./docker/nginx/log:/var/log/nginx
       - ./storage/photos:/var/lib/twocans/photos
       - ./storage/jokes:/var/lib/twocans/jokes
       - ./storage/backups:/var/lib/twocans/backups
       # Certificate status (read) and certbot requests/results (write) are shared
-      # with the nginx container.
-      - ./docker/nginx/certs:/certs:ro
+      # with the certbot loop inside this same container.
+      - ./docker/nginx/certs:/certs
       - ./docker/nginx/acme:/acme
+      - ./docker/web/nginx.conf:/etc/nginx/http.d/default.conf:ro
     networks: [twocans]
+    healthcheck:
+      # 127.0.0.1, not localhost: nginx listens on IPv4 only and busybox wget
+      # resolves localhost to ::1 first, which would refuse the connection.
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   # ---------------------------------------------------------------------------
-  # Transcription worker — same image as php-fpm, different command
+  # Transcription worker — starts from its own PHP image, different command
   # ---------------------------------------------------------------------------
   transcriber:
+    build:
+      context: ./docker/php
     image: twocans-php
     container_name: twocans-transcriber
     restart: unless-stopped
@@ -193,42 +200,6 @@ services:
     cpus: ${WHISPER_CPUS:-4.0}
     mem_limit: ${WHISPER_MEMORY:-2g}
     networks: [twocans]
-
-  # ---------------------------------------------------------------------------
-  # nginx — the web UI
-  # ---------------------------------------------------------------------------
-  nginx:
-    build:
-      context: ./docker/nginx
-    image: twocans-nginx
-    container_name: twocans-nginx
-    restart: unless-stopped
-    depends_on: [php]
-    ports:
-      - "${HTTP_PORT:-8083}:80"
-      - "${HTTPS_PORT:-443}:443"
-    environment:
-      # Used only to name the default self-signed certificate; the real one is
-      # requested per-domain through certbot from the web interface.
-      SIP_DOMAIN: ${SIP_DOMAIN:?set in .env}
-      APP_URL: ${APP_URL:?set in .env}
-      TZ: ${TZ:-Europe/London}
-    volumes:
-      - ./backend:/var/www/html:ro
-      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./docker/nginx/log:/var/log/nginx
-      # Certificates and certbot state are shared with the php container, which
-      # requests certificates and reports their status.
-      - ./docker/nginx/certs:/certs
-      - ./docker/nginx/acme:/acme
-    networks: [twocans]
-    healthcheck:
-      # 127.0.0.1, not localhost: nginx listens on IPv4 only and busybox wget
-      # resolves localhost to ::1 first, which would refuse the connection.
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
 
   # ---------------------------------------------------------------------------
   # Cloudflare Tunnel — the outside world, when the box is behind CGNAT or

@@ -19,7 +19,7 @@ make up
 make migrate
 
 # run the PHP test suite
-docker compose exec php php /var/www/html/bin/test.php
+docker compose exec web php /var/www/html/bin/test.php
 ```
 
 (see `make help` for the rest)
