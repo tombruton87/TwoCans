@@ -6,13 +6,16 @@
 COMPOSE := docker compose
 -include .env
 
-.PHONY: help install up down restart logs status migrate password passwords backup backups clean
+.PHONY: help install build up down restart logs status migrate password passwords backup backups clean
 
 help: ## List available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-11s\033[0m %s\n", $$1, $$2}'
 
 install: ## First-time setup: check prerequisites, write .env, then start
 	./install.sh
+
+build: ## Build the twocans images from source and start the stack
+	$(COMPOSE) -f compose.yaml -f compose.build.yml up -d --build
 
 up: ## Start the whole stack (keeps your data)
 	$(COMPOSE) up -d

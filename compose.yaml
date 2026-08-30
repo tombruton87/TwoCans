@@ -75,12 +75,7 @@ services:
   # PHP-FPM — the web app
   # ---------------------------------------------------------------------------
   web:
-    build:
-      context: ./docker/web
-      args:
-        UID: ${HOST_UID:-1000}
-        GID: ${HOST_GID:-1000}
-    image: twocans-web
+    image: docker.io/hamletdigital/twocans-web:latest
     container_name: twocans-web
     restart: unless-stopped
     depends_on:
@@ -150,9 +145,7 @@ services:
   # Transcription worker — starts from its own PHP image, different command
   # ---------------------------------------------------------------------------
   transcriber:
-    build:
-      context: ./docker/php
-    image: twocans-php
+    image: docker.io/hamletdigital/twocans-php:latest
     container_name: twocans-transcriber
     restart: unless-stopped
     depends_on:
@@ -184,9 +177,7 @@ services:
   # Whisper — speech to text, on this box only. No published ports.
   # ---------------------------------------------------------------------------
   whisper:
-    build:
-      context: ./docker/whisper
-    image: twocans-whisper
+    image: docker.io/hamletdigital/twocans-whisper:latest
     container_name: twocans-whisper
     restart: unless-stopped
     environment:

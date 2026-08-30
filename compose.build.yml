@@ -1,0 +1,24 @@
+# ---------------------------------------------------------------------------
+# Override to BUILD the twocans images from source instead of pulling the
+# prebuilt ones from Docker Hub. Merge it with the main compose file:
+#
+#   docker compose -f compose.yaml -f compose.build.yml up -d --build
+#   # or:  make build
+#
+# The base file keeps `image:` (the published tag); this file adds `build:` so
+# `docker compose` builds the images and re-tags them with that same name.
+# ---------------------------------------------------------------------------
+
+services:
+  web:
+    build:
+      context: ./docker/web
+      args:
+        UID: ${HOST_UID:-1000}
+        GID: ${HOST_GID:-1000}
+  transcriber:
+    build:
+      context: ./docker/php
+  whisper:
+    build:
+      context: ./docker/whisper

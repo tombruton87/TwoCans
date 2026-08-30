@@ -32,8 +32,12 @@ You need Docker Engine + Compose and a machine your phones can reach. Then:
 
 ```bash
 ./install.sh          # checks prerequisites, writes .env, brings the stack up
-docker compose up -d  # (or `make up`) once you already have a .env
+docker compose up -d  # pulls the prebuilt images and starts everything
 ```
+
+The custom images (`twocans-web`, `twocans-php`, `twocans-whisper`) are pulled
+from Docker Hub (`hamletdigital/...`). To build them from source instead, use
+`make build` (or `docker compose -f compose.yaml -f compose.build.yml up -d --build`).
 
 Open the URL it prints and complete **first-run setup** to create the household
 Owner. Then add a phone via its provisioning QR code and make a test call. See
@@ -191,8 +195,10 @@ cp .env.example .env
 #      DB_PASSWORD, DB_ROOT_PASSWORD, ARI_PASSWORD, AMI_PASSWORD, APP_KEY
 #        — generate each with:  php -r "echo bin2hex(random_bytes(16)), PHP_EOL;"
 
-# 3. Build and start the whole stack.
-docker compose up -d --build
+# 3. Pull the published images and start the whole stack.
+docker compose up -d
+
+#    (or build from source:  docker compose -f compose.yaml -f compose.build.yml up -d --build)
 
 # 4. Apply the schema, write the SIP transports, then reload Asterisk.
 docker compose exec web php /var/www/html/bin/migrate.php
