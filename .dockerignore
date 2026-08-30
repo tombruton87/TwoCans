@@ -1,0 +1,16 @@
+# Build context for the twocans image(s). The app image builds from the repo
+# root (so it can COPY backend/), and every file here is sent to the Docker
+# build daemon. Keep secrets, recordings and runtime data out of that.
+.git
+.env
+.env.*
+!.env.example
+.backup/
+storage/
+docker-compose-local.yml
+docker/asterisk/
+docker/nginx/certs/
+docker/nginx/acme/
+docker/nginx/log/
+docker/php/log/
+docker/mariadb/log/

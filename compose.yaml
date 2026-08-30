@@ -116,7 +116,6 @@ services:
       WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-en}
       TZ: ${TZ:-Europe/London}
     volumes:
-      - ./backend:/var/www/html
       - ./docker/asterisk/etc:/etc/asterisk
       - ./docker/asterisk/cdr:/var/log/asterisk/cdr-csv:ro
       - ./docker/asterisk/recordings:/var/spool/asterisk/monitor
@@ -142,15 +141,17 @@ services:
       retries: 3
 
   # ---------------------------------------------------------------------------
-  # Transcription worker — starts from its own PHP image, different command
+  # Transcription worker — runs the transcribe script from the twocans-web image
   # ---------------------------------------------------------------------------
   transcriber:
-    image: docker.io/hamletdigital/twocans-php:latest
+    image: docker.io/hamletdigital/twocans-web:latest
     container_name: twocans-transcriber
     restart: unless-stopped
     depends_on:
       mariadb: {condition: service_healthy}
-    command: ["php", "/var/www/html/bin/transcribe.php", "--watch"]
+    # The app is baked into twocans-web; this worker just runs one script from it.
+    entrypoint: ["php"]
+    command: ["/var/www/html/bin/transcribe.php", "--watch"]
     environment:
       DB_HOST: mariadb
       DB_PORT: 3306
@@ -166,7 +167,6 @@ services:
       WHISPER_MODEL: ${WHISPER_MODEL:-base}
       TZ: ${TZ:-Europe/London}
     volumes:
-      - ./backend:/var/www/html:ro
       - ./docker/asterisk/recordings:/var/spool/asterisk/monitor:ro
       - ./docker/asterisk/voicemail:/var/spool/asterisk/voicemail:ro
       - ./docker/asterisk/asks:/var/spool/asterisk/asks:ro

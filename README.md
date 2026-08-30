@@ -35,9 +35,10 @@ You need Docker Engine + Compose and a machine your phones can reach. Then:
 docker compose up -d  # pulls the prebuilt images and starts everything
 ```
 
-The custom images (`twocans-web`, `twocans-php`, `twocans-whisper`) are pulled
-from Docker Hub (`hamletdigital/...`). To build them from source instead, use
-`make build` (or `docker compose -f compose.yaml -f compose.build.yml up -d --build`).
+`docker compose up` pulls the images from Docker Hub (`hamletdigital/...`) — the
+whole app is baked into `twocans-web`, so there is nothing to build or pull by
+hand. To rebuild them from source (e.g. after editing the code), use `make build`
+(or `docker compose -f compose.yaml -f compose.build.yml up -d --build`).
 
 Open the URL it prints and complete **first-run setup** to create the household
 Owner. Then add a phone via its provisioning QR code and make a test call. See
@@ -230,29 +231,30 @@ leaves the old address in place and audio goes to the wrong host.
 
 ## Containers
 
-The stack is a handful of small containers, each doing one job. The three built
-from this repo are published on Docker Hub as `hamletdigital/...`; the rest are
-stock upstream images pulled as-is.
+The stack is a handful of small containers, each doing one job. Two are built
+from this repo and published on Docker Hub as `hamletdigital/...`; the rest are
+stock upstream images pulled as-is. The whole app is baked into `twocans-web`, so
+the `web` container is self-contained.
 
 | Service | Image | What it does |
 | --- | --- | --- |
 | `web` | `hamletdigital/twocans-web` *(built)* | The web server: **nginx + PHP-FPM in one container**. Serves the UI over HTTP and HTTPS, renders PHP, generates a self-signed cert on first start, runs certbot for a real Let's Encrypt certificate, and the once-a-minute dynamic-DNS check. Everything a browser talks to. |
-| `transcriber` | `hamletdigital/twocans-php` *(built)* | A worker that watches for new recordings and asks Whisper to transcribe them. |
+| `transcriber` | `hamletdigital/twocans-web` *(built)* | A worker that runs `bin/transcribe.php` from the same web image — watches for new recordings and asks Whisper to transcribe them. |
 | `whisper` | `hamletdigital/twocans-whisper` *(built)* | Speech-to-text, on this box only — audio never leaves it. |
 | `asterisk` | `andrius/asterisk:22` | The PBX: SIP signalling, RTP media and the dialplan that allows or blocks each call. Publishes `5060` (UDP+TCP) and the RTP port range. |
 | `mariadb` | `mariadb:11.4` | All of the app's data — guardians, phones, contacts, call log, voicemail notes, settings. Not published to the host. |
 | `cloudflared` | `cloudflare/cloudflared:latest` | Optional. An outbound-only Cloudflare Tunnel so the outside world can reach the web UI even behind CGNAT or double NAT. `docker compose --profile tunnel up -d`. |
 | `adminer` | `adminer:5` | Optional. A database browser (and a second unauthenticated-by-default way into every call record — keep it off unless you need it). `docker compose --profile tools up -d`. |
 
-**Build vs. pull:** by default Compose **pulls** the three built images, so there
-is no compile step. To rebuild them from source — for example, if your host
-user's UID isn't 1000 — run `make build` (or
-`docker compose -f compose.yaml -f compose.build.yml up -d --build`).
+**Build vs. pull:** by default Compose **pulls** the built images, so there is no
+compile step and the app is already in the container. To rebuild — for example,
+after editing the PHP code, or if your host user's UID isn't 1000 — run
+`make build` (or `docker compose -f compose.yaml -f compose.build.yml up -d --build`).
 
 ## Layout
 
 ```
-backend/                     nginx docroot (bind-mounted, edit live)
+backend/                     app source (baked into twocans-web at build time)
   index.php                  front controller — routes ?screen=… and dispatches POSTs
   src/
     bootstrap.php            session, timezone, requires
@@ -277,7 +279,7 @@ backend/                     nginx docroot (bind-mounted, edit live)
 docker/
   web/                       nginx + PHP-FPM in one container (the web server)
   nginx/default.conf         only index.php executes; src/ and views/ are denied
-  php/                       Dockerfile, php.ini, www.conf — builds the transcriber
+  php/                       Dockerfile, php.ini, www.conf — legacy worker image (unused by compose.yaml)
   whisper/                   faster-whisper image, ~720MB, no GPU needed
   asterisk/etc/              hand-written config; generated/ is written at runtime
 

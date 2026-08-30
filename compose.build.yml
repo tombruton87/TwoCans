@@ -7,18 +7,18 @@
 #
 # The base file keeps `image:` (the published tag); this file adds `build:` so
 # `docker compose` builds the images and re-tags them with that same name.
+# The web image builds from the repo root (context `.`) because the app code in
+# backend/ is baked into it; a root `.dockerignore` keeps secrets out of the build.
 # ---------------------------------------------------------------------------
 
 services:
   web:
     build:
-      context: ./docker/web
+      context: .
+      dockerfile: docker/web/Dockerfile
       args:
         UID: ${HOST_UID:-1000}
         GID: ${HOST_GID:-1000}
-  transcriber:
-    build:
-      context: ./docker/php
   whisper:
     build:
       context: ./docker/whisper

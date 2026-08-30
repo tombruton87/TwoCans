@@ -25,12 +25,17 @@ RUN addgroup -g "${GID}" twocans 2>/dev/null || true \
  && mkdir -p /var/log/php-fpm /var/log/nginx \
  && chown -R "${UID}:${GID}" /var/log/php-fpm
 
-COPY php.ini /usr/local/etc/php/conf.d/zz-twocans.ini
-COPY www.conf /usr/local/etc/php-fpm.d/zz-twocans.conf
-COPY nginx.conf /etc/nginx/http.d/default.conf
-COPY supervisord.conf /etc/supervisord.conf
-COPY entrypoint.sh loop-ddns.sh loop-certbot.sh /usr/local/bin/
+COPY docker/web/php.ini /usr/local/etc/php/conf.d/zz-twocans.ini
+COPY docker/web/www.conf /usr/local/etc/php-fpm.d/zz-twocans.conf
+COPY docker/web/nginx.conf /etc/nginx/http.d/default.conf
+COPY docker/web/supervisord.conf /etc/supervisord.conf
+COPY docker/web/entrypoint.sh docker/web/loop-ddns.sh docker/web/loop-certbot.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/loop-ddns.sh /usr/local/bin/loop-certbot.sh
+
+# The two-cans web app itself, baked into the image so the container is
+# self-contained (build context is the repo root). Read-only at runtime; all
+# app data lives in the mounted volumes.
+COPY backend/ /var/www/html
 
 WORKDIR /var/www/html
 
