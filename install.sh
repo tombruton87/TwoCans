@@ -234,8 +234,8 @@ ok "data directories ready"
 
 # ------------------------------------------------------------------- bring up
 echo
-echo "${bold}Starting${off} (first run builds images — this takes a few minutes)"
-docker compose up -d --build
+echo "${bold}Starting${off} (first run pulls the prebuilt images)"
+docker compose up -d
 
 echo
 echo "  waiting for the database…"

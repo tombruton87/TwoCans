@@ -228,6 +228,27 @@ The restart is not optional: `apply-config.php` rewrites the SIP transports,
 which carry `SIP_DOMAIN`, and **transports are not reloadable** — a reload
 leaves the old address in place and audio goes to the wrong host.
 
+## Containers
+
+The stack is a handful of small containers, each doing one job. The three built
+from this repo are published on Docker Hub as `hamletdigital/...`; the rest are
+stock upstream images pulled as-is.
+
+| Service | Image | What it does |
+| --- | --- | --- |
+| `web` | `hamletdigital/twocans-web` *(built)* | The web server: **nginx + PHP-FPM in one container**. Serves the UI over HTTP and HTTPS, renders PHP, generates a self-signed cert on first start, runs certbot for a real Let's Encrypt certificate, and the once-a-minute dynamic-DNS check. Everything a browser talks to. |
+| `transcriber` | `hamletdigital/twocans-php` *(built)* | A worker that watches for new recordings and asks Whisper to transcribe them. |
+| `whisper` | `hamletdigital/twocans-whisper` *(built)* | Speech-to-text, on this box only — audio never leaves it. |
+| `asterisk` | `andrius/asterisk:22` | The PBX: SIP signalling, RTP media and the dialplan that allows or blocks each call. Publishes `5060` (UDP+TCP) and the RTP port range. |
+| `mariadb` | `mariadb:11.4` | All of the app's data — guardians, phones, contacts, call log, voicemail notes, settings. Not published to the host. |
+| `cloudflared` | `cloudflare/cloudflared:latest` | Optional. An outbound-only Cloudflare Tunnel so the outside world can reach the web UI even behind CGNAT or double NAT. `docker compose --profile tunnel up -d`. |
+| `adminer` | `adminer:5` | Optional. A database browser (and a second unauthenticated-by-default way into every call record — keep it off unless you need it). `docker compose --profile tools up -d`. |
+
+**Build vs. pull:** by default Compose **pulls** the three built images, so there
+is no compile step. To rebuild them from source — for example, if your host
+user's UID isn't 1000 — run `make build` (or
+`docker compose -f compose.yaml -f compose.build.yml up -d --build`).
+
 ## Layout
 
 ```
