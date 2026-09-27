@@ -115,6 +115,22 @@ final class ContactRepository
             ->execute([$isGroup ? 1 : 0, $id]);
     }
 
+    /** Remember a group's own greeting, or forget it when $file is null. */
+    public function setGroupPrompt(int $groupId, ?string $file, int $seconds = 0): void
+    {
+        Database::pdo()->prepare(
+            'UPDATE contacts SET group_prompt = ?, group_prompt_seconds = ? WHERE id = ?'
+        )->execute([$file, $file === null ? 0 : max(0, $seconds), $groupId]);
+    }
+
+    /** Their name spoken, for phones that say who's calling — see migration 044. */
+    public function setAnnounce(int $id, ?string $file, int $seconds = 0): void
+    {
+        Database::pdo()->prepare(
+            'UPDATE contacts SET announce_clip = ?, announce_seconds = ? WHERE id = ?'
+        )->execute([$file, $file === null ? 0 : max(0, $seconds), $id]);
+    }
+
     /** Member ids only, including any that members() would filter out. */
     public function memberIds(int $groupId): array
     {
@@ -301,13 +317,27 @@ final class ContactRepository
             $window = 'afterschool';
         }
 
+        // Custom hours are a weekly schedule of their own — see Schedule. Only
+        // read when custom is picked, so switching to a preset and back keeps
+        // what was set.
+        $schedule = null;
+        if ($window === 'custom') {
+            [$rules, $problem] = Schedule::fromInput($input['schedule'] ?? []);
+            if ($problem !== null) {
+                return 'Custom hours: ' . $problem;
+            }
+            $schedule = Schedule::toJson($rules);
+        }
+
         Database::pdo()->prepare(
             'UPDATE contacts SET
                 name = :name, relationship = :rel, number_e164 = :number,
                 is_group = :is_group,
                 call_window = :window, speed_dial = :code,
                 allow_in = :allow_in, allow_out = :allow_out,
-                sos = :sos, ring_both = :ring_both
+                sos = :sos, ring_both = :ring_both,
+                always_ring = :always_ring,
+                window_schedule = COALESCE(:schedule, window_schedule)
              WHERE id = :id'
         )->execute([
             'name' => $name,
@@ -319,10 +349,15 @@ final class ContactRepository
             'is_group' => $isGroup ? 1 : 0,
             'window' => $window,
             'code' => $code !== '' ? $code : null,
-            'allow_in' => !empty($input['allowIn']) ? 1 : 0,
-            'allow_out' => !empty($input['allowOut']) ? 1 : 0,
-            'sos' => !empty($input['sos']) ? 1 : 0,
-            'ring_both' => !empty($input['ringboth']) ? 1 : 0,
+            // A group's form shows none of these. It is only ever called (the
+            // dialplan skips a group without allow_out), never calls in — each
+            // member's own entry decides that — and has no backup to ring.
+            'allow_in' => !$isGroup && !empty($input['allowIn']) ? 1 : 0,
+            'allow_out' => $isGroup || !empty($input['allowOut']) ? 1 : 0,
+            'sos' => !$isGroup && !empty($input['sos']) ? 1 : 0,
+            'ring_both' => !$isGroup && !empty($input['ringboth']) ? 1 : 0,
+            'always_ring' => !$isGroup && !empty($input['alwaysRing']) ? 1 : 0,
+            'schedule' => $schedule,
             'id' => $id,
         ]);
 
@@ -377,6 +412,8 @@ final class ContactRepository
         $row = $this->find($id);
         if ($row !== null) {
             (new PhotoStore())->delete((string) ($row['photo_path'] ?? ''));
+            (new GroupPromptStore())->delete((string) ($row['group_prompt'] ?? ''));
+            (new CallerNameStore())->delete((string) ($row['announce_clip'] ?? ''));
         }
 
         Database::pdo()->prepare('DELETE FROM contacts WHERE id = ?')->execute([$id]);
@@ -445,14 +482,31 @@ final class ContactRepository
             'color' => (string) $row['color'],
             'photo' => (string) ($row['photo_path'] ?? ''),
             'window' => (string) $row['call_window'],
+            // The custom window by day — see Schedule and migration 035. With
+            // none saved, the old from–until pair every day.
+            'windowRules' => Schedule::fromJson(
+                $row['window_schedule'] ?? null,
+                substr((string) ($row['window_from'] ?? '09:00'), 0, 5) ?: '09:00',
+                substr((string) ($row['window_to'] ?? '19:00'), 0, 5) ?: '19:00'
+            ),
             'allowIn' => (bool) $row['allow_in'],
             'allowOut' => (bool) $row['allow_out'],
             'sos' => (bool) $row['sos'],
             'ringboth' => (bool) $row['ring_both'],
+            // Never subject to the clock: bedtime, their own hours and the
+            // phones' own hours are all skipped for their call. Absent until
+            // migration 030 has run, hence the default.
+            'alwaysRing' => (bool) ($row['always_ring'] ?? false),
             'failover' => '',
             'code' => (string) ($row['speed_dial'] ?? ''),
             // A group has members instead of a number — see migration 018.
             'isGroup' => (bool) ($row['is_group'] ?? false),
+            // A group's own "press 1 to join" — see migration 032.
+            'groupPrompt' => (string) ($row['group_prompt'] ?? ''),
+            'groupPromptSeconds' => (int) ($row['group_prompt_seconds'] ?? 0),
+            // Their name spoken when a phone that says who's calling picks up.
+            'announce' => (string) ($row['announce_clip'] ?? ''),
+            'announceSeconds' => (int) ($row['announce_seconds'] ?? 0),
         ];
     }
 }

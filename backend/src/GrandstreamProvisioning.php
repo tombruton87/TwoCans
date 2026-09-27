@@ -2,8 +2,8 @@
 declare(strict_types=1);
 
 /**
- * Grandstream GHP621 provisioning: hand the phone its SIP account and its
- * hotkeys as a Grandstream config file (cfg{MAC}.xml).
+ * Grandstream provisioning: hand a GHP621 desk phone, or an HT801/HT802
+ * adapter, its SIP account(s) as a Grandstream config file (cfg{MAC}.xml).
  *
  * Grandstream phones fetch this file from a "Config Server Path" (set in the
  * phone's web UI, or via DHCP option 66) on boot and on reprovision. Unlike
@@ -17,6 +17,9 @@ declare(strict_types=1);
  * codes shared across Grandstream models. The hotkey codes are the GHP series'
  * own and are marked TODO(verify): confirm them against the official GHP621
  * config template before relying on them.
+ *
+ * The adapters' codes follow Grandstream's HT80x template: socket 1 uses the
+ * account-1 codes, socket 2 of an HT802 its own set (P401, P747, ...).
  */
 final class GrandstreamProvisioning
 {
@@ -48,36 +51,119 @@ final class GrandstreamProvisioning
     }
 
     /**
+     * Socket => the P-codes for that socket's account on an HT80x.
+     */
+    public const ATA_PCODES = [
+        1 => [
+            'active' => 'P271', 'name' => 'P3', 'server' => 'P47', 'proxy' => 'P48',
+            'user' => 'P35', 'auth' => 'P36', 'secret' => 'P34', 'transport' => 'P130',
+            'localPort' => 'P40', 'expiry' => 'P32',
+        ],
+        2 => [
+            'active' => 'P401', 'name' => 'P703', 'server' => 'P747', 'proxy' => 'P748',
+            'user' => 'P735', 'auth' => 'P736', 'secret' => 'P734', 'transport' => 'P830',
+            'localPort' => 'P740', 'expiry' => 'P732',
+        ],
+    ];
+
+    /**
+     * Where the phones register: host and the UDP port Asterisk listens on.
+     * Grandstream assumes 5060 when the port is left off, which is wrong
+     * whenever twocans shares the box with another SIP server.
+     */
+    public static function server(): string
+    {
+        return PjsipConfig::domain() . ':' . PjsipConfig::port('udp');
+    }
+
+    private static function p(string $code, string $value): string
+    {
+        return '    <' . $code . '>' . htmlspecialchars($value, ENT_XML1 | ENT_QUOTES, 'UTF-8') . '</' . $code . ">\n";
+    }
+
+    private static function open(): string
+    {
+        return '<?xml version="1.0" encoding="UTF-8"?>' . "\n"
+            . "<gs_provision version=\"1\">\n"
+            . "  <config version=\"2\">\n";
+    }
+
+    private static function close(): string
+    {
+        return "  </config>\n</gs_provision>\n";
+    }
+
+    /**
+     * An HT801 or HT802: each socket's account. A socket with no twocans
+     * phone is switched off, so an old account left on the box can't
+     * register behind twocans' back.
+     *
+     * @param array<int,array> $bySocket socket (1|2) => DeviceRepository::toView() shape
+     */
+    public function ataXml(string $type, array $bySocket): string
+    {
+        $sockets = $type === 'ht802' ? [1, 2] : [1];
+        $xml = self::open();
+
+        foreach ($sockets as $socket) {
+            $codes = self::ATA_PCODES[$socket];
+            $device = $bySocket[$socket] ?? null;
+            if ($device === null) {
+                $xml .= self::p($codes['active'], '0');
+                continue;
+            }
+            $xml .= self::p($codes['active'], '1');
+            $xml .= self::p($codes['name'], $device['name']);
+            $xml .= self::p($codes['server'], self::server());
+            $xml .= self::p($codes['proxy'], '');
+            $xml .= self::p($codes['user'], $device['sipUsername']);
+            $xml .= self::p($codes['auth'], $device['sipUsername']);
+            $xml .= self::p($codes['secret'], $device['sipSecret']);
+            $xml .= self::p($codes['transport'], '0');                // UDP
+            $xml .= self::p($codes['localPort'], $socket === 1 ? '5060' : '5062');
+            $xml .= self::p($codes['expiry'], '60');                  // minutes
+        }
+
+        // How dialling feels on a corded phone: # sends the number straight
+        // away, otherwise it goes after 4 seconds without a key press.
+        $xml .= self::p('P72', '1');
+        $xml .= self::p('P85', '4');
+
+        return $xml . self::close();
+    }
+
+    /**
+     * A GHP621 desk phone.
+     *
      * @param array            $device  DeviceRepository::toView() shape
      * @param array<int,string> $hotkeys key index => number to dial
      */
     public function xml(array $device, array $hotkeys): string
     {
-        $domain = PjsipConfig::domain();
+        $p = static fn(string $code, string $value): string => trim(self::p($code, $value));
 
-        $p = static fn(string $code, string $value): string
-            => '<' . $code . '>' . htmlspecialchars($value, ENT_XML1 | ENT_QUOTES, 'UTF-8') . '</' . $code . '>';
-
-        $xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
-        $xml .= "<gs_provision version=\"1\">\n";
-        $xml .= "  <config version=\"2\">\n";
+        $xml = self::open();
 
         // SIP account 1.
         $xml .= '    ' . $p('P271', '1') . "\n";                          // account active
         $xml .= '    ' . $p('P3', $device['name']) . "\n";                // display name
-        $xml .= '    ' . $p('P47', $domain) . "\n";                       // SIP server
+        $xml .= '    ' . $p('P47', self::server()) . "\n";               // SIP server, with its port
         $xml .= '    ' . $p('P35', $device['sipUsername']) . "\n";        // SIP user ID
         $xml .= '    ' . $p('P36', $device['sipUsername']) . "\n";        // authenticate ID
         $xml .= '    ' . $p('P34', $device['sipSecret']) . "\n";          // authenticate password
+
+        // Announcements: answer by itself when the call asks to, through the
+        // Call-Info/Alert-Info headers twocans sends (PjsipConfig's
+        // twocans-page context). On by default on the GHP6xx; set anyway so a
+        // factory reset or a hand edit can't quietly turn announcements back
+        // into ringing. Only that header does it — ordinary calls still ring.
+        $xml .= '    ' . $p('P298', '1') . "\n";                         // allow auto answer by Call-Info
 
         // Hotkeys: one speed dial per physical key.
         foreach (self::HOTKEY_PCODES as $index => $code) {
             $xml .= '    ' . $p($code, (string) ($hotkeys[$index] ?? '')) . "\n";
         }
 
-        $xml .= "  </config>\n";
-        $xml .= "</gs_provision>\n";
-
-        return $xml;
+        return $xml . self::close();
     }
 }

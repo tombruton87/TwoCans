@@ -15,7 +15,7 @@ final class Presenter
         'custom' => ['label' => 'Custom hours', 'sub' => 'You set the window', 'mod' => 'sky'],
     ];
 
-    public const SCREENS = ['dashboard', 'phones', 'contacts', 'calllog', 'voicemail', 'jokes', 'guardians', 'trunk', 'dialplan', 'system', 'notifications'];
+    public const SCREENS = ['dashboard', 'phones', 'contacts', 'calllog', 'voicemail', 'jokes', 'guardians', 'trunk', 'dialplan', 'system', 'notifications', 'greetings', 'announcements', 'homeassistant'];
 
     /** Header title + subtitle per screen. */
     public const TITLES = [
@@ -24,12 +24,23 @@ final class Presenter
         'contacts' => ['People', "Who's allowed to call, and when."],
         'calllog' => ['Call log', 'Every call, with transcripts you can keep.'],
         'voicemail' => ['Voicemail', 'Messages left when no one could pick up.'],
-        'jokes' => ['The joke line', 'Dial 602 from any phone and hear one. You choose what goes on it.'],
+        // No number here: it's the household's choice (258 by default), and
+        // the banner on the screen says which it is.
+        'jokes' => ['The joke line', 'A joke on tap from any phone. You choose what goes on it.'],
         'guardians' => ['Family & guardians', 'The grown-ups who help run this line.'],
         'trunk' => ['Phone line', 'Where your calls actually travel.'],
         'dialplan' => ['Dial plan', 'Which numbers the kids may dial beyond their contacts.'],
         'system' => ['System', 'How the box is doing, and its backups.'],
         'notifications' => ['Notifications', 'Email and uptime alerts from your line.'],
+        'greetings' => ['Greetings', 'Everything the line says out loud, and who hears it.'],
+        'announcements' => ['Announcements', 'Buttons that page the phones with a message.'],
+        'homeassistant' => ['Home Assistant', 'Your line, its phones and its calls, in Home Assistant.'],
+    ];
+
+    /** Symbols for the ISO 4217 codes a provider is likely to report. */
+    public const CURRENCY_SYMBOLS = [
+        'USD' => '$', 'GBP' => '£', 'EUR' => '€', 'JPY' => '¥',
+        'AUD' => 'A$', 'CAD' => 'CA$', 'NZD' => 'NZ$',
     ];
 
     public static function window(string $key): array
@@ -102,7 +113,9 @@ final class Presenter
             $d['lastSeenText'] = 'Waiting for the app to sign in';
         }
 
-        $d['ruleSummary'] = ($d['allowOut'] ? 'Can call out' : 'No outgoing') . ' · ' . $d['timeFrom'] . '–' . $d['timeTo'];
+        $d['ruleSummary'] = !empty($d['adult'])
+            ? 'Adult mode — no restrictions'
+            : ($d['allowOut'] ? 'Can call out' : 'No outgoing') . ' · ' . Schedule::describe($d['hours'] ?? []);
 
         return $d;
     }
@@ -114,6 +127,11 @@ final class Presenter
         $c['hasCode'] = $c['code'] !== '';
         $c['winLabel'] = $w['label'];
         $c['winSub'] = $w['sub'];
+        // Custom hours say what they are, on the card and in the editor.
+        if ($c['window'] === 'custom' && !empty($c['windowRules'])) {
+            $c['winLabel'] = Schedule::describe($c['windowRules']);
+            $c['winSub'] = Schedule::describe($c['windowRules']);
+        }
         $c['winMod'] = $w['mod'];
         $c['inText'] = $c['allowIn'] ? 'on' : 'off';
         $c['outText'] = $c['allowOut'] ? 'on' : 'off';
@@ -141,6 +159,13 @@ final class Presenter
         }
 
         $c['meta'] = $dirLabel . ' · ' . $c['date'] . ' ' . $c['time'] . ($c['dur'] !== '—' ? ' · ' . $c['dur'] : '');
+
+        // "laptop2 called" / "Rang laptop2": which phone, and which way, in the
+        // words a parent would use. Falls back to the direction alone.
+        $phone = (string) ($c['deviceName'] ?? '');
+        $c['via'] = $phone === ''
+            ? $dirLabel
+            : ($c['dir'] === 'in' ? 'Rang ' . $phone : $phone . ' called');
         $c['dirLabel'] = $dirLabel;
         $c['showDownload'] = $c['status'] !== 'blocked';
 
@@ -183,9 +208,22 @@ final class Presenter
         };
     }
 
+    /**
+     * Credit as the screens show it. The stored currency is an ISO 4217 code,
+     * so an unknown one is printed as-is ("CHF 4.20") rather than guessed at.
+     */
     public static function money(array $trunk): string
     {
-        return $trunk['currency'] . number_format((float) $trunk['balance'], 2);
+        if (($trunk['balance'] ?? null) === null) {
+            return '—';
+        }
+
+        $code = strtoupper((string) ($trunk['currency'] ?? 'USD'));
+        $amount = number_format((float) $trunk['balance'], 2);
+
+        return isset(self::CURRENCY_SYMBOLS[$code])
+            ? self::CURRENCY_SYMBOLS[$code] . $amount
+            : $code . ' ' . $amount;
     }
 
     /**
@@ -241,9 +279,19 @@ final class Presenter
         return $plural(intdiv($seconds, 86400), 'day');
     }
 
+    /** Bedtime in a few words, for the sidebar: the first rule, and how many more. */
     public static function quietRange(array $settings): string
     {
-        return $settings['quietHours'] ? $settings['quietFrom'] . '–' . $settings['quietTo'] : 'Off';
+        if (!$settings['quietHours']) {
+            return 'Off';
+        }
+        $rules = $settings['quietRules'] ?? [];
+        if ($rules === []) {
+            return $settings['quietFrom'] . '–' . $settings['quietTo'];
+        }
+        $first = Schedule::describe([$rules[0]]);
+
+        return count($rules) > 1 ? $first . ' +' . (count($rules) - 1) : $first;
     }
 
     public static function quietStateText(array $settings): string

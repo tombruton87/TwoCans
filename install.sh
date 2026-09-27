@@ -228,8 +228,8 @@ sed -i "s/^password = .*/password = ${ARI_PASSWORD}/" docker/asterisk/etc/ari.co
 sed -i "s/^secret = .*/secret = ${AMI_PASSWORD}/" docker/asterisk/etc/manager.conf
 ok "Asterisk credentials synced"
 
-mkdir -p docker/asterisk/{cdr,recordings,voicemail} docker/{nginx,php,mariadb}/log storage/{photos,jokes}
-chmod 777 docker/asterisk/{cdr,recordings,voicemail} storage/photos storage/jokes 2>/dev/null || true
+mkdir -p docker/asterisk/{cdr,recordings,voicemail} docker/{nginx,php,mariadb}/log storage/{photos,jokes,refusals}
+chmod 777 docker/asterisk/{cdr,recordings,voicemail} storage/photos storage/jokes storage/refusals 2>/dev/null || true
 ok "data directories ready"
 
 # ------------------------------------------------------------------- bring up

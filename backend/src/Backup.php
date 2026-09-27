@@ -14,6 +14,9 @@ final class Backup
     private const DIRS = [
         'photos' => '/var/lib/twocans/photos',
         'jokes' => '/var/lib/twocans/jokes',
+        // A parent reading out the "nobody can take your call" message: a
+        // minute of their time that nobody wants to record twice.
+        'refusals' => '/var/lib/twocans/refusals',
         'recordings' => '/var/spool/asterisk/monitor',
         'voicemail' => '/var/spool/asterisk/voicemail',
         'asks' => '/var/spool/asterisk/asks',

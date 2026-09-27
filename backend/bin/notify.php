@@ -28,6 +28,9 @@ if ($statusOnly) {
     printf("  asks         %s\n", $config['notifyAsks'] ? 'on' : 'off');
     printf("  offline      %s\n", $config['notifyOffline'] ? 'on' : 'off');
     printf("  low credit   %s\n", $config['notifyLowCredit'] ? 'on' : 'off');
+    printf("  emergency    %s\n", $config['notifyEmergency'] ? 'on' : 'off');
+    printf("  messages     %s\n", $config['notifyMessages'] ? 'on' : 'off');
+    printf("  weekly       %s\n", $config['notifyDigest'] ? 'on' : 'off');
     printf("  last run     %s\n", $config['lastRunAt'] ?? 'never');
     if ($config['lastError'] !== null) {
         printf("  last error   %s\n", $config['lastError']);
@@ -40,7 +43,28 @@ if ($watch) {
     $log('notification watcher starting — every 60s');
 }
 
+// Keep the Home Assistant bridge running — see HomeAssistant::ensureRunning().
+if (!$watch) {
+    try {
+        if (HomeAssistant::ensureRunning()) {
+            $log('started the Home Assistant bridge');
+        }
+    } catch (Throwable $e) {
+        $log('could not start the Home Assistant bridge: ' . $e->getMessage());
+    }
+}
+
 do {
+    // Keep the router's openings renewed, or close them — see PortOpener.
+    try {
+        $line = (new PortOpener())->maintain();
+        if ($line !== null) {
+            $log($line);
+        }
+    } catch (Throwable $e) {
+        $log('router ports: ' . $e->getMessage());
+    }
+
     try {
         $result = (new Notifier())->run();
 

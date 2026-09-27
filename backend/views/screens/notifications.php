@@ -84,13 +84,22 @@ $canEdit = Auth::can('notifications');
 
       <div class="tc-card__head"><h2 class="tc-card__title">What to email about</h2></div>
       <label style="display:flex;gap:8px;align-items:center;font:600 13px var(--tc-body);padding:5px 0">
-        <input type="checkbox" name="notify_asks" <?= $config['notifyAsks'] ? 'checked' : '' ?>> New ask-to-call requests
+        <input type="checkbox" name="notify_emergency" <?= $config['notifyEmergency'] ? 'checked' : '' ?>> A phone dialling an emergency number <span class="tc-micro">— sent straight away, on its own</span>
+      </label>
+      <label style="display:flex;gap:8px;align-items:center;font:600 13px var(--tc-body);padding:5px 0">
+        <input type="checkbox" name="notify_messages" <?= $config['notifyMessages'] ? 'checked' : '' ?>> Somebody not on the list leaving a message
+      </label>
+      <label style="display:flex;gap:8px;align-items:center;font:600 13px var(--tc-body);padding:5px 0">
+        <input type="checkbox" name="notify_asks" <?= $config['notifyAsks'] ? 'checked' : '' ?>> A child trying to call a number that isn't allowed
       </label>
       <label style="display:flex;gap:8px;align-items:center;font:600 13px var(--tc-body);padding:5px 0">
         <input type="checkbox" name="notify_offline" <?= $config['notifyOffline'] ? 'checked' : '' ?>> A phone going offline
       </label>
       <label style="display:flex;gap:8px;align-items:center;font:600 13px var(--tc-body);padding:5px 0">
         <input type="checkbox" name="notify_low_credit" <?= $config['notifyLowCredit'] ? 'checked' : '' ?>> Low call credit
+      </label>
+      <label style="display:flex;gap:8px;align-items:center;font:600 13px var(--tc-body);padding:5px 0">
+        <input type="checkbox" name="notify_digest" <?= $config['notifyDigest'] ? 'checked' : '' ?>> A summary of the week <span class="tc-micro">— Sunday evening: calls and minutes per phone, who they talked to most</span>
       </label>
 
       <div style="margin-top:18px">

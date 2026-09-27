@@ -10,8 +10,9 @@ services:
     container_name: twocans-asterisk
     restart: unless-stopped
     ports:
-      - "5060:5060/udp"       # SIP signalling
-      - "5060:5060/tcp"
+      - "${SIP_PORT:-5060}:${SIP_PORT:-5060}/udp"   # handset signalling
+      - "${SIP_PORT:-5060}:${SIP_PORT:-5060}/tcp"
+      - "${TRUNK_SIP_PORT:-5062}:${TRUNK_SIP_PORT:-5062}/udp"   # the trunk (advertises the public address)
       - "8088:8088/tcp"       # ARI HTTP interface for call control
       - "5038:5038/tcp"       # AMI for provisioning/reloads
       - "10000-10100:10000-10100/udp"  # RTP media
@@ -95,6 +96,12 @@ services:
       AMI_PASSWORD: ${AMI_PASSWORD:-twocans-ami-secret}
       # Where to write generated PJSIP config
       ASTERISK_GENERATED_DIR: /etc/asterisk/generated
+      # Which ports the generated transports bind. These must match the ports
+      # published on the asterisk service, because Asterisk advertises its own
+      # port in Contact and Via — a mismatch silently breaks call setup.
+      SIP_PORT: ${SIP_PORT:-5060}
+      SIP_TLS_PORT: ${SIP_TLS_PORT:-5061}
+      TRUNK_SIP_PORT: ${TRUNK_SIP_PORT:-5062}
       # Encrypts the Twilio auth token at rest (trunk.auth_token_enc).
       APP_KEY: ${APP_KEY:-}
       # PHP settings

@@ -150,6 +150,19 @@ function view(string $name, array $vars = []): void
     require __DIR__ . '/../views/' . $name . '.php';
 }
 
+/**
+ * An icon that is either a Font Awesome class ("fa-solid fa-utensils") or an
+ * emoji, as HTML. Decorative: the label next to it says what it is.
+ */
+function icon_html(string $icon): string
+{
+    if (preg_match('/^fa-(solid|regular|brands) fa-[a-z0-9-]+$/', $icon)) {
+        return '<i class="' . e($icon) . '" aria-hidden="true"></i>';
+    }
+
+    return '<span aria-hidden="true">' . e($icon) . '</span>';
+}
+
 /** "8:13" from seconds. */
 function fmt_duration(int $seconds): string
 {

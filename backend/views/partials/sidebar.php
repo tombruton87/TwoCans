@@ -42,7 +42,13 @@ $items = [
       <div class="tc-quiet-card__row">
         <div>
           <div class="tc-quiet-card__label">Quiet hours</div>
-          <div class="tc-quiet-card__value"><?= e(Presenter::quietRange($settings)) ?></div>
+          <div class="tc-quiet-card__value">
+            <?php if ($canEditRules): ?>
+              <a href="<?= e(url(['screen' => 'dashboard', 'bedtime' => '1'])) ?>" title="Change bedtime's times"><?= e(Presenter::quietRange($settings)) ?></a>
+            <?php else: ?>
+              <?= e(Presenter::quietRange($settings)) ?>
+            <?php endif; ?>
+          </div>
         </div>
         <?php if ($canEditRules): ?>
           <form method="post" action="/">

@@ -109,6 +109,19 @@ final class CallRequestRepository
         )->fetchAll();
     }
 
+    /**
+     * Every number a child has tried, decided or not, most recent first — the
+     * call log's "numbers the kids tried".
+     *
+     * @return array<int,array>
+     */
+    public function all(): array
+    {
+        return Database::pdo()->query(
+            'SELECT * FROM call_requests ORDER BY COALESCE(last_asked_at, requested_at) DESC'
+        )->fetchAll();
+    }
+
     public function countPending(): int
     {
         return (int) Database::pdo()

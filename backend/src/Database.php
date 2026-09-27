@@ -36,6 +36,15 @@ final class Database
     }
 
     /** True if the database is reachable — used to show a useful error page. */
+    /**
+     * Drop the connection so the next pdo() makes a fresh one — for a
+     * long-running worker whose connection the server has timed out.
+     */
+    public static function reset(): void
+    {
+        self::$pdo = null;
+    }
+
     public static function isAvailable(): bool
     {
         try {

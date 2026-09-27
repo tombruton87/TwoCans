@@ -63,8 +63,7 @@ calls go to voicemail and can be retrieved from a handset.
 
 Not done yet: an **outside line** (a SIP trunk is configurable but untested
 against a real provider), **ATA auto-provisioning** for the Grandstream
-handsets, the **ask-to-call queue** on the dashboard, ring-both failover,
-guardian invitation emails, and TLS.
+handsets, ring-both failover, guardian invitation emails, and TLS.
 
 ### Accounts
 
@@ -127,8 +126,8 @@ invalidate their existing sessions — PHP's file-based sessions have no index t
 revoke by. Worth a session table if this is ever exposed beyond a LAN.
 
 Every screen from the design is implemented as server-rendered PHP. The parts
-that are still stand-ins — the ask-to-call queue, top-up billing, the blocked
-message preview — are marked in the source:
+that are still stand-ins — top-up billing and the ATA provisioning wizard — are
+marked in the source:
 
 ```bash
 grep -rn "TODO(wire)" backend/
@@ -416,6 +415,11 @@ so a child's picture is never fetchable by an unauthenticated request.
 Dial **258** from any handset and a joke plays, picked at random and never the
 same one twice running. Parents manage what's on it from the Joke line page.
 
+It is also where a caller from outside lands if they press **5** while a message
+is playing: the quiet-time message when the line is asleep (see "Bedtime") and
+the recording a refused caller hears both offer the same escape, so the joke line
+is written once and both branches point at it.
+
 That number is a setting, changed on the same page — pick whatever a child will
 remember. It is refused if it would shadow an emergency or service number, a
 handset's own extension, or a speed dial already given to somebody; and the
@@ -454,24 +458,175 @@ docker compose exec web php /var/www/html/bin/import-jokes.php /path/to/folder
 docker compose exec web php /var/www/html/bin/backfill-joke-hashes.php
 ```
 
-## Asks to call
+## Bedtime
 
-When a child dials a number that isn't on the allowlist, the line says no — and
-then invites them to say who they were trying to reach. That recording, plus how
-many times they've tried, appears on the dashboard as a real request a grown-up
-can approve.
+Bedtime mode is the switch on the dashboard, on by default between **19:30 and
+07:00**. While it's on the phones don't ring: a call that would have put one of
+them through is answered and taken as a message instead. A phone that trills in a
+sleeping house is the thing the setting exists to prevent, so the line goes quiet
+whether or not anybody has the dashboard open — the times and the switch are
+household settings, written into the generated dialplan as a `GotoIfTime`, which
+is why changing either one rewrites and reloads it.
 
-Approving doesn't quietly add a number: it opens the contact editor with the
-number and the child's own words filled in, with the contact switched **off**
-until it's saved. Half a contact on the allowlist is worse than none.
+**The SOS contact still rings through**, and a caller who isn't on the list is
+refused before bedtime is ever considered: this is about the calls that would
+otherwise have rung the house.
 
-Nothing about this touches the database mid-call. The recording is named after
-the call's `uniqueid` and matched up afterwards, and the ask itself is derived
-from blocked calls already in the call log — so a blocked call behaves the same
-whether or not the app is running.
+**A person marked "Always put through"** — the switch at the bottom of their
+editor on the People screen, meant for Mum and Dad rather than for the emergency
+contact — ignores the clock entirely. Bedtime, the hours set on that person and
+the hours set on each phone are all skipped, so their call rings a handset that
+is otherwise off for the night. That last part is what separates it from an SOS
+contact: SOS skips bedtime and the person's own hours, but a phone whose own
+hours have ended still doesn't ring, so at 2am an SOS call can end up in the
+house mailbox anyway.
 
-Inbound screening (an unknown number ringing *in*) needs a SIP trunk and isn't
-wired yet; the outbound half above works today.
+It loosens only what arrives, never what the children may dial: a call placed at
+bedtime is still a call placed at bedtime. A phone also still has to be switched
+on for incoming calls — that switch is a decision about a handset rather than an
+hour, and nothing overrides it. In the dialplan it is one more skip beside the
+SOS one, so ticking it rewrites and reloads the config like the times themselves.
+
+**What a caller hears** is the household's own recording — the "Quiet-time
+message" card on the same screen, and the first thing worth recording on this
+page. Something like *"It's late, so we can't take your call just now — press 5
+for a joke."* Pressing **5** hands the caller to the joke line. Pressing nothing
+leaves the call to carry on to the house mailbox, so a message can still be left.
+Until somebody records one, callers hear the stock voicemail greeting and nothing
+else changes, so a household that records nothing notices no difference.
+
+The recording covers the whole line rather than one per phone. At bedtime every
+handset is asleep, so there is no phone whose voice it would be, and the house
+has the same thing to say to everybody. Up to **30 seconds**, and any audio file
+a parent has to hand: an MP3, an M4A voice memo, a WAV recorded at the kitchen
+table. Uploads go through the same converter the joke line and the phones'
+refusal messages use (`AudioStore`), so 8kHz mono PCM WAV is what reaches the
+disk, and replacing it deletes the one it replaced: one recording, nothing left
+behind.
+
+The same recording answers a caller who is **outside the hours set on the person
+they're after**. A contact with a call window that doesn't cover this moment gets
+the quiet treatment too, press 5 included, rather than ringing a phone that
+shouldn't be disturbed. The two reasons share one branch in the dialplan, because
+what the caller is told is the same either way: nobody is going to pick up, and
+here is what you can do about it.
+
+Audio lives in `storage/refusals/quiet` — inside the volume the phones' refusal
+messages already use — mounted read-only into Asterisk at
+`/var/lib/twocans/refusals` and played by absolute path. Sharing that volume is
+what makes this something an existing install can use straight away: no second
+mount, no container recreate and no `mkdir`, because the folder is created on the
+first upload, and backups carry it along with the refusals folder. Set
+`QUIET_MESSAGE_PATH` to keep it somewhere else; that path then needs mounting
+into Asterisk too.
+
+## Callers who aren't on the list
+
+A call from a number nobody has added is refused without ringing: the line
+answers, plays a message, and hangs up. Until somebody records one, that message
+is a stock Asterisk prompt, which makes the caller sound like a wrong number
+rather than a person who reached a house that isn't taking calls.
+
+**The message is a recording, one per phone**, uploaded on that phone's page —
+the "If someone not on the list calls…" card. Which recording a caller hears
+depends on the phone they would have reached: the refusal is spoken in the voice
+of the first phone that could have rung at that moment, under the same
+availability, incoming-calls switch and opening-hours rules that decide whether
+it would have rung at all. If nothing on the line could ring — every handset
+asleep, or outside its hours — the first phone that has a recording speaks
+instead, and if no phone has one the stock prompt stands in, so a household that
+never records anything notices no change. Pointing the line at a single handset
+with the trunk's ring setting therefore selects that handset's message, because
+it is the only phone that can ring.
+
+The recording can also offer a way out. Press **5** while it plays and the caller
+is handed to the joke line — worth saying out loud in the recording, since being
+given a joke beats a dial tone at 2am. Press nothing and the call goes on to
+whatever *People we don't know* below is set to do with it. The key is read
+while the audio is still playing, so a caller who wants the joke line doesn't
+have to sit through the whole refusal first, and the same five seconds of grace
+applies even to a phone that has no recording yet.
+
+Audio lives in `storage/refusals`, mounted read-only into Asterisk at
+`/var/lib/twocans/refusals` and played by absolute path — the same arrangement as
+the joke line, and for the same reasons. Uploads are re-encoded by the same
+converter the joke line uses (`AudioStore`), so a parent can hand over whatever
+they have — an MP3, an M4A voice memo off a phone, a WAV recorded at the kitchen
+table — and 8kHz mono PCM WAV is what reaches the disk. Clips are capped at 30
+seconds, and replacing a message deletes the one it replaces: one per phone,
+nothing left behind.
+
+Like every other upload, the audio is queued for transcription, so the page shows
+what the message says without playing it. That wording is editable, because
+Whisper mishears names and turns of phrase — and it is only the wording: what a
+caller hears is the recording. Anything previously typed into that box is carried
+over as the starting transcript, so existing wording is not lost.
+
+The web and transcriber containers both need `/var/lib/twocans/refusals`
+available. With `compose.yaml` that comes with the `./storage` mount; an install
+from before that mount existed needs the directory created
+(`mkdir -p storage/refusals`) and the containers recreated, and the phone page
+says so plainly rather than failing quietly.
+
+This is deliberately separate from what a **child** hears when they dial a number
+that isn't allowed. That one stays a stock prompt in the stock voice, because it
+is the child being spoken to — a parent's recorded refusal would be the wrong
+person talking.
+
+## People we don't know
+
+A number nobody has added never rings a phone. A child who dials it is told no,
+and a caller who rings *in* from it hears the refusal — and either way the number
+ends up on the dashboard in one card, **People we don't know**, because the
+question behind both is the same one: is this number allowed? Newest first, each
+row tagged with which way it came, *Wants to call* or *Rang us*, and the same two
+buttons on every row.
+
+**A child asking to call out.** The refusal invites them to say who they were
+trying to reach. That recording, plus how many times they have tried, is the row,
+with the child's own words offered as the guess at a name — *Maybe "Nana"?* — and
+the voice note there to play. None of it touches the database mid-call: the ask
+is derived from blocked calls already in the call log, and the recording is named
+after the call's `uniqueid` and matched up afterwards, so a blocked call behaves
+the same whether or not the app is running.
+
+**A caller ringing in.** A wrong number and a grandparent's new mobile look
+identical on the way in, so by default the line hands them to the **house
+mailbox** once the recording has played and lets them say who they were. No phone
+rings either way: an unknown number still never reaches a child's handset, and
+the call is logged as blocked whether or not a message was left. What they leave
+is the row — number, when they rang, how long they spoke and the transcript,
+quoted underneath because somebody's words are not a guess at a name, and the
+recording there to play, though reading it is usually enough. The switch in the
+card's header turns the hand-off off, and then the line hangs up exactly as it
+always did. It is a setting rather than a browser preference because the
+generated dialplan is the thing that decides: with it on the refusal ends in
+`Goto(quiet)`, the same branch bedtime and a contact's own hours land on, and with
+it off in `Hangup()`. Changing it rewrites and reloads the dialplan on the spot.
+
+**The same two buttons.** *Add them* opens the contact editor with the number
+already filled in and the contact switched **off** until it is saved, exactly as
+approving an ask always did — half a contact on the allowlist is worse than none.
+*Not now* clears the row: on an ask it drops the voice note, which has served its
+purpose, and on a message it records the verdict and leaves the recording in the
+mailbox, because that one is somebody's real words. Either way the row is kept,
+so the same number does not come straight back — a number that is tried again
+returns to the top, and a *new* message from the same number arrives as a row of
+its own, so somebody persistent gets noticed instead of hidden.
+
+The two live in separate tables, deliberately. An ask is a blocked attempt with a
+voice note; a message is a voicemail with a duration and a mailbox, which the
+mailbox screen lists and the phone's message light counts. The card is a view of
+both, not a merged store, and each verdict is recorded where its own record lives
+— `resolution`, `resolved_by`, `resolved_at` on `call_requests`, and the same
+three columns on `voicemails` (migration 031) — so "who decided, and when"
+survives a restart. Messages that arrived before any of this existed are simply
+undecided and show up as waiting, which is the right answer for a message nobody
+has listened to yet.
+
+Clearing a row needs the permission the ask queue needs (Admin or Owner); the
+switch sits with the other rules. A Viewer sees the numbers, the transcripts and
+the recordings, and gets no buttons.
 
 ## Three-way calls
 
@@ -505,9 +660,10 @@ see *Listening in*, whose "Join" mode barges into the existing call.
 ## Asterisk's sound prompts
 
 The Asterisk image ships **no sound files at all**. Until they're installed,
-every stock prompt silently plays nothing — the blocked-call message, the
-voicemail prompts, "nobody is available" — and ConfBridge won't admit anyone to
-a group call, because it can't open the file it wants to play them.
+every stock prompt silently plays nothing — the prompt for a refused caller who
+has no recording of their own, the voicemail prompts, "nobody is available" — and
+ConfBridge won't admit anyone to a group call, because it can't open the file it
+wants to play them.
 
 `install.sh` downloads the core ulaw set (~10MB) into the Asterisk volume. ulaw
 because it's what the phones use, so it plays without transcoding. To do it by

@@ -33,6 +33,98 @@ if (isset($_GET['provision'])) {
 }
 
 /*
+ * An announcement's trigger URL, for Home Assistant, IFTTT, Uptime Kuma or
+ * anything else that can fetch a URL: /hook/announce/<token>, GET or POST.
+ * Before the login gate — the 32-character secret in the path is the
+ * credential, and a new one can be made from the Announcements screen.
+ */
+if (preg_match('#^/hook/announce/([a-f0-9]{32})/?(?:\?.*)?$#', $_SERVER['REQUEST_URI'] ?? '', $hookMatch)) {
+    header('Content-Type: application/json');
+    header('Cache-Control: no-store');
+    $announcements = new AnnouncementRepository();
+    $announcement = $announcements->findByToken($hookMatch[1]);
+    if ($announcement === null) {
+        http_response_code(404);
+        exit(json_encode(['ok' => false, 'error' => 'No announcement has that trigger URL.']));
+    }
+    $sent = $announcements->send($announcement['id']);
+    http_response_code($sent['ok'] ? 200 : 409);
+    exit(json_encode([
+        'ok' => $sent['ok'],
+        'announcement' => $announcement['label'],
+        'phones' => $sent['phones'],
+        'error' => $sent['error'],
+    ]));
+}
+
+/*
+ * Self-service: /hello/<token>, the page a parent sends one person so they can
+ * add their own photo and say their own name. Before the login gate — the
+ * token is the credential, and all it reaches is that one person's photo and
+ * name clip. See ContactLinkRepository.
+ */
+if (preg_match('#^/hello/([a-f0-9]{32})/?(?:\?.*)?$#', $_SERVER['REQUEST_URI'] ?? '', $helloMatch)) {
+    header('Cache-Control: no-store');
+    header('X-Robots-Tag: noindex');
+    header('Referrer-Policy: no-referrer');
+    $links = new ContactLinkRepository();
+    $person = $links->contactFor($helloMatch[1]);
+    $helloErrors = [];
+
+    if ($person !== null && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+        $id = (int) $person['id'];
+        $contacts = new ContactRepository();
+        $saved = [];
+
+        // Taken with the camera just now, or picked from their photos.
+        $taken = (int) ($_FILES['camera']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE;
+        $photo = (new PhotoStore())->store($_FILES[$taken ? 'camera' : 'photo'] ?? []);
+        if ($photo['error'] !== null) {
+            $helloErrors[] = $photo['error'];
+        } elseif ($photo['file'] !== null) {
+            $contacts->setPhoto($id, $photo['file']);
+            $saved[] = 'photo';
+        }
+
+        if ((int) ($_FILES['clip']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+            $names = new CallerNameStore();
+            $clip = $names->store($_FILES['clip']);
+            if ($clip['error'] !== null) {
+                $helloErrors[] = $clip['error'];
+            } else {
+                $names->delete((string) ($person['announce_clip'] ?? ''));
+                $contacts->setAnnounce($id, (string) $clip['file'], $clip['seconds']);
+                $saved[] = 'voice';
+            }
+        }
+
+        if ($saved !== []) {
+            $links->markUsed($id);
+            (new PjsipConfig(new DeviceRepository()))->apply();
+        }
+        if ($helloErrors === [] && $saved !== []) {
+            header('Location: /hello/' . $helloMatch[1] . '?saved=' . implode(',', $saved), true, 303);
+            exit;
+        }
+        if ($helloErrors === []) {
+            $helloErrors[] = 'Add a photo or record your voice first.';
+        }
+        $person = $contacts->find($id);
+    }
+
+    if ($person === null) {
+        http_response_code(404);
+    }
+    view('hello', [
+        'person' => $person,
+        'token' => $helloMatch[1],
+        'errors' => $helloErrors,
+        'saved' => array_filter(explode(',', (string) ($_GET['saved'] ?? ''))),
+    ]);
+    exit;
+}
+
+/*
  * Phone and phonebook provisioning. Served before the login gate (phones have
  * no session), but gated by HTTP basic auth — unlike Linphone's one-time token,
  * these URLs are stable and re-fetched, so they need their own credential.
@@ -63,11 +155,22 @@ if ($gsConfigMatch || $phonebookMatch) {
         exit;
     }
 
-    $device = (new DeviceRepository())->findByMac(strtoupper($gsMac[1]));
-    if ($device === null) {
+    $found = (new DeviceRepository())->findByMac(strtoupper($gsMac[1]));
+    if ($found === []) {
         http_response_code(404);
         header('Content-Type: text/plain; charset=utf-8');
         exit("twocans: no phone with that MAC\n");
+    }
+    $device = $found[0];
+
+    // An adapter: one file carries every socket's account.
+    if (in_array($device['type'], ['ht801', 'ht802'], true)) {
+        $bySocket = [];
+        foreach ($found as $row) {
+            $bySocket[(int) $row['port']] ??= DeviceRepository::toView($row);
+        }
+        echo (new GrandstreamProvisioning())->ataXml((string) $device['type'], $bySocket);
+        exit;
     }
 
     $hotkeys = (new DeviceHotkeyRepository())->forDevice((int) $device['id']);
@@ -138,6 +241,10 @@ if (!in_array($screen, Presenter::SCREENS, true)) {
 if ($screen === 'system' && !Auth::can('system')) {
     $screen = 'dashboard';
 }
+// Home Assistant holds the MQTT login and an HA token.
+if ($screen === 'homeassistant' && !Auth::can('system')) {
+    $screen = 'dashboard';
+}
 // Notifications hold the Mailgun key and recipients — Owner only.
 if ($screen === 'notifications' && !Auth::can('notifications')) {
     $screen = 'dashboard';
@@ -195,6 +302,12 @@ $callFilters = [
 // joke line are never on screen at the same time.
 $callPage = max(1, (int) ($_GET['page'] ?? 1));
 
+// A link to one call (from the dashboard) opens the log on the page it's on.
+$focusCall = $screen === 'calllog' ? (int) ($_GET['call'] ?? 0) : 0;
+if ($focusCall > 0 && !isset($_GET['page'])) {
+    $callPage = $calls->pageOf($focusCall) ?? 1;
+}
+
 // Password modal: your own always, anyone else's only with Owner rights.
 $passwordFor = null;
 if ($screen === 'guardians' && isset($_GET['password'])) {
@@ -228,10 +341,13 @@ view('layout', [
     'listenCall' => $listenCall,
     'callFilters' => $callFilters,
     'callPage' => $callPage,
+    'focusCall' => $focusCall,
     'editingContact' => $editingContact,
     'deviceWizard' => $deviceWizard,
     'trunkWizard' => $trunkWizard,
     'passwordFor' => $passwordFor,
+    // Bedtime's times editor, from the dashboard card or the sidebar.
+    'editBedtime' => isset($_GET['bedtime']) && Auth::can('rules'),
     'headerTitle' => $headerTitle,
     'headerSub' => $headerSub,
     'toast' => take_flash(),

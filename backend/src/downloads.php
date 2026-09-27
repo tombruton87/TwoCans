@@ -24,6 +24,75 @@ $send = static function (string $filename, string $body, string $type): never {
     exit;
 };
 
+/*
+ * Every recording route below serves the same small WAV files, and a browser
+ * fetches media by byte range: without a real 206 reply the <audio> element
+ * can start but cannot scrub, and Safari will not play it at all. One helper
+ * keeps the six routes honest, rather than six header blocks that each promise
+ * 'Accept-Ranges: bytes' and then always read out the whole file.
+ */
+$play = static function (string $file, string $filename): never {
+    $size = (int) filesize($file);
+    $start = 0;
+    $end = $size - 1;
+    $ranged = false;
+
+    // A player asks for one range at a time: "bytes=0-", "bytes=1000-2000", or
+    // the suffix form "bytes=-500" for the tail of the recording.
+    if (preg_match('/^\s*bytes=(\d*)-(\d*)\s*$/', (string) ($_SERVER['HTTP_RANGE'] ?? ''), $m)
+        && ($m[1] !== '' || $m[2] !== '')) {
+        if ($m[1] === '') {
+            $start = max(0, $size - (int) $m[2]);
+        } else {
+            $start = (int) $m[1];
+            if ($m[2] !== '') {
+                $end = min($end, (int) $m[2]);
+            }
+        }
+
+        if ($start > $end || $start >= $size) {
+            header('Content-Range: bytes */' . $size);
+            http_response_code(416);
+            exit;
+        }
+
+        $ranged = true;
+    }
+
+    $length = $end - $start + 1;
+
+    header('Accept-Ranges: bytes');
+    header('Content-Type: audio/wav');
+    header('Content-Disposition: inline; filename="' . $filename . '"');
+    header('Content-Length: ' . $length);
+    if ($ranged) {
+        http_response_code(206);
+        header('Content-Range: bytes ' . $start . '-' . $end . '/' . $size);
+    }
+
+    // Anything buffered from earlier in the request would be prepended to the
+    // audio and stop it being a playable WAV, so drop it before streaming.
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+
+    $in = fopen($file, 'rb');
+    if ($in === false) {
+        exit;
+    }
+    fseek($in, $start);
+    for ($left = $length; $left > 0 && !feof($in);) {
+        $chunk = fread($in, min(65536, $left));
+        if ($chunk === false || $chunk === '') {
+            break;
+        }
+        echo $chunk;
+        $left -= strlen($chunk);
+    }
+    fclose($in);
+    exit;
+};
+
 switch ($download) {
     case 'call':
         $repo = new CallRepository();
@@ -55,13 +124,7 @@ switch ($download) {
             exit('No recording for that call');
         }
 
-        // Range support so the browser's audio player can seek and scrub.
-        header('Accept-Ranges: bytes');
-        header('Content-Type: audio/wav');
-        header('Content-Disposition: inline; filename="call-' . (int) $row['id'] . '.wav"');
-        header('Content-Length: ' . filesize($file));
-        readfile($file);
-        exit;
+        $play($file, 'call-' . (int) $row['id'] . '.wav');
 
     case 'voicemail_audio':
         $repo = new VoicemailRepository();
@@ -74,12 +137,7 @@ switch ($download) {
             exit('No audio for that message');
         }
 
-        header('Accept-Ranges: bytes');
-        header('Content-Type: audio/wav');
-        header('Content-Disposition: inline; filename="voicemail-' . (int) $row['id'] . '.wav"');
-        header('Content-Length: ' . filesize($file));
-        readfile($file);
-        exit;
+        $play($file, 'voicemail-' . (int) $row['id'] . '.wav');
 
     case 'ask_audio':
         $repo = new CallRequestRepository();
@@ -93,12 +151,7 @@ switch ($download) {
             exit('No audio for that ask');
         }
 
-        header('Accept-Ranges: bytes');
-        header('Content-Type: audio/wav');
-        header('Content-Disposition: inline; filename="ask-' . (int) $row['id'] . '.wav"');
-        header('Content-Length: ' . filesize($file));
-        readfile($file);
-        exit;
+        $play($file, 'ask-' . (int) $row['id'] . '.wav');
 
     case 'joke_audio':
         $row = (new JokeRepository())->find(isset($_GET['id']) ? (int) $_GET['id'] : null);
@@ -111,12 +164,88 @@ switch ($download) {
             exit('No audio for that joke');
         }
 
-        header('Accept-Ranges: bytes');
-        header('Content-Type: audio/wav');
-        header('Content-Disposition: inline; filename="joke-' . (int) $row['id'] . '.wav"');
-        header('Content-Length: ' . filesize($file));
-        readfile($file);
-        exit;
+        $play($file, 'joke-' . (int) $row['id'] . '.wav');
+
+    case 'refusal_audio':
+        $row = (new DeviceRepository())->find(isset($_GET['id']) ? (int) $_GET['id'] : null);
+        // file() validates the name and re-derives the path, so a tampered row
+        // still can't point at anything outside the messages folder.
+        $file = $row === null ? null : (new RefusalStore())->file((string) ($row['refusal_audio'] ?? ''));
+
+        if ($file === null) {
+            http_response_code(404);
+            exit('No message for that phone');
+        }
+
+        $play($file, 'refusal-' . (int) $row['id'] . '.wav');
+
+    case 'quiet_message':
+        // The household's bedtime recording. The row is the only thing that
+        // names it, so the browser can play back what a caller actually hears
+        // without any path being reachable from the query string.
+        $file = (new QuietMessageStore())->file((new SettingsRepository())->quietMessage());
+
+        if ($file === null) {
+            http_response_code(404);
+            exit('No bedtime message');
+        }
+
+        $play($file, 'bedtime-message.wav');
+
+    case 'group_prompt':
+        // With an id, that group's own greeting; without, the house's. Only the
+        // stored name is ever used, so the query string can't reach a path.
+        $prompts = new GroupPromptStore();
+        if (isset($_GET['id'])) {
+            $row = (new ContactRepository())->find((int) $_GET['id']);
+            $file = $row === null ? null : $prompts->file((string) ($row['group_prompt'] ?? ''));
+        } else {
+            $file = $prompts->file((new SettingsRepository())->groupPrompt());
+        }
+
+        if ($file === null) {
+            http_response_code(404);
+            exit('No greeting');
+        }
+
+        $play($file, 'group-greeting.wav');
+
+    case 'caller_name':
+        // A contact's name spoken, by their row only.
+        $row = (new ContactRepository())->find(isset($_GET['id']) ? (int) $_GET['id'] : 0);
+        $file = $row === null ? null : (new CallerNameStore())->file((string) ($row['announce_clip'] ?? ''));
+        if ($file === null) {
+            http_response_code(404);
+            exit('No name clip');
+        }
+
+        $play($file, 'caller-name.wav');
+
+    case 'announcement':
+        // An announcement's recording, named by its row only.
+        $row = (new AnnouncementRepository())->find(isset($_GET['id']) ? (int) $_GET['id'] : 0);
+        $file = $row === null ? null : (new AnnouncementStore())->file($row['audio']);
+
+        if ($file === null) {
+            http_response_code(404);
+            exit('No recording');
+        }
+
+        $play($file, 'announcement-' . $row['id'] . '.wav');
+
+    case 'greeting':
+        // One of the re-recorded stock prompts, named by its slot only.
+        $slot = (string) ($_GET['slot'] ?? '');
+        $file = Greetings::exists($slot)
+            ? (new GreetingStore())->file((new Greetings())->file($slot))
+            : null;
+
+        if ($file === null) {
+            http_response_code(404);
+            exit('No greeting');
+        }
+
+        $play($file, 'greeting-' . $slot . '.wav');
 
     case 'voicemail':
         $repo = new VoicemailRepository();

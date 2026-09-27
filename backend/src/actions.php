@@ -71,6 +71,44 @@ if ($action === 'login') {
     redirect(url(['screen' => 'dashboard']));
 }
 
+/*
+ * Signing in with a passkey — Face ID, Touch ID, a fingerprint. Two steps,
+ * both answered in JSON for the page's script: a challenge, then the phone's
+ * signed reply. See WebAuthn for what is checked.
+ */
+$json = static function (array $body, int $status = 200): never {
+    http_response_code($status);
+    header('Content-Type: application/json');
+    header('Cache-Control: no-store');
+    exit(json_encode($body));
+};
+
+if ($action === 'passkey_login_options') {
+    if (!WebAuthn::available()) {
+        $json(['ok' => false, 'error' => 'Passkeys need the secure address of this app (https://…).'], 400);
+    }
+    $json(['ok' => true, 'options' => WebAuthn::loginOptions()]);
+}
+
+if ($action === 'passkey_login') {
+    $credential = json_decode((string) ($_POST['credential'] ?? ''), true);
+    $passkeys = new PasskeyRepository();
+    $stored = is_array($credential) ? $passkeys->findByCredential((string) ($credential['id'] ?? '')) : null;
+    if ($stored === null) {
+        unset($_SESSION['webauthn']);
+        $json(['ok' => false, 'error' => "That passkey isn't set up here. Sign in with your password, then add it on Family & guardians."], 401);
+    }
+    try {
+        $count = WebAuthn::verifyLogin((array) ($credential['response'] ?? []), $stored);
+    } catch (RuntimeException $e) {
+        $json(['ok' => false, 'error' => $e->getMessage()], 401);
+    }
+    $passkeys->used((int) $stored['id'], $count);
+    Auth::startSession((int) $stored['guardian_id']);
+    $guardians->recordLogin((int) $stored['guardian_id']);
+    $json(['ok' => true, 'redirect' => url(['screen' => 'dashboard'])]);
+}
+
 // ---------------------------------------------------------------------------
 // Everything past this point requires a session.
 // ---------------------------------------------------------------------------
@@ -113,6 +151,267 @@ switch ($action) {
         // switch has to rewrite and reload it to mean anything.
         (new PjsipConfig($devices))->apply();
         flash($on ? 'Bedtime mode on' : 'Bedtime mode off');
+        break;
+
+    case 'device_hours':
+        if ($devices->find((int) $id) === null) {
+            break;
+        }
+        [$rules, $problem] = Schedule::fromInput($_POST['schedule'] ?? []);
+        if ($problem !== null) {
+            flash($problem);
+            redirect(url(['screen' => 'phones', 'device' => $id]));
+        }
+        $devices->setHours((int) $id, $rules);
+        // A phone's hours decide whether it rings, in the generated dialplan.
+        (new PjsipConfig($devices))->apply();
+        flash('Hours saved — ' . Schedule::describe($rules));
+        redirect(url(['screen' => 'phones', 'device' => $id]));
+
+    case 'device_adult':
+        $phone = $devices->find((int) $id);
+        if ($phone === null) {
+            break;
+        }
+        $on = ($_POST['on'] ?? '') === '1';
+        // Switching it on only counts with the confirmation that spelled out
+        // what it does; a stray or crafted post can't do it by itself.
+        if ($on && ($_POST['confirm'] ?? '') !== 'remove-all-restrictions') {
+            flash('Adult mode was not turned on.');
+            redirect(url(['screen' => 'phones', 'device' => $id]));
+        }
+        $devices->setAdult((int) $id, $on);
+        (new PjsipConfig($devices))->apply();
+        flash($on
+            ? (string) $phone['name'] . ' is in adult mode — no restrictions apply to it'
+            : (string) $phone['name'] . ' is back to normal — its rules apply again');
+        redirect(url(['screen' => 'phones', 'device' => $id]));
+
+    case 'device_limits':
+        if ($devices->find((int) $id) === null) {
+            break;
+        }
+        // Minutes, from the page's fixed choices; anything else is "no limit".
+        $minutes = static function (mixed $value): ?int {
+            $n = (int) $value;
+
+            return $n >= 1 && $n <= 600 ? $n : null;
+        };
+        $devices->setLimits((int) $id, $minutes($_POST['maxCall'] ?? ''), $minutes($_POST['daily'] ?? ''));
+        // Limits are enforced by Asterisk, from values set on the phone's endpoint.
+        (new PjsipConfig($devices))->apply();
+        flash('Call limits saved');
+        redirect(url(['screen' => 'phones', 'device' => $id]));
+
+    // ----------------------------------------------------------- announcements
+    case 'announce_send':
+        $sent = (new AnnouncementRepository())->send((int) $id);
+        flash($sent['ok']
+            ? 'Sent to ' . $sent['phones'] . ' phone' . ($sent['phones'] === 1 ? '' : 's') . ' 📣'
+            : (string) $sent['error']);
+        break;
+
+    case 'announce_new':
+        $newId = (new AnnouncementRepository())->create();
+        redirect(url(['screen' => 'announcements', 'edit' => $newId]) . '#announce-' . $newId);
+
+    case 'announce_save':
+        $announcements = new AnnouncementRepository();
+        if ($announcements->find((int) $id) === null) {
+            break;
+        }
+        $problem = $announcements->save((int) $id, $_POST);
+        flash($problem ?? 'Saved ✓');
+        redirect(url(['screen' => 'announcements', 'edit' => $problem === null ? '' : $id]) . '#announce-' . (int) $id);
+
+    case 'announce_audio':
+        $announcements = new AnnouncementRepository();
+        $current = $announcements->find((int) $id);
+        $store = new AnnouncementStore();
+        if ($current === null) {
+            break;
+        }
+        if (!$store->isAvailable()) {
+            flash("Audio conversion isn't available — the web container needs rebuilding.");
+            break;
+        }
+        $converted = $store->store($_FILES['message'] ?? []);
+        if ($converted['error'] !== null) {
+            flash($converted['error']);
+            redirect(url(['screen' => 'announcements']) . '#announce-' . (int) $id);
+        }
+        $store->delete($current['audio']);
+        $announcements->setAudio((int) $id, (string) $converted['file'], $converted['seconds']);
+        flash('Message saved ✓');
+        redirect(url(['screen' => 'announcements']) . '#announce-' . (int) $id);
+
+    case 'announce_delete':
+        (new AnnouncementRepository())->delete((int) $id);
+        flash('Announcement removed');
+        redirect(url(['screen' => 'announcements']));
+
+    case 'announce_token':
+        (new AnnouncementRepository())->newToken((int) $id);
+        flash('New trigger URL made — the old one no longer works');
+        redirect(url(['screen' => 'announcements']) . '#announce-' . (int) $id);
+
+    // ------------------------------------------------------------- passkeys
+    case 'passkey_register_options':
+        $me = Auth::user();
+        if (!WebAuthn::available()) {
+            $json(['ok' => false, 'error' => 'Passkeys need the secure address of this app (https://…).'], 400);
+        }
+        $existing = array_map(
+            static fn(array $row): string => (string) $row['credential_id'],
+            (new PasskeyRepository())->forGuardian((int) $me['id'])
+        );
+        $json(['ok' => true, 'options' => WebAuthn::registerOptions($me, $existing)]);
+
+    case 'passkey_register':
+        $me = Auth::user();
+        $credential = json_decode((string) ($_POST['credential'] ?? ''), true);
+        try {
+            $key = WebAuthn::verifyRegistration((array) ($credential['response'] ?? []));
+        } catch (RuntimeException $e) {
+            $json(['ok' => false, 'error' => $e->getMessage()], 400);
+        }
+        $passkeys = new PasskeyRepository();
+        if ($passkeys->findByCredential($key['id']) !== null) {
+            $json(['ok' => false, 'error' => 'That passkey is already set up.'], 409);
+        }
+        $passkeys->add((int) $me['id'], $key, PasskeyRepository::labelFromAgent((string) ($_SERVER['HTTP_USER_AGENT'] ?? '')));
+        flash('Face ID sign-in is set up on this device ✓');
+        $json(['ok' => true, 'redirect' => url(['screen' => 'guardians'])]);
+
+    case 'passkey_delete':
+        (new PasskeyRepository())->remove((int) $id, (int) Auth::user()['id']);
+        flash('Passkey removed');
+        redirect(url(['screen' => 'guardians']));
+
+    // ------------------------------------------------------- Home Assistant
+    case 'ha_save':
+        $problem = (new HomeAssistant())->save($_POST);
+        flash($problem ?? 'Saved — the bridge picks this up within a minute');
+        redirect(url(['screen' => 'homeassistant']));
+
+    case 'ha_test':
+        $error = (new HomeAssistant())->test();
+        flash($error === null ? 'Connected to the MQTT broker ✓' : 'Could not connect: ' . $error);
+        redirect(url(['screen' => 'homeassistant']));
+
+    case 'bedtime_save':
+        [$rules, $problem] = Schedule::fromInput($_POST['schedule'] ?? []);
+        if ($problem !== null) {
+            flash($problem);
+            redirect(url(['screen' => 'dashboard', 'bedtime' => '1']));
+        }
+        (new SettingsRepository())->setQuietRules($rules);
+        // Bedtime is GotoIfTime in the generated dialplan.
+        (new PjsipConfig($devices))->apply();
+        flash('Bedtime saved — ' . Schedule::describe($rules));
+        redirect(url(['screen' => 'dashboard']));
+
+    case 'quiet_message':
+        $quiet = new QuietMessageStore();
+        $settings = new SettingsRepository();
+
+        if (!$quiet->isAvailable()) {
+            flash("Audio conversion isn't available — the web container needs rebuilding.");
+            break;
+        }
+
+        $converted = $quiet->store($_FILES['message'] ?? []);
+        if ($converted['error'] !== null) {
+            flash($converted['error']);
+            break;
+        }
+
+        // One recording for the house, so the one this replaces is removed: the
+        // dialplan is about to name the new file, and nothing would ever name
+        // the old one again.
+        $quiet->delete($settings->quietMessage());
+        $settings->setQuietMessage((string) $converted['file'], $converted['seconds']);
+
+        // Bedtime plays this from the generated dialplan, so it has to be
+        // written in and reloaded before a caller can hear it.
+        (new PjsipConfig($devices))->apply();
+        flash('Message saved ✓ — callers hear it whenever the line is quiet');
+        break;
+
+    case 'quiet_message_remove':
+        $quiet = new QuietMessageStore();
+        $settings = new SettingsRepository();
+
+        $quiet->delete($settings->quietMessage());
+        $settings->setQuietMessage(null);
+        (new PjsipConfig($devices))->apply();
+        flash('Message removed — callers get the standard greeting again');
+        break;
+
+    case 'group_prompt':
+        $prompts = new GroupPromptStore();
+        $settings = new SettingsRepository();
+
+        if (!$prompts->isAvailable()) {
+            flash("Audio conversion isn't available — the web container needs rebuilding.");
+            redirect(back());
+        }
+
+        $converted = $prompts->store($_FILES['greeting'] ?? []);
+        if ($converted['error'] !== null) {
+            flash($converted['error']);
+            redirect(back());
+        }
+
+        $prompts->delete($settings->groupPrompt());
+        $settings->setGroupPrompt((string) $converted['file'], $converted['seconds']);
+        (new PjsipConfig($devices))->apply();
+        flash('Greeting saved ✓ — grown-ups hear it when a group call rings them');
+        redirect(back());
+
+    case 'group_prompt_remove':
+        $settings = new SettingsRepository();
+        (new GroupPromptStore())->delete($settings->groupPrompt());
+        $settings->setGroupPrompt(null);
+        (new PjsipConfig($devices))->apply();
+        flash('Greeting removed — group calls use the standard prompt again');
+        redirect(back());
+
+    case 'greeting_save':
+        // One of the line's stock prompts, re-recorded — see Greetings.
+        $slot = (string) ($_POST['slot'] ?? '');
+        $store = new GreetingStore();
+        $greetings = new Greetings();
+
+        if (!Greetings::exists($slot)) {
+            break;
+        }
+        if (!$store->isAvailable()) {
+            flash("Audio conversion isn't available — the web container needs rebuilding.");
+            break;
+        }
+
+        $converted = $store->store($_FILES['greeting'] ?? []);
+        if ($converted['error'] !== null) {
+            flash($converted['error']);
+            break;
+        }
+
+        $store->delete($greetings->file($slot));
+        $greetings->set($slot, (string) $converted['file'], $converted['seconds']);
+        (new PjsipConfig($devices))->apply();
+        flash(Greetings::SLOTS[$slot]['title'] . ' saved ✓');
+        break;
+
+    case 'greeting_remove':
+        $slot = (string) ($_POST['slot'] ?? '');
+        if (Greetings::exists($slot)) {
+            $greetings = new Greetings();
+            (new GreetingStore())->delete($greetings->file($slot));
+            $greetings->set($slot, null);
+            (new PjsipConfig($devices))->apply();
+            flash(Greetings::SLOTS[$slot]['title'] . ' — back to the standard one');
+        }
         break;
 
     case 'joke_number':
@@ -172,15 +471,88 @@ switch ($action) {
         flash('Photo removed');
         break;
 
+    case 'device_refusal_message':
+        $store = new RefusalStore();
+
+        if (!$store->isAvailable()) {
+            flash("Audio conversion isn't available — the web container needs rebuilding.");
+            break;
+        }
+
+        $converted = $store->store($_FILES['message'] ?? []);
+        if ($converted['error'] !== null) {
+            flash($converted['error']);
+            break;
+        }
+
+        $row = $devices->find((int) $id);
+        if ($row === null) {
+            // Nothing to attach it to. Don't leave the clip orphaned on disk.
+            $store->delete((string) $converted['file']);
+            flash('No such phone');
+            break;
+        }
+
+        // One message per phone, so the one this replaces is removed: the
+        // dialplan is about to name the new file, and nothing would ever name
+        // the old one again.
+        $store->delete((string) ($row['refusal_audio'] ?? ''));
+        $devices->setRefusalAudio((int) $id, (string) $converted['file'], $converted['seconds']);
+
+        // The dialplan plays the recording by name, so it has to be written in
+        // before a caller can hear it.
+        (new PjsipConfig($devices))->apply();
+        flash('Message saved ✓ — the transcript will appear shortly');
+        break;
+
+    case 'device_refusal_remove':
+        $row = $devices->find((int) $id);
+        if ($row === null) {
+            flash('No such phone');
+            break;
+        }
+
+        (new RefusalStore())->delete((string) ($row['refusal_audio'] ?? ''));
+        $devices->clearRefusalAudio((int) $id);
+        (new PjsipConfig($devices))->apply();
+        flash('Message removed — callers hear the standard message again');
+        break;
+
+    case 'device_refusal_transcript':
+        // The wording is what the app shows back, and Whisper mishears a name
+        // or a phrase here and there, so it stays editable and never touches
+        // the dialplan.
+        $devices->updateField((int) $id, 'refusalTranscript', (string) ($_POST['transcript'] ?? ''));
+        flash('Saved ✓');
+        break;
+
     case 'device_mac':
         $mac = GrandstreamProvisioning::normalizeMac((string) ($_POST['mac'] ?? ''));
         if ($mac === '') {
             flash('That MAC address does not look right.');
             break;
         }
-        $devices->setMac((int) $id, $mac);
+        if (!$devices->setMac((int) $id, $mac)) {
+            flash('Another phone already has that MAC address.');
+            break;
+        }
         flash('MAC saved ✓');
         break;
+
+    case 'device_add_socket':
+        // The other socket of an HT802: a new phone on the same box.
+        $first = $devices->find((int) $id);
+        if ($first === null || $first['type'] !== 'ht802' || (string) $first['mac'] === ''
+            || count($devices->findByMac((string) $first['mac'])) > 1) {
+            flash('That adapter has no free socket.');
+            break;
+        }
+        $other = $devices->create(trim((string) ($_POST['name'] ?? '')), 'ht802', 'udp');
+        $devices->setPort((int) $other['id'], (int) $first['port'] === 1 ? 2 : 1);
+        $devices->setMac((int) $other['id'], (string) $first['mac']);
+        (new PjsipConfig($devices))->apply();
+        flash('Added — reboot the adapter so it picks up the new phone.');
+        redirect(url(['screen' => 'phones', 'device' => $other['id']]));
 
     case 'hotkey_set':
         $hotkeys = [];
@@ -297,7 +669,7 @@ switch ($action) {
         break;
 
     case 'device_edit':
-        foreach (['name', 'timeFrom', 'timeTo', 'blockedMsg'] as $field) {
+        foreach (['name', 'timeFrom', 'timeTo'] as $field) {
             if (isset($_POST[$field])) {
                 $devices->updateField((int) $id, $field, (string) $_POST[$field]);
             }
@@ -369,7 +741,23 @@ switch ($action) {
         $draft = $store->deviceDraft();
         $type = (string) ($draft['type'] ?? 'linphone');
         // The GHP621 is UDP-only; the transport picker is hidden for it.
-        $transport = $type === 'ghp621' ? 'udp' : (string) ($_POST['transport'] ?? 'udp');
+        // Grandstream hardware is provisioned over UDP; the picker is hidden for it.
+        $provisioned = in_array($type, ['ghp621', 'ht801', 'ht802'], true);
+        $transport = $provisioned ? 'udp' : (string) ($_POST['transport'] ?? 'udp');
+        $mac = GrandstreamProvisioning::normalizeMac((string) ($_POST['mac'] ?? ''));
+
+        // An adapter has no screen to type an account into: without its MAC
+        // there is no way to hand it one, so ask before creating anything.
+        if ($type === 'ht801' || $type === 'ht802') {
+            if ($mac === '') {
+                flash('That MAC address does not look right — it is on the label under the adapter.');
+                redirect(url(['screen' => 'phones', 'wizard' => 2]));
+            }
+            if ($devices->findByMac($mac) !== []) {
+                flash('Another phone already has that MAC address.');
+                redirect(url(['screen' => 'phones', 'wizard' => 2]));
+            }
+        }
 
         if (!(DeviceRepository::TRANSPORTS[$transport]['available'] ?? false)) {
             flash('Pick a transport that is ready');
@@ -378,8 +766,16 @@ switch ($action) {
 
         $device = $devices->create(trim((string) ($_POST['name'] ?? '')), $type, $transport);
 
-        if ($type === 'ghp621') {
-            $devices->setMac((int) $device['id'], (string) ($_POST['mac'] ?? ''));
+        if ($provisioned && $mac !== '' && !$devices->setMac((int) $device['id'], $mac)) {
+            flash('Phone added, but another phone already has that MAC address.');
+        }
+
+        // The HT802's second socket is a phone of its own on the same box.
+        $second = trim((string) ($_POST['name2'] ?? ''));
+        if ($type === 'ht802' && $second !== '') {
+            $other = $devices->create($second, $type, $transport);
+            $devices->setPort((int) $other['id'], 2);
+            $devices->setMac((int) $other['id'], $mac);
         }
 
         $store->resetDeviceDraft();
@@ -426,7 +822,13 @@ switch ($action) {
             'allowOut' => isset($_POST['allowOut']),
             'ringboth' => isset($_POST['ringboth']),
             'sos' => isset($_POST['sos']),
-            'isGroup' => isset($_POST['isGroup']),
+            'alwaysRing' => isset($_POST['alwaysRing']),
+            // Custom hours by day — only read when the custom window is picked.
+            'schedule' => $_POST['schedule'] ?? [],
+            // Not from the post: the switch lives in its own form (see
+            // contact_group_toggle), so the Save button never sends it, and a
+            // group was being validated as a person with no number.
+            'isGroup' => (int) ($contacts->find((int) $id)['is_group'] ?? 0) === 1,
             'members' => (array) ($_POST['members'] ?? []),
         ]);
 
@@ -456,6 +858,127 @@ switch ($action) {
         redirect(url(['screen' => 'contacts', 'contact' => $id]));
 
         // no break — redirect exits
+
+    case 'contact_group_prompt':
+        $prompts = new GroupPromptStore();
+        $group = $contacts->find((int) $id);
+        $back = url(['screen' => 'contacts', 'contact' => $id]);
+
+        if ($group === null || (int) ($group['is_group'] ?? 0) !== 1) {
+            flash('Only a group has a greeting of its own');
+            redirect(url(['screen' => 'contacts']));
+        }
+        if (!$prompts->isAvailable()) {
+            flash("Audio conversion isn't available — the web container needs rebuilding.");
+            redirect($back);
+        }
+
+        $converted = $prompts->store($_FILES['greeting'] ?? []);
+        if ($converted['error'] !== null) {
+            flash($converted['error']);
+            redirect($back);
+        }
+
+        $prompts->delete((string) ($group['group_prompt'] ?? ''));
+        $contacts->setGroupPrompt((int) $id, (string) $converted['file'], $converted['seconds']);
+        (new PjsipConfig($devices))->apply();
+        flash('Greeting saved ✓');
+        redirect($back);
+
+    case 'contact_group_prompt_remove':
+        $group = $contacts->find((int) $id);
+        if ($group !== null) {
+            (new GroupPromptStore())->delete((string) ($group['group_prompt'] ?? ''));
+            $contacts->setGroupPrompt((int) $id, null);
+            (new PjsipConfig($devices))->apply();
+        }
+        flash('Greeting removed — this group uses the house one again');
+        redirect(url(['screen' => 'contacts', 'contact' => $id]));
+
+    case 'contact_announce':
+    case 'contact_announce_voice':
+        // Their name, spoken when a phone that says who's calling is picked
+        // up: a recording, or Home Assistant's voice saying it.
+        $names = new CallerNameStore();
+        $person = $contacts->find((int) $id);
+        $back = url(['screen' => 'contacts', 'contact' => $id]);
+
+        if ($person === null || (int) ($person['is_group'] ?? 0) === 1) {
+            flash('Only a person has a name to say');
+            redirect(url(['screen' => 'contacts']));
+        }
+        if (!$names->isAvailable()) {
+            flash("Audio conversion isn't available — the web container needs rebuilding.");
+            redirect($back);
+        }
+
+        if ($action === 'contact_announce_voice') {
+            $text = trim((string) ($_POST['text'] ?? ''));
+            if ($text === '') {
+                $text = "It's " . (string) $person['name'] . '!';
+            }
+            $converted = (new HomeAssistant())->speak(mb_substr($text, 0, 80), $names);
+            if ($converted['error'] !== null) {
+                $converted['error'] = "Home Assistant couldn't say it — " . $converted['error'] . '.';
+            }
+        } else {
+            $converted = $names->store($_FILES['clip'] ?? []);
+        }
+        if ($converted['error'] !== null) {
+            flash($converted['error']);
+            redirect($back);
+        }
+
+        $names->delete((string) ($person['announce_clip'] ?? ''));
+        $contacts->setAnnounce((int) $id, (string) $converted['file'], $converted['seconds']);
+        (new PjsipConfig($devices))->apply();
+        flash('Saved ✓ — phones that say who\'s calling will use it');
+        redirect($back);
+
+    case 'ports_save':
+    case 'ports_try':
+        $opener = new PortOpener();
+        if ($action === 'ports_save') {
+            $router = trim((string) ($_POST['router'] ?? ''));
+            if ($router !== '' && !filter_var($router, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+                flash("That router address doesn't look right — it's four numbers, like 192.168.1.1.");
+                redirect(url(['screen' => 'trunk']) . '#ports');
+            }
+            $opener->save(isset($_POST['auto']), array_map('strval', (array) ($_POST['groups'] ?? [])), $router);
+        }
+        if (!$opener->auto()) {
+            $opener->closeAll();
+            flash('Automatic port opening is off');
+            redirect(url(['screen' => 'trunk']) . '#ports');
+        }
+        $state = $opener->run();
+        flash($state['error'] === '' ? 'The router opened them ✓' : $state['error']);
+        redirect(url(['screen' => 'trunk']) . '#ports');
+
+    case 'contact_link_create':
+        $person = $contacts->find((int) $id);
+        if ($person === null || (int) ($person['is_group'] ?? 0) === 1) {
+            flash('Only a person can have a link');
+            redirect(url(['screen' => 'contacts']));
+        }
+        (new ContactLinkRepository())->create((int) $id);
+        flash('Link made — copy it or send it');
+        redirect(url(['screen' => 'contacts', 'contact' => $id]));
+
+    case 'contact_link_stop':
+        (new ContactLinkRepository())->revoke((int) $id);
+        flash('Link stopped — it no longer works');
+        redirect(url(['screen' => 'contacts', 'contact' => $id]));
+
+    case 'contact_announce_remove':
+        $person = $contacts->find((int) $id);
+        if ($person !== null) {
+            (new CallerNameStore())->delete((string) ($person['announce_clip'] ?? ''));
+            $contacts->setAnnounce((int) $id, null);
+            (new PjsipConfig($devices))->apply();
+        }
+        flash('Removed — their calls connect without their name');
+        redirect(url(['screen' => 'contacts', 'contact' => $id]));
 
     case 'contact_delete':
         $contacts->remove((int) $id);
@@ -512,6 +1035,62 @@ switch ($action) {
             $asks->decide((int) $id, 'denied', Auth::user()['id'] ?? null);
         }
         flash('Dismissed — it will come back if they keep trying');
+        break;
+
+        // ------------------------------------------- callers nobody recognises
+    case 'screening_set':
+        $settings = new SettingsRepository();
+        $on = ($_POST['on'] ?? '') === '1';
+        $settings->setTakesUnknownMessages($on);
+
+        // Whether an unrecognised caller is handed to the mailbox or hung up on
+        // after the refusal is decided by the dialplan, so the switch only means
+        // anything once the config has been rewritten and reloaded.
+        (new PjsipConfig($devices))->apply();
+        flash($on
+            ? 'Unknown callers can leave a message again'
+            : 'Unknown callers are hung up on again');
+        break;
+
+    case 'screening_allow':
+        $voicemails = new VoicemailRepository();
+        $message = $voicemails->find((int) $id);
+        if ($message === null) {
+            flash('That message has gone');
+            break;
+        }
+
+        // A number that reached us over the trunk is already E.164.
+        $number = (string) $message['peer_number'];
+        $voicemails->resolve((int) $id, 'approved', Auth::user()['id'] ?? null);
+
+        $existing = $contacts->findByNumber($number);
+        if ($existing !== null) {
+            flash($existing['name'] . ' is already on the call list');
+            redirect(url(['screen' => 'contacts', 'contact' => (int) $existing['id']]));
+        }
+
+        /*
+         * Adding them does not mean dropping a bare number on the list and
+         * calling it done — it opens the contact editor with the number filled
+         * in, so a grown-up still names the person and decides when they may be
+         * called. prefill() leaves them switched off, so a half-built contact
+         * cannot widen the allowlist on its own.
+         */
+        $contactId = $contacts->create();
+        $contacts->prefill($contactId, $number);
+
+        flash('Now finish setting them up');
+        redirect(url(['screen' => 'contacts', 'contact' => $contactId]));
+
+        // no break — redirect exits
+
+    case 'screening_junk':
+        // The row and the recording stay: the message is somebody's real words.
+        // Recording the decision is what stops it asking again, and a new
+        // message from the same number arrives as a row of its own.
+        (new VoicemailRepository())->resolve((int) $id, 'junk', Auth::user()['id'] ?? null);
+        flash('Dismissed — a new message from that number will show up here');
         break;
 
         // ------------------------------------------------------------- voicemail
@@ -613,10 +1192,13 @@ switch ($action) {
         $step = max(1, min(3, (int) ($_POST['step'] ?? 1)));
         $store->setTrunkDraft([
             'provider' => (string) ($_POST['provider'] ?? $store->trunkDraft()['provider']),
+            'region' => (string) ($_POST['region'] ?? $store->trunkDraft()['region']),
             'sid' => (string) ($_POST['sid'] ?? $store->trunkDraft()['sid']),
             'token' => (string) ($_POST['token'] ?? $store->trunkDraft()['token']),
             'number' => (string) ($_POST['number'] ?? $store->trunkDraft()['number']),
             'termination' => (string) ($_POST['termination'] ?? $store->trunkDraft()['termination']),
+            'terminationUsername' => (string) ($_POST['terminationUsername'] ?? $store->trunkDraft()['terminationUsername']),
+            'terminationPassword' => (string) ($_POST['terminationPassword'] ?? $store->trunkDraft()['terminationPassword']),
             'apiKey' => (string) ($_POST['apiKey'] ?? $store->trunkDraft()['apiKey']),
             'proxy' => (string) ($_POST['proxy'] ?? $store->trunkDraft()['proxy']),
         ]);
@@ -627,15 +1209,20 @@ switch ($action) {
         $result = (new TrunkRepository())->connect($draft);
 
         if (!$result['ok']) {
-            // Keep the non-secret fields, but never echo a token/API key back.
+            // Keep the non-secret fields, but never echo a secret back into the
+            // form. setTrunkDraft merges, so every secret has to be named here
+            // or it survives into the re-rendered inputs.
             $store->setTrunkDraft([
                 'provider' => $draft['provider'],
+                'region' => $draft['region'],
                 'sid' => $draft['sid'],
                 'number' => $draft['number'],
                 'termination' => $draft['termination'],
+                'terminationUsername' => $draft['terminationUsername'],
                 'proxy' => $draft['proxy'],
                 'token' => '',
                 'apiKey' => '',
+                'terminationPassword' => '',
             ]);
             flash($result['error']);
             redirect(url(['screen' => 'trunk', 'trunkwizard' => 2]));
@@ -649,6 +1236,62 @@ switch ($action) {
             ? 'Phone line connected to ' . (string) $draft['provider'] . ' ✓'
             : 'Phone line connected, but Asterisk did not reload: ' . $apply['error']);
         redirect(url(['screen' => 'trunk']));
+
+    /*
+     * Which phone the line's number rings. Empty means all of them, which is
+     * how a line behaves until someone narrows it.
+     */
+    case 'trunk_ring_device':
+        $wanted = trim((string) ($_POST['device'] ?? ''));
+        $chosen = null;
+        // Only one of the line's own numbers can be pointed anywhere.
+        $number = (string) ($_POST['number'] ?? '');
+        if (!in_array($number, (new TrunkRepository())->get()['numbers'], true)) {
+            flash('That number is no longer on the line.');
+            break;
+        }
+
+        if ($wanted !== '') {
+            $chosen = $devices->find((int) $wanted);
+            if ($chosen === null) {
+                flash('That phone is no longer on the line.');
+                break;
+            }
+        }
+
+        (new TrunkRepository())->setRingDevice($number, $chosen === null ? null : (int) $chosen['id']);
+        // Who rings is baked into the generated incoming dialplan.
+        (new PjsipConfig($devices))->apply();
+
+        flash($chosen === null
+            ? 'Calls to ' . $number . ' will ring every phone'
+            : 'Calls to ' . $number . ' will ring ' . (string) $chosen['name']);
+        break;
+
+    /*
+     * Reopen the wizard against the line that is already connected.
+     *
+     * Everything but the secrets is seeded from the stored trunk, so changing
+     * one field does not mean retyping the rest. The token and API key are
+     * deliberately left blank: they are write-only, and asking for them again
+     * is the price of not keeping them where they could be echoed back.
+     */
+    case 'trunk_edit':
+        $current = (new TrunkRepository())->get();
+        $store->setTrunkDraft([
+            'provider' => $current['provider'],
+            'region' => $current['region'],
+            'sid' => $current['accountSid'],
+            // Every number, main one first, the way the box takes them.
+            'number' => implode(' ', $current['numbers']),
+            'termination' => $current['terminationUri'],
+            'terminationUsername' => $current['terminationUsername'],
+            'terminationPassword' => '',
+            'proxy' => $current['sipProxy'],
+            'token' => '',
+            'apiKey' => '',
+        ]);
+        redirect(url(['screen' => 'trunk', 'trunkwizard' => 2]));
 
     case 'trunk_topup':
         // TODO(wire): charge the payment method on file via Twilio, then update

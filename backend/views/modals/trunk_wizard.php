@@ -7,6 +7,13 @@
  */
 $draft = $store->trunkDraft();
 $closeUrl = url(['screen' => 'trunk']);
+
+/*
+ * Reopened against a line that is already connected. Secrets are write-only,
+ * so their fields always render blank — which reads as data loss unless the
+ * form says that leaving them alone keeps what is saved.
+ */
+$editing = (bool) $store->trunk()['connected'];
 ?>
 <div class="tc-modal" data-tc-modal="<?= e($closeUrl) ?>" data-tc-close="<?= e($closeUrl) ?>" role="dialog" aria-modal="true" aria-label="Connect a phone line">
   <div class="tc-modal__panel tc-modal__panel--sm">
@@ -68,10 +75,12 @@ $closeUrl = url(['screen' => 'trunk']);
           <div style="display:flex;flex-direction:column;gap:12px">
             <?php if ($isSipio): ?>
               <label class="tc-label tc-label--sm">API key
-                <input class="tc-input tc-input--white" type="password" name="apiKey" value="<?= e((string) $draft['apiKey']) ?>" placeholder="sk_…" autocomplete="off">
+                <input class="tc-input tc-input--white" type="password" name="apiKey" value="<?= e((string) $draft['apiKey']) ?>"
+                       placeholder="<?= $editing ? 'leave blank to keep the saved key' : 'sk_…' ?>" autocomplete="off">
               </label>
-              <label class="tc-label tc-label--sm">Your SIP.IO number
+              <label class="tc-label tc-label--sm">Your SIP.IO number(s)
                 <input class="tc-input tc-input--white" type="text" name="number" value="<?= e((string) $draft['number']) ?>" placeholder="+1 (628) 555-0100">
+                <span class="tc-micro tc-field-note">One number, or several separated by spaces. The first is the caller ID for outgoing calls.</span>
               </label>
               <label class="tc-label tc-label--sm">SIP edge host (proxy)
                 <input class="tc-input tc-input--white" type="text" name="proxy" value="<?= e((string) $draft['proxy']) ?>" placeholder="sip.your-account.sip.io" autocomplete="off">
@@ -80,15 +89,33 @@ $closeUrl = url(['screen' => 'trunk']);
               <label class="tc-label tc-label--sm">Account SID
                 <input class="tc-input tc-input--white" type="text" name="sid" value="<?= e((string) $draft['sid']) ?>" placeholder="ACxxxxxxxxxxxxxxxx" autocomplete="off">
               </label>
-              <label class="tc-label tc-label--sm">Auth token
-                <input class="tc-input tc-input--white" type="password" name="token" value="<?= e((string) $draft['token']) ?>" placeholder="••••••••••••" autocomplete="off">
+              <label class="tc-label tc-label--sm">Twilio region
+                <select class="tc-input tc-input--white" name="region">
+                  <?php foreach (Twilio::REGIONS as $key => $meta): ?>
+                    <option value="<?= e($key) ?>"<?= (string) $draft['region'] === $key ? ' selected' : '' ?>><?= e($meta['label']) ?></option>
+                  <?php endforeach; ?>
+                </select>
               </label>
-              <label class="tc-label tc-label--sm">Your Twilio number
+              <span class="tc-micro">A trunk in one region is invisible from another, and each region has its own auth token. Match the region shown beside your trunk in the Twilio console.</span>
+              <label class="tc-label tc-label--sm">Auth token
+                <input class="tc-input tc-input--white" type="password" name="token" value="<?= e((string) $draft['token']) ?>"
+                       placeholder="<?= $editing ? 'leave blank to keep the saved token' : '••••••••••••' ?>" autocomplete="off">
+              </label>
+              <label class="tc-label tc-label--sm">Your Twilio number(s)
                 <input class="tc-input tc-input--white" type="text" name="number" value="<?= e((string) $draft['number']) ?>" placeholder="+1 (628) 555-0100">
+                <span class="tc-micro tc-field-note">One number, or several separated by spaces. The first is the caller ID for outgoing calls; every one must be on the trunk.</span>
               </label>
               <label class="tc-label tc-label--sm">Termination SIP URI
                 <input class="tc-input tc-input--white" type="text" name="termination" value="<?= e((string) $draft['termination']) ?>" placeholder="your-trunk.pstn.twilio.com" autocomplete="off">
               </label>
+              <label class="tc-label tc-label--sm">Termination username
+                <input class="tc-input tc-input--white" type="text" name="terminationUsername" value="<?= e((string) $draft['terminationUsername']) ?>" placeholder="leave blank if the trunk allows your IP" autocomplete="off">
+              </label>
+              <label class="tc-label tc-label--sm">Termination password
+                <input class="tc-input tc-input--white" type="password" name="terminationPassword" value="<?= e((string) $draft['terminationPassword']) ?>"
+                       placeholder="<?= $editing ? 'leave blank to keep the saved password' : '••••••••••••' ?>" autocomplete="off">
+              </label>
+              <span class="tc-micro">Only needed if your trunk's Termination tab uses a Credential List. Leave the password blank to keep the one already saved; clear the username to switch back to IP authentication.</span>
             <?php endif; ?>
           </div>
 

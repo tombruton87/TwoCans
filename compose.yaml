@@ -18,8 +18,15 @@ services:
     container_name: twocans-asterisk
     restart: unless-stopped
     ports:
-      - "${SIP_PORT:-5060}:5060/udp"
-      - "${SIP_PORT:-5060}:5060/tcp"
+      - "${SIP_PORT:-5060}:${SIP_PORT:-5060}/udp"
+      - "${SIP_PORT:-5060}:${SIP_PORT:-5060}/tcp"
+      # The trunk's own port, separate from the handsets' because the two
+      # transports advertise different addresses (public vs LAN) and cannot
+      # share one. Neither port is remappable: Asterisk puts its own port in
+      # the Contact and Via headers, so host and container must agree, and the
+      # router must forward the trunk port straight through. Which of the two
+      # gets 5060 is a per-house choice — see SIP_PORT / TRUNK_SIP_PORT in .env.
+      - "${TRUNK_SIP_PORT:-5062}:${TRUNK_SIP_PORT:-5062}/udp"
       - "${RTP_PORT_START:-10000}-${RTP_PORT_END:-10100}:10000-10100/udp"
     volumes:
       - ./docker/asterisk/etc:/etc/asterisk
@@ -103,6 +110,11 @@ services:
       # SIP and RTP do not follow a web hostname. APP_URL is what a browser and
       # the provisioning QR code use, and may be a domain once TLS is set up.
       SIP_DOMAIN: ${SIP_DOMAIN:?set in .env}
+      # Must match the port published on the asterisk service above: Asterisk
+      # advertises it, so the router has to map it straight through.
+      TRUNK_SIP_PORT: ${TRUNK_SIP_PORT:-5062}
+      SIP_PORT: ${SIP_PORT:-5060}
+      SIP_TLS_PORT: ${SIP_TLS_PORT:-5061}
       APP_URL: ${APP_URL:?set in .env}
       DEFAULT_COUNTRY_CODE: ${DEFAULT_COUNTRY_CODE:-44}
       CDR_CSV_PATH: /var/log/asterisk/cdr-csv/Master.csv
@@ -111,6 +123,7 @@ services:
       ASK_RECORDINGS_PATH: /var/spool/asterisk/asks
       PHOTO_PATH: /var/lib/twocans/photos
       JOKES_PATH: /var/lib/twocans/jokes
+      REFUSALS_PATH: /var/lib/twocans/refusals
       BACKUPS_PATH: /var/lib/twocans/backups
       WHISPER_URL: http://whisper:9000
       WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-en}
@@ -160,6 +173,7 @@ services:
       VOICEMAIL_PATH: /var/spool/asterisk/voicemail
       ASK_RECORDINGS_PATH: /var/spool/asterisk/asks
       JOKES_PATH: /var/lib/twocans/jokes
+      REFUSALS_PATH: /var/lib/twocans/refusals
       WHISPER_URL: http://whisper:9000
       WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-en}
       WHISPER_MODEL: ${WHISPER_MODEL:-base}

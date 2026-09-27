@@ -9,6 +9,8 @@ services:
     ports:
       - "5060:5060/udp"
       - "5060:5060/tcp"
+      # The SIP trunk, on its own port so it can advertise the public address.
+      - "${TRUNK_SIP_PORT:-5062}:${TRUNK_SIP_PORT:-5062}/udp"
       - "10000-10100:10000-10100/udp"
     volumes:
       - ./docker/asterisk/etc:/etc/asterisk
@@ -82,6 +84,7 @@ services:
       ASK_RECORDINGS_PATH: /var/spool/asterisk/asks
       PHOTO_PATH: /var/lib/twocans/photos
       JOKES_PATH: /var/lib/twocans/jokes
+      REFUSALS_PATH: /var/lib/twocans/refusals
       BACKUPS_PATH: /var/lib/twocans/backups
       WHISPER_URL: http://whisper:9000
       WHISPER_LANGUAGE: en
@@ -123,6 +126,7 @@ services:
       VOICEMAIL_PATH: /var/spool/asterisk/voicemail
       ASK_RECORDINGS_PATH: /var/spool/asterisk/asks
       JOKES_PATH: /var/lib/twocans/jokes
+      REFUSALS_PATH: /var/lib/twocans/refusals
       WHISPER_URL: http://whisper:9000
       WHISPER_LANGUAGE: en
       WHISPER_MODEL: base

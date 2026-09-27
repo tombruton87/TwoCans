@@ -41,6 +41,15 @@
 
         <button class="tc-btn tc-btn--coral tc-btn--lg" type="submit" style="margin-top:6px">Pick up the line →</button>
 
+        <?php /* Face ID / fingerprint, where passkeys can work — see WebAuthn. The
+                 script hides it again on a browser that has no passkeys. */ ?>
+        <?php if (WebAuthn::available()): ?>
+          <button class="tc-btn tc-btn--ghost tc-btn--lg tc-passkey-login" type="button" data-tc-passkey-login hidden>
+            <i class="fa-solid fa-fingerprint" aria-hidden="true"></i> Sign in with Face ID
+          </button>
+          <div class="tc-form-error" role="alert" data-tc-passkey-status hidden></div>
+        <?php endif; ?>
+
         <div class="tc-login__alt">Forgotten it? A grown-up with Owner access can reset it for you.</div>
       </form>
 

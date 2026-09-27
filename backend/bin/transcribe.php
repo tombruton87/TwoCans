@@ -23,21 +23,36 @@ $calls = new CallRepository();
 $voicemails = new VoicemailRepository();
 
 /**
- * Calls, voicemail and jokes transcribe identically — same engine, same retry
- * rules — so the queue is described once and walked over rather than duplicated.
+ * Calls, voicemail, jokes and the phones' refusal messages all transcribe
+ * identically — same engine, same retry rules — so the queue is described once
+ * and walked over rather than duplicated.
  *
- * Jokes store a bare filename rather than a path, because the directory they
- * live in comes from the environment, hence `prefix`.
+ * An entry says where its audio is (a bare filename needs `prefix`, because the
+ * directory it lives in comes from the environment) and what its bookkeeping
+ * columns are called. Most tables carry the `transcript_*` names from the
+ * baseline schema; the two that are about something other than a call spell
+ * them out, and a null means the table has no such column at all.
  */
 $queues = [
     ['table' => 'calls', 'audio' => 'recording_path', 'label' => 'call'],
-    ['table' => 'voicemails', 'audio' => 'audio_path', 'label' => 'message'],
+    // Voicemail predates the engine and timestamp columns; there is nowhere to
+    // record which model did the work, so nothing is stamped.
+    ['table' => 'voicemails', 'audio' => 'audio_path', 'label' => 'message',
+     'engine' => null, 'stamp' => null],
     ['table' => 'jokes', 'audio' => 'audio_file', 'label' => 'joke',
      'prefix' => (new JokeStore())->path() . '/'],
     // "Who were you trying to call?" — a few words, so this is quick. The
     // baseline schema calls the text `label`, hence `column`.
     ['table' => 'call_requests', 'audio' => 'recording_path', 'label' => 'ask',
      'column' => 'label'],
+    // The message a caller who isn't on the list hears, recorded on the phone's
+    // page. One row per phone, so its columns are named after the phone's
+    // message rather than after the work.
+    ['table' => 'devices', 'audio' => 'refusal_audio', 'label' => 'refusal message',
+     'prefix' => (new RefusalStore())->path() . '/', 'column' => 'refusal_transcript',
+     'status' => 'refusal_status', 'attempts' => 'refusal_attempts',
+     'engine' => 'refusal_engine', 'error' => 'refusal_error',
+     'stamp' => 'refusal_transcribed_at'],
 ];
 
 // Keep going on a database blip rather than dying and restart-looping.
@@ -53,22 +68,39 @@ do {
 
         $rows = [];
         foreach ($queues as $queue) {
+            // Fill in the column names this table doesn't spell out, so the walk
+            // below never has to ask again.
+            $q = $queue + [
+                'prefix' => '',
+                'column' => 'transcript',
+                'status' => 'transcript_status',
+                'attempts' => 'transcript_attempts',
+                'engine' => 'transcript_engine',
+                'error' => 'transcript_error',
+                'stamp' => 'transcribed_at',
+            ];
+
             $pending = Database::pdo()->prepare(
-                'SELECT id, ' . $queue['audio'] . ' AS audio
-                   FROM ' . $queue['table'] . '
-                  WHERE transcript_status = "pending"
-                    AND ' . $queue['audio'] . ' IS NOT NULL
-                    AND transcript_attempts < :max
+                'SELECT id, ' . $q['audio'] . ' AS audio
+                   FROM ' . $q['table'] . '
+                  WHERE ' . $q['status'] . ' = "pending"
+                    AND ' . $q['audio'] . ' IS NOT NULL
+                    AND ' . $q['attempts'] . ' < :max
                ORDER BY id DESC
                   LIMIT 5'
             );
             $pending->execute(['max' => Transcriber::MAX_ATTEMPTS]);
             foreach ($pending->fetchAll() as $row) {
                 $rows[] = $row + [
-                    'table' => $queue['table'],
-                    'label' => $queue['label'],
-                    'prefix' => $queue['prefix'] ?? '',
-                    'column' => $queue['column'] ?? 'transcript',
+                    'table' => $q['table'],
+                    'label' => $q['label'],
+                    'prefix' => $q['prefix'],
+                    'column' => $q['column'],
+                    'status' => $q['status'],
+                    'attempts' => $q['attempts'],
+                    'engine' => $q['engine'],
+                    'error' => $q['error'],
+                    'stamp' => $q['stamp'],
                 ];
             }
         }
@@ -82,12 +114,17 @@ do {
             $table = $row['table'];
             $label = $row['label'];
             $column = $row['column'];
+            $statusColumn = $row['status'];
+            $attemptsColumn = $row['attempts'];
+            $errorColumn = $row['error'];
+            $engineColumn = $row['engine'];
+            $stampColumn = $row['stamp'];
             $id = (int) $row['id'];
 
             // Claim it first, so a second worker skips it.
             Database::pdo()->prepare(
-                "UPDATE {$table} SET transcript_status = 'running', transcript_attempts = transcript_attempts + 1
-                  WHERE id = ? AND transcript_status = 'pending'"
+                "UPDATE {$table} SET {$statusColumn} = 'running', {$attemptsColumn} = {$attemptsColumn} + 1
+                  WHERE id = ? AND {$statusColumn} = 'pending'"
             )->execute([$id]);
 
             $file = (string) $row['prefix'] . (string) $row['audio'];
@@ -96,15 +133,15 @@ do {
             $seconds = round(microtime(true) - $started, 1);
 
             if ($result['ok']) {
-                // `voicemails` is the one table without the engine/timestamp
-                // columns; the others record which model produced the text.
-                $extra = $table === 'voicemails'
+                // Which model produced the text, where the table has room to
+                // record it: voicemail has neither column.
+                $extra = $engineColumn === null || $stampColumn === null
                     ? ''
-                    : ", transcript_engine = '" . $transcriber->engine() . "', transcribed_at = NOW()";
+                    : ", {$engineColumn} = '" . $transcriber->engine() . "', {$stampColumn} = NOW()";
+                $clearError = $errorColumn === null ? '' : ", {$errorColumn} = NULL";
 
                 Database::pdo()->prepare(
-                    "UPDATE {$table} SET {$column} = :text, transcript_status = 'done',
-                            transcript_error = NULL{$extra}
+                    "UPDATE {$table} SET {$column} = :text, {$statusColumn} = 'done'{$clearError}{$extra}
                       WHERE id = :id"
                 )->execute(['text' => $result['text'], 'id' => $id]);
 
@@ -121,9 +158,9 @@ do {
              */
             if (str_contains((string) $result['error'], 'could not reach')) {
                 Database::pdo()->prepare(
-                    "UPDATE {$table} SET transcript_status = 'pending',
-                            transcript_attempts = GREATEST(transcript_attempts - 1, 0),
-                            transcript_error = :error
+                    "UPDATE {$table} SET {$statusColumn} = 'pending',
+                            {$attemptsColumn} = GREATEST({$attemptsColumn} - 1, 0),
+                            {$errorColumn} = :error
                       WHERE id = :id"
                 )->execute(['error' => $result['error'], 'id' => $id]);
 
@@ -136,14 +173,14 @@ do {
                       || str_contains((string) $result['error'], 'empty');
 
             $attempts = (int) Database::pdo()
-                ->query("SELECT transcript_attempts FROM {$table} WHERE id = " . $id)
+                ->query("SELECT {$attemptsColumn} FROM {$table} WHERE id = " . $id)
                 ->fetchColumn();
 
             $status = $permanent ? 'skipped'
                 : ($attempts >= Transcriber::MAX_ATTEMPTS ? 'failed' : 'pending');
 
             Database::pdo()->prepare(
-                "UPDATE {$table} SET transcript_status = :status, transcript_error = :error WHERE id = :id"
+                "UPDATE {$table} SET {$statusColumn} = :status, {$errorColumn} = :error WHERE id = :id"
             )->execute(['status' => $status, 'error' => $result['error'], 'id' => $id]);
 
             $log("{$label} {$id}: {$status} — {$result['error']}");

@@ -30,6 +30,11 @@ final class NotificationRepository
             'notifyAsks' => (bool) ($row['notify_asks'] ?? true),
             'notifyOffline' => (bool) ($row['notify_offline'] ?? true),
             'notifyLowCredit' => (bool) ($row['notify_low_credit'] ?? true),
+            // Migration 037. Emergency calls and messages default on: they are
+            // the ones a parent would be upset to have missed.
+            'notifyMessages' => (bool) ($row['notify_messages'] ?? true),
+            'notifyEmergency' => (bool) ($row['notify_emergency'] ?? true),
+            'notifyDigest' => (bool) ($row['notify_digest'] ?? false),
             'mailgunConfigured' => $hasKey
                 && ($row['mailgun_domain'] ?? '') !== ''
                 && ($row['mailgun_from'] ?? '') !== ''
@@ -48,6 +53,9 @@ final class NotificationRepository
         $notifyAsks = !empty($input['notify_asks']);
         $notifyOffline = !empty($input['notify_offline']);
         $notifyLowCredit = !empty($input['notify_low_credit']);
+        $notifyMessages = !empty($input['notify_messages']);
+        $notifyEmergency = !empty($input['notify_emergency']);
+        $notifyDigest = !empty($input['notify_digest']);
 
         $domainInput = trim((string) ($input['mailgun_domain'] ?? ''));
         $fromInput = trim((string) ($input['mailgun_from'] ?? ''));
@@ -84,8 +92,9 @@ final class NotificationRepository
         Database::pdo()->prepare(
             'INSERT INTO notifications
                 (id, enabled, mailgun_api_key_enc, mailgun_region, mailgun_domain, mailgun_from, mailgun_to,
-                 uptime_kuma_url, notify_asks, notify_offline, notify_low_credit)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 uptime_kuma_url, notify_asks, notify_offline, notify_low_credit,
+                 notify_messages, notify_emergency, notify_digest)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE
                 enabled = VALUES(enabled),
                 mailgun_api_key_enc = VALUES(mailgun_api_key_enc),
@@ -96,10 +105,14 @@ final class NotificationRepository
                 uptime_kuma_url = VALUES(uptime_kuma_url),
                 notify_asks = VALUES(notify_asks),
                 notify_offline = VALUES(notify_offline),
-                notify_low_credit = VALUES(notify_low_credit)'
+                notify_low_credit = VALUES(notify_low_credit),
+                notify_messages = VALUES(notify_messages),
+                notify_emergency = VALUES(notify_emergency),
+                notify_digest = VALUES(notify_digest)'
         )->execute([
             self::ID, $enabled ? 1 : 0, $keyEnc, $region, $domain, $from, $to, $kumaUrl,
             $notifyAsks ? 1 : 0, $notifyOffline ? 1 : 0, $notifyLowCredit ? 1 : 0,
+            $notifyMessages ? 1 : 0, $notifyEmergency ? 1 : 0, $notifyDigest ? 1 : 0,
         ]);
 
         return ['ok' => true];
@@ -133,6 +146,28 @@ final class NotificationRepository
     {
         Database::pdo()->prepare('UPDATE notifications SET last_ask_id = ? WHERE id = ?')
             ->execute([$id, self::ID]);
+    }
+
+    public function lastMessageId(): int
+    {
+        return (int) ($this->row()['last_message_id'] ?? 0);
+    }
+
+    public function setLastMessageId(int $id): void
+    {
+        Database::pdo()->prepare('UPDATE notifications SET last_message_id = ? WHERE id = ?')
+            ->execute([$id, self::ID]);
+    }
+
+    public function lastDigestAt(): ?string
+    {
+        return $this->row()['last_digest_at'] ?? null;
+    }
+
+    public function markDigestSent(): void
+    {
+        Database::pdo()->prepare('UPDATE notifications SET last_digest_at = NOW() WHERE id = ?')
+            ->execute([self::ID]);
     }
 
     public function lowCreditAlerted(): bool

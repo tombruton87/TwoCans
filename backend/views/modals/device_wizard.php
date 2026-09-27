@@ -44,7 +44,7 @@ $d = $device !== null ? DeviceRepository::toView($device) : null;
                 <input type="hidden" name="type" value="<?= e($key) ?>">
                 <button class="tc-provider-row tc-provider-row--active" type="submit"
                         style="border-color:var(--tc-teal-deep);background:var(--tc-teal-bg)">
-                  <span class="tc-provider-row__mark" style="background:var(--tc-teal-deep)">L</span>
+                  <span class="tc-provider-row__mark" style="background:var(--tc-teal-deep)"><i class="fa-solid <?= e(['linphone' => 'fa-mobile-screen', 'ghp621' => 'fa-phone-flip'][$key] ?? 'fa-plug') ?>" aria-hidden="true"></i></span>
                   <span class="tc-grow">
                     <span class="tc-provider-row__name" style="display:block"><?= e($type['label']) ?></span>
                     <span class="tc-card__hint" style="display:block"><?= e($type['sub']) ?> · ready now</span>
@@ -66,11 +66,12 @@ $d = $device !== null ? DeviceRepository::toView($device) : null;
 
         <div class="tc-note" style="margin:16px 0 0">
           The Grandstream adapters let an ordinary corded phone plug into the
-          line. They need auto-provisioning, which isn't built yet.
+          line — an HT802 takes two, each a phone of its own here. You'll need
+          the MAC address from the label underneath.
         </div>
 
       <?php elseif ($step === 2): ?>
-        <div class="tc-wizard-title">Name it, and pick how it connects</div>
+        <div class="tc-wizard-title"><?= $draft['type'] === 'linphone' ? 'Name it, and pick how it connects' : 'Name it, and tell us which one it is' ?></div>
         <div class="tc-wizard-sub">A name kids recognise — like "Playroom Phone".</div>
 
         <form method="post" action="/">
@@ -80,7 +81,15 @@ $d = $device !== null ? DeviceRepository::toView($device) : null;
           <input class="tc-name-input" type="text" name="name" placeholder="Playroom Phone"
                  aria-label="Phone name" required autofocus>
 
-          <?php if ($draft['type'] !== 'ghp621'): ?>
+          <?php $ata = in_array($draft['type'], ['ht801', 'ht802'], true); ?>
+          <?php if ($ata && $draft['type'] === 'ht802'): ?>
+            <div style="font:800 14px var(--tc-display);margin:4px 0 4px">Phone 2 socket <span class="tc-card__hint">(optional)</span></div>
+            <input class="tc-name-input" type="text" name="name2" placeholder="Kitchen Phone"
+                   aria-label="Name for the phone in socket 2">
+            <div class="tc-note" style="margin-top:-4px">The name above is for the phone in socket 1. Leave this blank if only one is plugged in — you can add it later.</div>
+          <?php endif; ?>
+
+          <?php if ($draft['type'] === 'linphone'): ?>
           <div style="font:800 14px var(--tc-display);margin:4px 0 9px">Transport</div>
           <div class="tc-win-grid" style="margin-bottom:8px">
             <?php foreach (DeviceRepository::TRANSPORTS as $key => $t): ?>
@@ -107,8 +116,8 @@ $d = $device !== null ? DeviceRepository::toView($device) : null;
           <?php else: ?>
           <div style="font:800 14px var(--tc-display);margin:14px 0 4px">MAC address</div>
           <input class="tc-name-input" type="text" name="mac" placeholder="00:0B:82:C1:23:45"
-                 aria-label="MAC address" autocomplete="off" style="font-size:15px">
-          <div class="tc-note">Printed on the underside of the phone — used to serve its settings.</div>
+                 aria-label="MAC address" autocomplete="off" style="font-size:15px"<?= $ata ? ' required' : '' ?>>
+          <div class="tc-note">Printed on the underside of the <?= $ata ? 'adapter' : 'phone' ?> — used to serve its settings.</div>
           <?php endif; ?>
 
           <div class="tc-wizard-actions">
@@ -124,21 +133,14 @@ $d = $device !== null ? DeviceRepository::toView($device) : null;
           <div class="tc-success-tick">✓</div>
           <div class="tc-wizard-title" style="margin-bottom:0"><?= e($d['name']) ?> is ready</div>
           <div class="tc-card__hint" style="font-size:13px">
-            <?= $d['type'] === 'ghp621' ? 'Point the phone at the server below, then reboot it.' : 'Scan it on a phone, or copy the link on a desktop.' ?>
+            <?= $d['type'] !== 'linphone' ? 'Point the ' . ($d['ata'] ? 'adapter' : 'phone') . ' at twocans as below, then reboot it.' : 'Scan it on a phone, or copy the link on a desktop.' ?>
           </div>
         </div>
 
-        <?php if ($d['type'] === 'ghp621'): ?>
+        <?php if ($d['type'] !== 'linphone'): ?>
           <div class="tc-manual-setup" style="padding:16px;text-align:left">
-            <div style="font:800 14px var(--tc-display);margin-bottom:8px">Grandstream GHP621 setup</div>
-            <ol class="tc-qr__steps">
-              <li>Plug the phone in and find its IP address (check your router, or the phone's menu).</li>
-              <li>Open that IP in a browser to reach the phone's web UI.</li>
-              <li>Set <b>Config Server Path</b> to <code>http://<?= e(PjsipConfig::domain()) ?>:<?= (int) (getenv('HTTP_PORT') ?: 8083) ?>/grandstream/</code></li>
-              <li>Set the config username to <b>twocans</b> and the password to <code><?= e((new SettingsRepository())->provisionPass()) ?></code></li>
-              <li>Set the remote phonebook to <code>http://twocans:<?= e((new SettingsRepository())->provisionPass()) ?>@<?= e(PjsipConfig::domain()) ?>:<?= (int) (getenv('HTTP_PORT') ?: 8083) ?>/phonebook/grandstream.xml</code></li>
-              <li>Save, then reboot the phone — it fetches its settings on boot.</li>
-            </ol>
+            <div style="font:800 14px var(--tc-display);margin-bottom:8px">Grandstream <?= e($d['model']) ?> setup</div>
+            <?php view('partials/grandstream_setup', ['d' => $d]); ?>
           </div>
         <?php else: ?>
           <?php view('partials/provision_qr', ['d' => $d]); ?>

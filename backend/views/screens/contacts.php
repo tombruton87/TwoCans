@@ -37,7 +37,15 @@ $canEdit = Auth::can('contacts');
         <?php if ($c['hasCode']): ?>
           <span class="tc-chip tc-chip--sun">⌗ Dial <?= e($c['code']) ?></span>
         <?php endif; ?>
-        <span class="tc-chip tc-chip--<?= e($c['winMod']) ?>"><?= e($c['winLabel']) ?></span>
+        <?php if (!empty($c['alwaysRing'])): ?>
+          <?php /* Replaces the window chip rather than sitting beside it: the
+                   card should state the rule that actually applies, and a card
+                   reading "After school · Always through" says two things. The
+                   window is still set in the editor. */ ?>
+          <span class="tc-chip tc-chip--teal">Always through</span>
+        <?php else: ?>
+          <span class="tc-chip tc-chip--<?= e($c['winMod']) ?>"><?= e($c['winLabel']) ?></span>
+        <?php endif; ?>
         <?php if ($c['ringboth']): ?>
           <span class="tc-chip tc-chip--lav">Rings both ↦ <?= e($c['failover'] !== '' ? $c['failover'] : 'backup') ?></span>
         <?php endif; ?>
@@ -55,3 +63,4 @@ $canEdit = Auth::can('contacts');
     </<?= $tag ?>>
   <?php endforeach; ?>
 </div>
+

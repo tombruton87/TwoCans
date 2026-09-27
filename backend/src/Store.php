@@ -171,7 +171,7 @@ final class Store
     public function trunkDraft(): array
     {
         return array_merge(
-            ['provider' => 'Twilio', 'sid' => '', 'token' => '', 'number' => '', 'termination' => '', 'apiKey' => '', 'proxy' => ''],
+            ['provider' => 'Twilio', 'region' => 'us1', 'sid' => '', 'token' => '', 'number' => '', 'termination' => '', 'terminationUsername' => '', 'terminationPassword' => '', 'apiKey' => '', 'proxy' => ''],
             $this->data['trunkDraft']
         );
     }
@@ -183,7 +183,7 @@ final class Store
 
     public function resetTrunkDraft(): void
     {
-        $this->data['trunkDraft'] = ['provider' => 'Twilio', 'sid' => '', 'token' => '', 'number' => '', 'termination' => '', 'apiKey' => '', 'proxy' => ''];
+        $this->data['trunkDraft'] = ['provider' => 'Twilio', 'region' => 'us1', 'sid' => '', 'token' => '', 'number' => '', 'termination' => '', 'terminationUsername' => '', 'terminationPassword' => '', 'apiKey' => '', 'proxy' => ''];
     }
 
     // ------------------------------------------------------------------ seed
@@ -198,7 +198,7 @@ final class Store
             'listenMode' => 'listen',
             'inviteRole' => 'Admin',
             'deviceDraft' => ['model' => null, 'name' => ''],
-            'trunkDraft' => ['provider' => 'Twilio', 'sid' => '', 'token' => '', 'number' => '', 'termination' => '', 'apiKey' => '', 'proxy' => ''],
+            'trunkDraft' => ['provider' => 'Twilio', 'region' => 'us1', 'sid' => '', 'token' => '', 'number' => '', 'termination' => '', 'terminationUsername' => '', 'terminationPassword' => '', 'apiKey' => '', 'proxy' => ''],
             'ddnsDraft' => ['zone' => '', 'hostname' => ''],
 
 
@@ -211,7 +211,7 @@ final class Store
 
             'trunk' => [
                 'connected' => true, 'provider' => 'Twilio', 'number' => '+1 (628) 555-0100',
-                'balance' => 4.20, 'currency' => '$', 'lowThreshold' => 5,
+                'balance' => 4.20, 'currency' => 'USD', 'lowThreshold' => 5,
                 'minutesThisMonth' => 142, 'rate' => '$0.013/min', 'autoTopUp' => false,
             ],
 

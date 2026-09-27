@@ -4,7 +4,9 @@
  * @var CallRepository $calls
  * @var array          $filters Current search/filter state
  * @var int            $page
+ * @var int            $focus   a call linked to directly (dashboard), or 0
  */
+$focus = (int) ($focus ?? 0);
 $total = $calls->countMatching($filters);
 $perPage = CallRepository::PER_PAGE;
 $pages = max(1, (int) ceil($total / $perPage));
@@ -21,6 +23,18 @@ $retentionLabel = $settings->retentionLabel();
 $expiringSoon = array_sum((new Retention($settings))->pending());
 
 $callers = $calls->callers();
+
+// Who each group call on this page reached — see call_participants.
+$reached = $calls->participants(array_column($rows, 'uniqueid'));
+
+// With more than one number on the line, an incoming call says which it came
+// in on. With one it would say the same thing on every row.
+$lineNumbers = (new TrunkRepository())->get()['numbers'];
+$showLine = count($lineNumbers) > 1;
+
+// Numbers a child tried that aren't on the list — see UnknownQueue::tried().
+$tried = (new UnknownQueue())->tried();
+$triedWaiting = count(array_filter($tried, static fn(array $t): bool => $t['dismiss'] !== null));
 $term = trim((string) ($filters['q'] ?? ''));
 $filtering = $term !== '' || (int) ($filters['contact'] ?? 0) > 0 || ($filters['status'] ?? '') !== '';
 
@@ -34,194 +48,245 @@ $pageUrl = static fn(int $n): string => url([
     'page' => $n > 1 ? (string) $n : '',
 ]);
 ?>
-<div class="tc-stack tc-stack--tight tc-narrow--log">
+<?php
+/*
+ * Laid out as three blocks so a wide screen can put them side by side: the
+ * filters and the calls in the main column, and beside them what's about the
+ * log rather than in it — the numbers the kids tried, the privacy note and how
+ * long recordings are kept. On a phone they stack, in the order they always had.
+ */
+?>
+<div class="tc-calllog">
 
-  <form class="tc-filters" method="get" action="/">
-    <input type="hidden" name="screen" value="calllog">
+  <div class="tc-calllog__filters">
+    <form class="tc-filters" method="get" action="/">
+      <input type="hidden" name="screen" value="calllog">
 
-    <label class="tc-filters__search">
-      <span class="tc-filters__icon" aria-hidden="true">⌕</span>
-      <input type="search" name="q" value="<?= e($term) ?>"
-             placeholder="Search names, numbers or what was said"
-             aria-label="Search the call log">
-    </label>
+      <label class="tc-filters__search">
+        <span class="tc-filters__icon" aria-hidden="true">⌕</span>
+        <input type="search" name="q" value="<?= e($term) ?>"
+               placeholder="Search names, numbers or what was said"
+               aria-label="Search the call log">
+      </label>
 
-    <select class="tc-filters__select" name="contact" aria-label="Filter by person">
-      <option value="">Everyone</option>
-      <?php foreach ($callers as $c): ?>
-        <option value="<?= (int) $c['id'] ?>" <?= (int) ($filters['contact'] ?? 0) === (int) $c['id'] ? 'selected' : '' ?>>
-          <?= e($c['name']) ?> (<?= (int) $c['calls'] ?>)
-        </option>
-      <?php endforeach; ?>
-    </select>
+      <select class="tc-filters__select" name="contact" aria-label="Filter by person">
+        <option value="">Everyone</option>
+        <?php foreach ($callers as $c): ?>
+          <option value="<?= (int) $c['id'] ?>" <?= (int) ($filters['contact'] ?? 0) === (int) $c['id'] ? 'selected' : '' ?>>
+            <?= e($c['name']) ?> (<?= (int) $c['calls'] ?>)
+          </option>
+        <?php endforeach; ?>
+      </select>
 
-    <select class="tc-filters__select" name="status" aria-label="Filter by outcome">
-      <option value="">Any outcome</option>
-      <?php foreach (['done' => 'Answered', 'missed' => 'Missed', 'blocked' => 'Blocked'] as $key => $label): ?>
-        <option value="<?= e($key) ?>" <?= ($filters['status'] ?? '') === $key ? 'selected' : '' ?>><?= e($label) ?></option>
-      <?php endforeach; ?>
-    </select>
+      <select class="tc-filters__select" name="status" aria-label="Filter by outcome">
+        <option value="">Any outcome</option>
+        <?php foreach (['done' => 'Answered', 'missed' => 'Missed', 'blocked' => 'Blocked'] as $key => $label): ?>
+          <option value="<?= e($key) ?>" <?= ($filters['status'] ?? '') === $key ? 'selected' : '' ?>><?= e($label) ?></option>
+        <?php endforeach; ?>
+      </select>
 
-    <button class="tc-btn tc-btn--teal tc-btn--sm" type="submit">Search</button>
-    <?php if ($filtering): ?>
-      <a class="tc-link" href="<?= e(url(['screen' => 'calllog'])) ?>">Clear</a>
-    <?php endif; ?>
-  </form>
+      <button class="tc-btn tc-btn--teal tc-btn--sm" type="submit">Search</button>
+      <?php if ($filtering): ?>
+        <a class="tc-link" href="<?= e(url(['screen' => 'calllog'])) ?>">Clear</a>
+      <?php endif; ?>
+    </form>
 
-  <div class="tc-info-banner">
-    <span class="tc-info-banner__icon tc-info-banner__icon--lav">i</span>
-    <?php if ($filtering): ?>
-      <?= $total === 1 ? '1 call matches' : e((string) $total) . ' calls match' ?><?php if ($term !== ''): ?> “<?= e($term) ?>”<?php endif; ?>.
-      Searching looks inside transcripts as well as names and numbers.
-    <?php else: ?>
-      Every call through your line is recorded and transcribed automatically, on
-      your own server. The audio never leaves this machine.
-    <?php endif; ?>
   </div>
 
-  <?php /* Retention lives here rather than on a settings page of its own: this
-           is the screen where a parent is looking at the recordings, and so the
-           screen where "how long do we keep these?" is a natural question. */ ?>
-  <div class="tc-retention">
-    <span class="tc-retention__label">
-      Keep recordings and transcripts for
-    </span>
-
-    <?php if (Auth::can('rules')): ?>
-      <form method="post" action="/" class="tc-inline-form">
-        <?= form_fields() ?>
-        <input type="hidden" name="action" value="retention_set">
-        <select class="tc-filters__select" name="days" data-tc-autosave aria-label="How long to keep recordings">
-          <?php foreach (SettingsRepository::RETENTION_CHOICES as $value => $label): ?>
-            <option value="<?= e((string) $value) ?>" <?= $retentionDays === (int) $value ? 'selected' : '' ?>>
-              <?= e($label) ?>
-            </option>
+  <aside class="tc-calllog__side tc-stack tc-stack--tight">
+    <?php /* The numbers the kids tried that aren't allowed, one card per number
+             rather than one line per attempt, and gone once somebody adds them.
+             Hidden while searching: it isn't what the filters are about. */ ?>
+    <?php if ($tried !== [] && !$filtering && $page === 1): ?>
+      <details class="tc-card tc-tried"<?= $triedWaiting > 0 ? ' open' : '' ?>>
+        <summary class="tc-tried__head">
+          <span class="tc-grow">
+            <span class="tc-card__title">Numbers the kids tried</span>
+            <span class="tc-card__hint tc-tried__sub">
+              Blocked because they aren't on the list. Add them to let the calls
+              through — they drop off here once they're a contact.
+            </span>
+          </span>
+          <?php if ($triedWaiting > 0): ?>
+            <span class="tc-pill tc-pill--coral"><?= $triedWaiting ?></span>
+          <?php endif; ?>
+          <span class="tc-tried__count"><?= count($tried) ?> number<?= count($tried) === 1 ? '' : 's' ?></span>
+        </summary>
+        <div class="tc-tried__list">
+          <?php foreach ($tried as $u): ?>
+            <?php view('partials/unknown_card', ['u' => $u]); ?>
           <?php endforeach; ?>
-        </select>
-        <noscript><button class="tc-btn tc-btn--teal tc-btn--sm" type="submit">Save</button></noscript>
-      </form>
-    <?php else: ?>
-      <b><?= e($retentionLabel) ?></b>
+        </div>
+      </details>
     <?php endif; ?>
 
-    <span class="tc-retention__note">
-      <?php if ($retentionDays === 0): ?>
-        Nothing is ever deleted. These are recordings of children's
-        conversations — it's worth picking a window.
+    <div class="tc-info-banner">
+      <span class="tc-info-banner__icon tc-info-banner__icon--lav">i</span>
+      <?php if ($filtering): ?>
+        <?= $total === 1 ? '1 call matches' : e((string) $total) . ' calls match' ?><?php if ($term !== ''): ?> “<?= e($term) ?>”<?php endif; ?>.
+        Searching looks inside transcripts as well as names and numbers.
       <?php else: ?>
-        The call stays in this log; only the audio and transcript go.
-        <?php if ($expiringSoon > 0): ?>
-          <?= (int) $expiringSoon ?> due to be cleared.
-        <?php endif; ?>
+        Every call through your line is recorded and transcribed automatically, on
+        your own server. The audio never leaves this machine.
       <?php endif; ?>
-    </span>
-  </div>
-
-  <?php if ($rows === []): ?>
-    <div class="tc-card" style="text-align:center;padding:34px 22px">
-      <div style="font:800 18px var(--tc-display);margin-bottom:6px">
-        <?= $filtering ? 'Nothing matches' : 'No calls yet' ?>
-      </div>
-      <p class="tc-card__hint" style="margin:0 auto;max-width:360px">
-        <?php if ($filtering): ?>
-          Try a different word, or <a class="tc-link" href="<?= e(url(['screen' => 'calllog'])) ?>">clear the filters</a>.
-        <?php else: ?>
-          As soon as a phone on your line makes or receives a call it will appear
-          here. Try the echo test on <b>600</b>, or the Test call button on a phone.
-        <?php endif; ?>
-      </p>
     </div>
-  <?php endif; ?>
 
-  <?php foreach ($rows as $c): ?>
-    <article class="tc-card tc-card--flat">
-      <div class="tc-call-row">
-        <?php if ($c['hasRecording']): ?>
-          <?php /* Same control as the voicemail screen: circle plays, goes
-                   solid teal while playing, equalizer appears below. */ ?>
-          <audio data-audio preload="none" src="<?= e(url(['download' => 'recording', 'id' => $c['id']])) ?>"></audio>
-          <button class="tc-vm-play" type="button" data-play
-                  aria-label="Play the recording of this call with <?= e($c['name']) ?>">▶</button>
-        <?php endif; ?>
-        <div class="tc-avatar" style="background:<?= e($c['color']) ?>"><?= e($c['initial']) ?></div>
-        <div class="tc-grow">
-          <div class="tc-call-row__name"><?= highlight($c['name'], $term) ?></div>
-          <div class="tc-call-row__meta">
-            <?= highlight($c['number'], $term) ?> · <?= e($c['date']) ?> <?= e($c['time']) ?>
-          </div>
-        </div>
-        <span class="tc-pill tc-pill--lg tc-pill--<?= e($c['statusMod']) ?>"><?= e($c['statusLabel']) ?></span>
-        <?php if ($c['hasRecording']): ?>
-          <a class="tc-btn--icon" style="display:flex;align-items:center;justify-content:center"
-             href="<?= e(url(['download' => 'recording', 'id' => $c['id']])) ?>" download
-             title="Save the recording">↓</a>
-        <?php elseif ($c['showDownload']): ?>
-          <a class="tc-btn--icon" style="display:flex;align-items:center;justify-content:center"
-             href="<?= e(url(['download' => 'call', 'id' => $c['id']])) ?>"
-             title="Download this record">↓</a>
-        <?php endif; ?>
-      </div>
+    <?php /* Retention lives here rather than on a settings page of its own: this
+             is the screen where a parent is looking at the recordings, and so the
+             screen where "how long do we keep these?" is a natural question. */ ?>
+    <div class="tc-retention">
+      <span class="tc-retention__label">
+        Keep recordings and transcripts for
+      </span>
 
-      <?php if ($c['hasRecording']): ?>
-        <div class="tc-eqstrip" data-eq title="Click to skip through the call">
-          <?php view('partials/eq', ['variant' => 'vm']); ?>
-        </div>
+      <?php if (Auth::can('rules')): ?>
+        <form method="post" action="/" class="tc-inline-form">
+          <?= form_fields() ?>
+          <input type="hidden" name="action" value="retention_set">
+          <select class="tc-filters__select" name="days" data-tc-autosave aria-label="How long to keep recordings">
+            <?php foreach (SettingsRepository::RETENTION_CHOICES as $value => $label): ?>
+              <option value="<?= e((string) $value) ?>" <?= $retentionDays === (int) $value ? 'selected' : '' ?>>
+                <?= e($label) ?>
+              </option>
+            <?php endforeach; ?>
+          </select>
+          <noscript><button class="tc-btn tc-btn--teal tc-btn--sm" type="submit">Save</button></noscript>
+        </form>
+      <?php else: ?>
+        <b><?= e($retentionLabel) ?></b>
       <?php endif; ?>
 
-      <?php if ($c['transcript'] !== ''): ?>
-        <div class="tc-transcript"><?= highlight($c['transcript'], $term) ?></div>
-      <?php else: ?>
-        <div class="tc-transcript tc-transcript--empty">
-          <?php if ($c['contentExpired']): ?>
-            Recording and transcript deleted — this call is older than <?= e($retentionLabel) ?>.
-          <?php elseif ($c['blockReason'] !== ''): ?>
-            <?= e($c['blockReason']) ?> — the caller heard the blocked-call message.
-          <?php elseif ($c['status'] === 'missed'): ?>
-            Nobody answered<?= $c['disposition'] !== '' ? ' (' . e(strtolower($c['disposition'])) . ')' : '' ?>.
-          <?php elseif ($c['transcriptStatus'] === 'pending' || $c['transcriptStatus'] === 'running'): ?>
-            <span class="tc-transcribing">Listening to this call… the transcript will appear here shortly.</span>
-          <?php elseif ($c['transcriptStatus'] === 'done'): ?>
-            Nothing was said, or the call was too quiet to make out.
-          <?php elseif ($c['transcriptStatus'] === 'failed'): ?>
-            Couldn't transcribe this one<?= $c['transcriptError'] !== '' ? ' — ' . e($c['transcriptError']) : '' ?>.
+      <span class="tc-retention__note">
+        <?php if ($retentionDays === 0): ?>
+          Nothing is ever deleted. These are recordings of children's
+          conversations — it's worth picking a window.
+        <?php else: ?>
+          The call stays in this log; only the audio and transcript go.
+          <?php if ($expiringSoon > 0): ?>
+            <?= (int) $expiringSoon ?> due to be cleared.
+          <?php endif; ?>
+        <?php endif; ?>
+      </span>
+    </div>
+
+  </aside>
+
+  <div class="tc-calllog__list tc-stack tc-stack--tight">
+    <?php if ($rows === []): ?>
+      <div class="tc-card" style="text-align:center;padding:34px 22px">
+        <div style="font:800 18px var(--tc-display);margin-bottom:6px">
+          <?= $filtering ? 'Nothing matches' : 'No calls yet' ?>
+        </div>
+        <p class="tc-card__hint" style="margin:0 auto;max-width:360px">
+          <?php if ($filtering): ?>
+            Try a different word, or <a class="tc-link" href="<?= e(url(['screen' => 'calllog'])) ?>">clear the filters</a>.
           <?php else: ?>
-            Nothing recorded for this call.
+            As soon as a phone on your line makes or receives a call it will appear
+            here. Try the echo test on <b>600</b>, or the Test call button on a phone.
+          <?php endif; ?>
+        </p>
+      </div>
+    <?php endif; ?>
+
+    <?php foreach ($rows as $c): ?>
+      <article class="tc-card tc-card--flat<?= $c['id'] === $focus ? ' is-focus' : '' ?>" id="call-<?= (int) $c['id'] ?>">
+        <div class="tc-call-row">
+          <?php if ($c['hasRecording']): ?>
+            <?php /* Same control as the voicemail screen: circle plays, goes
+                     solid teal while playing, equalizer appears below. */ ?>
+            <audio data-audio preload="none" src="<?= e(url(['download' => 'recording', 'id' => $c['id']])) ?>"></audio>
+            <button class="tc-vm-play" type="button" data-play
+                    aria-label="Play the recording of this call with <?= e($c['name']) ?>">▶</button>
+          <?php endif; ?>
+          <div class="tc-avatar" style="background:<?= e($c['color']) ?>"><?= e($c['initial']) ?></div>
+          <div class="tc-grow">
+            <div class="tc-call-row__name"><?= highlight($c['name'], $term) ?></div>
+            <div class="tc-call-row__meta">
+              <?= highlight($c['number'], $term) ?> · <?= e($c['date']) ?> <?= e($c['time']) ?>
+              <?php $on = $showLine && $c['dir'] === 'in' ? TrunkRepository::lineNumberFor($c['dialled'], $lineNumbers) : null; ?>
+              <?php if ($on !== null): ?>
+                · <span class="tc-call-row__line">on <?= e($on) ?></span>
+              <?php endif; ?>
+            </div>
+            <?php if (!empty($reached[$c['uniqueid']])): ?>
+              <div class="tc-call-row__who"><?= e(CallRepository::describeParticipants($reached[$c['uniqueid']])) ?></div>
+            <?php endif; ?>
+            <?php /* No transcript to show: say why in a line, not a box. */ ?>
+            <?php if ($c['transcript'] === ''): ?>
+              <div class="tc-call-row__note">
+                <?php if ($c['contentExpired']): ?>
+                  Recording and transcript deleted — older than <?= e($retentionLabel) ?>.
+                <?php elseif ($c['blockReason'] !== ''): ?>
+                  <?= e($c['blockReason']) ?> — they heard the blocked-call message.
+                <?php elseif ($c['status'] === 'missed'): ?>
+                  Nobody answered<?= $c['disposition'] !== '' ? ' (' . e(strtolower($c['disposition'])) . ')' : '' ?>.
+                <?php elseif ($c['transcriptStatus'] === 'pending' || $c['transcriptStatus'] === 'running'): ?>
+                  <span class="tc-transcribing">Transcribing…</span>
+                <?php elseif ($c['transcriptStatus'] === 'done'): ?>
+                  Nothing was said, or it was too quiet to make out.
+                <?php elseif ($c['transcriptStatus'] === 'failed'): ?>
+                  Couldn't transcribe this one<?= $c['transcriptError'] !== '' ? ' — ' . e($c['transcriptError']) : '' ?>.
+                <?php else: ?>
+                  Nothing recorded for this call.
+                <?php endif; ?>
+              </div>
+            <?php endif; ?>
+          </div>
+          <span class="tc-pill tc-pill--lg tc-pill--<?= e($c['statusMod']) ?>"><?= e($c['statusLabel']) ?></span>
+          <?php if ($c['hasRecording']): ?>
+            <a class="tc-btn--icon" style="display:flex;align-items:center;justify-content:center"
+               href="<?= e(url(['download' => 'recording', 'id' => $c['id']])) ?>" download
+               title="Save the recording">↓</a>
+          <?php elseif ($c['showDownload']): ?>
+            <a class="tc-btn--icon" style="display:flex;align-items:center;justify-content:center"
+               href="<?= e(url(['download' => 'call', 'id' => $c['id']])) ?>"
+               title="Download this record">↓</a>
           <?php endif; ?>
         </div>
-      <?php endif; ?>
-    </article>
-  <?php endforeach; ?>
 
-  <?php if ($pages > 1): ?>
-    <nav class="tc-pager" aria-label="Call log pages">
-      <?php if ($page > 1): ?>
-        <a class="tc-pager__page tc-pager__page--step" href="<?= e($pageUrl($page - 1)) ?>"
-           rel="prev" aria-label="Newer calls">‹</a>
-      <?php else: ?>
-        <span class="tc-pager__page tc-pager__page--step is-disabled" aria-hidden="true">‹</span>
-      <?php endif; ?>
-
-      <?php foreach (Presenter::pageNumbers($page, $pages) as $n): ?>
-        <?php if ($n === null): ?>
-          <span class="tc-pager__gap" aria-hidden="true">…</span>
-        <?php elseif ($n === $page): ?>
-          <span class="tc-pager__page is-current" aria-current="page"><?= (int) $n ?></span>
-        <?php else: ?>
-          <a class="tc-pager__page" href="<?= e($pageUrl($n)) ?>"
-             aria-label="Page <?= (int) $n ?>"><?= (int) $n ?></a>
+        <?php if ($c['hasRecording']): ?>
+          <div class="tc-eqstrip" data-eq title="Click to skip through the call">
+            <?php view('partials/eq', ['variant' => 'vm']); ?>
+          </div>
         <?php endif; ?>
-      <?php endforeach; ?>
 
-      <?php if ($page < $pages): ?>
-        <a class="tc-pager__page tc-pager__page--step" href="<?= e($pageUrl($page + 1)) ?>"
-           rel="next" aria-label="Older calls">›</a>
-      <?php else: ?>
-        <span class="tc-pager__page tc-pager__page--step is-disabled" aria-hidden="true">›</span>
-      <?php endif; ?>
+        <?php if ($c['transcript'] !== ''): ?>
+          <div class="tc-transcript"><?= highlight($c['transcript'], $term) ?></div>
+        <?php endif; ?>
+      </article>
+    <?php endforeach; ?>
 
-      <span class="tc-pager__count">
-        <?= (int) $total ?> call<?= $total === 1 ? '' : 's' ?>
-      </span>
-    </nav>
-  <?php endif; ?>
+    <?php if ($pages > 1): ?>
+      <nav class="tc-pager" aria-label="Call log pages">
+        <?php if ($page > 1): ?>
+          <a class="tc-pager__page tc-pager__page--step" href="<?= e($pageUrl($page - 1)) ?>"
+             rel="prev" aria-label="Newer calls">‹</a>
+        <?php else: ?>
+          <span class="tc-pager__page tc-pager__page--step is-disabled" aria-hidden="true">‹</span>
+        <?php endif; ?>
+
+        <?php foreach (Presenter::pageNumbers($page, $pages) as $n): ?>
+          <?php if ($n === null): ?>
+            <span class="tc-pager__gap" aria-hidden="true">…</span>
+          <?php elseif ($n === $page): ?>
+            <span class="tc-pager__page is-current" aria-current="page"><?= (int) $n ?></span>
+          <?php else: ?>
+            <a class="tc-pager__page" href="<?= e($pageUrl($n)) ?>"
+               aria-label="Page <?= (int) $n ?>"><?= (int) $n ?></a>
+          <?php endif; ?>
+        <?php endforeach; ?>
+
+        <?php if ($page < $pages): ?>
+          <a class="tc-pager__page tc-pager__page--step" href="<?= e($pageUrl($page + 1)) ?>"
+             rel="next" aria-label="Older calls">›</a>
+        <?php else: ?>
+          <span class="tc-pager__page tc-pager__page--step is-disabled" aria-hidden="true">›</span>
+        <?php endif; ?>
+
+        <span class="tc-pager__count">
+          <?= (int) $total ?> call<?= $total === 1 ? '' : 's' ?>
+        </span>
+      </nav>
+    <?php endif; ?>
+  </div>
 </div>

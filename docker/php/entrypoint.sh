@@ -33,4 +33,18 @@ if [ "$1" = "php-fpm" ] && [ "${DDNS_WATCH:-1}" = "1" ]; then
   ) &
 fi
 
+# The Home Assistant bridge: one long-running process, restarted if it ever
+# exits. It sits idle until the bridge is switched on in the app, so it costs
+# nothing on a house without Home Assistant. HA_WATCH=0 turns it off.
+if [ "$1" = "php-fpm" ] && [ "${HA_WATCH:-1}" = "1" ]; then
+  (
+    sleep 20
+    while :; do
+      su -s /bin/sh twocans -c \
+        '/usr/local/bin/php /var/www/html/bin/homeassistant.php --watch >> /var/log/php-fpm/homeassistant.log 2>&1' || true
+      sleep 5
+    done
+  ) &
+fi
+
 exec "$@"

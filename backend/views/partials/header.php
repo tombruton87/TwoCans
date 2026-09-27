@@ -42,39 +42,79 @@ $canNotifications = Auth::can('notifications');
       ])) ?>">↓ Export CSV</a>
     <?php endif; ?>
 
-    <?php if ($canSettings): ?>
-      <div class="tc-menu" data-tc-menu>
-        <button type="button"
-                class="tc-account <?= in_array($screen, ['guardians', 'trunk', 'dialplan', 'system', 'notifications'], true) ? 'is-active' : '' ?>"
-                data-tc-menu-toggle aria-haspopup="menu" aria-expanded="false"
-                title="Account and settings">
-          <?= e(initial($user['name'])) ?>
-          <span class="tc-menu__caret" aria-hidden="true"></span>
-        </button>
+    <?php /* The account menu, for everyone: who you are, the settings your role
+             can reach, and signing out — which on a phone has nowhere else to
+             live, since the sidebar that carries it is hidden there. */ ?>
+    <div class="tc-menu" data-tc-menu>
+      <button type="button"
+              class="tc-account <?= in_array($screen, ['guardians', 'trunk', 'dialplan', 'greetings', 'announcements', 'homeassistant', 'system', 'notifications'], true) ? 'is-active' : '' ?>"
+              data-tc-menu-toggle aria-haspopup="menu" aria-expanded="false"
+              title="Account and settings">
+        <?= e(initial($user['name'])) ?>
+        <span class="tc-menu__caret" aria-hidden="true"></span>
+      </button>
 
-        <div class="tc-menu__panel" data-tc-menu-panel role="menu" hidden>
-          <a class="tc-menu__item <?= $screen === 'guardians' ? 'is-active' : '' ?>" role="menuitem"
-             href="<?= e(url(['screen' => 'guardians'])) ?>">Family &amp; guardians</a>
+      <div class="tc-menu__panel" data-tc-menu-panel role="menu" hidden>
+        <div class="tc-menu__who">
+          <div class="tc-menu__name"><?= e($user['name']) ?></div>
+          <div class="tc-menu__role"><?= e($user['role']) ?> · <?= e($user['email']) ?></div>
+        </div>
+        <div class="tc-menu__divider" role="separator"></div>
+
+        <a class="tc-menu__item <?= $screen === 'guardians' ? 'is-active' : '' ?>" role="menuitem"
+           href="<?= e(url(['screen' => 'guardians'])) ?>">
+          <i class="fa-solid fa-user-group" aria-hidden="true"></i> Family &amp; guardians
+        </a>
+        <?php if ($canSettings): ?>
           <div class="tc-menu__divider" role="separator"></div>
           <a class="tc-menu__item <?= $screen === 'trunk' ? 'is-active' : '' ?>" role="menuitem"
-             href="<?= e(url(['screen' => 'trunk'])) ?>">Phone line</a>
+             href="<?= e(url(['screen' => 'trunk'])) ?>">
+            <i class="fa-solid fa-tower-broadcast" aria-hidden="true"></i> Phone line
+          </a>
           <a class="tc-menu__item <?= $screen === 'dialplan' ? 'is-active' : '' ?>" role="menuitem"
-             href="<?= e(url(['screen' => 'dialplan'])) ?>">Dial plan</a>
-          <?php if ($canSystem): ?>
-            <div class="tc-menu__divider" role="separator"></div>
-            <a class="tc-menu__item <?= $screen === 'system' ? 'is-active' : '' ?>" role="menuitem"
-               href="<?= e(url(['screen' => 'system'])) ?>">System</a>
-          <?php endif; ?>
-          <?php if ($canNotifications): ?>
-            <a class="tc-menu__item <?= $screen === 'notifications' ? 'is-active' : '' ?>" role="menuitem"
-               href="<?= e(url(['screen' => 'notifications'])) ?>">Notifications</a>
-          <?php endif; ?>
-        </div>
+             href="<?= e(url(['screen' => 'dialplan'])) ?>">
+            <i class="fa-solid fa-hashtag" aria-hidden="true"></i> Dial plan
+          </a>
+          <a class="tc-menu__item <?= $screen === 'greetings' ? 'is-active' : '' ?>" role="menuitem"
+             href="<?= e(url(['screen' => 'greetings'])) ?>">
+            <i class="fa-solid fa-comment-dots" aria-hidden="true"></i> Greetings
+          </a>
+          <a class="tc-menu__item <?= $screen === 'announcements' ? 'is-active' : '' ?>" role="menuitem"
+             href="<?= e(url(['screen' => 'announcements'])) ?>">
+            <i class="fa-solid fa-bullhorn" aria-hidden="true"></i> Announcements
+          </a>
+        <?php endif; ?>
+        <?php if ($canSystem || $canNotifications): ?>
+          <div class="tc-menu__divider" role="separator"></div>
+        <?php endif; ?>
+        <?php if ($canSystem): ?>
+          <a class="tc-menu__item <?= $screen === 'system' ? 'is-active' : '' ?>" role="menuitem"
+             href="<?= e(url(['screen' => 'system'])) ?>">
+            <i class="fa-solid fa-server" aria-hidden="true"></i> System
+          </a>
+        <?php endif; ?>
+        <?php if ($canNotifications): ?>
+          <a class="tc-menu__item <?= $screen === 'notifications' ? 'is-active' : '' ?>" role="menuitem"
+             href="<?= e(url(['screen' => 'notifications'])) ?>">
+            <i class="fa-solid fa-bell" aria-hidden="true"></i> Notifications
+          </a>
+        <?php endif; ?>
+        <?php if ($canSystem): ?>
+          <a class="tc-menu__item <?= $screen === 'homeassistant' ? 'is-active' : '' ?>" role="menuitem"
+             href="<?= e(url(['screen' => 'homeassistant'])) ?>">
+            <i class="fa-solid fa-house-signal" aria-hidden="true"></i> Home Assistant
+          </a>
+        <?php endif; ?>
+
+        <div class="tc-menu__divider" role="separator"></div>
+        <form method="post" action="/">
+          <?= form_fields() ?>
+          <input type="hidden" name="action" value="logout">
+          <button class="tc-menu__item tc-menu__item--signout" type="submit" role="menuitem">
+            <i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i> Sign out
+          </button>
+        </form>
       </div>
-    <?php else: ?>
-      <a class="tc-account <?= $screen === 'guardians' ? 'is-active' : '' ?>"
-         href="<?= e(url(['screen' => 'guardians'])) ?>"
-         title="Family &amp; guardians"><?= e(initial($user['name'])) ?></a>
-    <?php endif; ?>
+    </div>
   </div>
 </header>

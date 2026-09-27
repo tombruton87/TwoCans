@@ -191,6 +191,35 @@ final class Ami
         return $online;
     }
 
+    /**
+     * The connection itself, for a long-running listener to stream_select() on
+     * alongside other sockets (the Home Assistant bridge — see bin/homeassistant.php).
+     *
+     * @return resource|null
+     */
+    public function stream()
+    {
+        return $this->socket;
+    }
+
+    /**
+     * The next block Asterisk sends — for a listener, an event such as
+     * Newstate or Hangup. Use a connection of its own: send() skips events
+     * while it waits for a reply.
+     */
+    public function readEvent(): ?array
+    {
+        if ($this->socket === null) {
+            return null;
+        }
+        $block = $this->readBlock();
+        if ($block === [] && feof($this->socket)) {
+            throw new RuntimeException('Asterisk closed the AMI connection.');
+        }
+
+        return $block === [] ? null : $block;
+    }
+
     private function readBlock(): array
     {
         $block = [];

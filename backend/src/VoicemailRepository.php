@@ -180,6 +180,57 @@ final class VoicemailRepository
         return $st->fetchAll();
     }
 
+    /**
+     * Messages from numbers nobody recognises, still waiting on a decision.
+     *
+     * A message counts as unrecognised when it came from nobody on the call
+     * list — the importer leaves `contact_id` NULL for those — and from
+     * something that is not one of this household's own extensions, since a
+     * handset dialling its own mailbox is not an outside caller. Rows a
+     * grown-up has already ruled on are left out, so the dashboard shows only
+     * what is still waiting on someone.
+     *
+     * @return array<int,array>
+     */
+    public function unrecognised(int $limit = 20): array
+    {
+        $st = Database::pdo()->prepare(
+            'SELECT v.*
+               FROM voicemails v
+              WHERE v.contact_id IS NULL
+                AND v.resolution IS NULL
+                AND NOT EXISTS (SELECT 1 FROM devices d WHERE d.extension = v.peer_number)
+              ORDER BY v.left_at DESC, v.id DESC
+              LIMIT :limit'
+        );
+        $st->bindValue('limit', $limit, PDO::PARAM_INT);
+        $st->execute();
+
+        return $st->fetchAll();
+    }
+
+    /**
+     * Record what a grown-up decided about an unrecognised caller's message.
+     *
+     * The message is left exactly where it is — this only stops it asking for a
+     * decision again. Both the verdict and the `resolution IS NULL` guard are
+     * deliberate: a hand-edited form cannot put a third state in an ENUM
+     * column, and two tabs open on the same card cannot overwrite the first
+     * decision.
+     */
+    public function resolve(int $id, string $resolution, ?int $guardianId): void
+    {
+        if (!in_array($resolution, ['approved', 'junk'], true)) {
+            return;
+        }
+
+        Database::pdo()->prepare(
+            'UPDATE voicemails
+                SET resolution = ?, resolved_by = ?, resolved_at = NOW()
+              WHERE id = ? AND resolution IS NULL'
+        )->execute([$resolution, $guardianId, $id]);
+    }
+
     public function find(?int $id): ?array
     {
         if ($id === null) {
@@ -260,6 +311,14 @@ final class VoicemailRepository
             'hasAudio' => ($row['audio_path'] ?? '') !== '',
             // Deleted by the retention policy rather than never recorded.
             'contentExpired' => ($row['content_expired_at'] ?? null) !== null,
+            // Set once a grown-up has dealt with an unrecognised caller's
+            // message: 'approved' when the number joined the call list, 'junk'
+            // when it was dismissed. '' while it is still waiting on someone.
+            'resolution' => (string) ($row['resolution'] ?? ''),
+            'resolvedBy' => ($row['resolved_by'] ?? null) === null ? 0 : (int) $row['resolved_by'],
+            'resolvedAt' => ($row['resolved_at'] ?? null) === null
+                ? 0
+                : (int) strtotime((string) $row['resolved_at']),
         ];
     }
 

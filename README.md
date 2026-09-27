@@ -138,6 +138,7 @@ services:
       ASK_RECORDINGS_PATH: /var/spool/asterisk/asks
       PHOTO_PATH: /var/lib/twocans/photos
       JOKES_PATH: /var/lib/twocans/jokes
+      REFUSALS_PATH: /var/lib/twocans/refusals
       BACKUPS_PATH: /var/lib/twocans/backups
       WHISPER_URL: http://whisper:9000
       WHISPER_LANGUAGE: en
@@ -179,6 +180,7 @@ services:
       VOICEMAIL_PATH: /var/spool/asterisk/voicemail
       ASK_RECORDINGS_PATH: /var/spool/asterisk/asks
       JOKES_PATH: /var/lib/twocans/jokes
+      REFUSALS_PATH: /var/lib/twocans/refusals
       WHISPER_URL: http://whisper:9000
       WHISPER_LANGUAGE: en
       WHISPER_MODEL: base

@@ -94,9 +94,15 @@ final class CallRepository
     /**
      * Import any call records not already stored.
      *
+     * With $refresh, calls already stored are re-read from their CDR as well —
+     * who they were with, which way they went — and rows that should never have
+     * been imported are dropped. For correcting history after the reading of a
+     * CDR changes (bin/refresh-calls.php); a page load never does this, so a
+     * contact renamed or removed later doesn't rewrite old calls.
+     *
      * @return int number of new calls added
      */
-    public function import(): int
+    public function import(bool $refresh = false): int
     {
         $path = $this->csvPath();
         if (!is_readable($path)) {
@@ -124,7 +130,17 @@ final class CallRepository
                 (:uniqueid, :device_id, :contact_id, :peer_name, :peer_number, :dialled,
                  :direction, :status, :disposition, :block_reason,
                  :started_at, :answered_at, :duration, :billsec, NULL)'
+            . ($refresh
+                ? ' ON DUPLICATE KEY UPDATE device_id = VALUES(device_id), contact_id = VALUES(contact_id),
+                        peer_name = VALUES(peer_name), peer_number = VALUES(peer_number),
+                        dialled = VALUES(dialled), direction = VALUES(direction)'
+                : '')
         );
+        // Uniqueids of group-call member legs, and of every row that was kept:
+        // one call can write several CDRs under the same uniqueid, so only a
+        // uniqueid that produced nothing but member legs may be dropped.
+        $confLegs = [];
+        $kept = [];
 
         $added = 0;
         while (($line = fgets($handle)) !== false) {
@@ -149,10 +165,21 @@ final class CallRepository
                 array_pad(array_slice($values, 0, count(self::CSV_COLUMNS)), count(self::CSV_COLUMNS), '')
             );
 
-            $call = $this->interpret($cdr, $byUsername);
-            if ($call === null) {
+            // A group call's leg, tagged by the dialplan: who it was and how far
+            // they got. Not a call of its own — see call_participants.
+            if (str_starts_with(trim((string) $cdr['userfield']), 'tcmember:')) {
+                $this->recordParticipant($cdr);
                 continue;
             }
+
+            $call = $this->interpret($cdr, $byUsername);
+            if ($call === null) {
+                if (trim((string) $cdr['dcontext']) === PjsipConfig::CONF_CONTEXT) {
+                    $confLegs[trim((string) $cdr['uniqueid'])] = true;
+                }
+                continue;
+            }
+            $kept[$call['uniqueid']] = true;
 
             $insert->execute($call);
             $added += $insert->rowCount();
@@ -160,10 +187,123 @@ final class CallRepository
 
         fclose($handle);
 
+        if ($refresh) {
+            $this->dropConfLegs(array_keys(array_diff_key($confLegs, $kept)));
+        }
+
         $this->linkRecordings();
         $this->mergeListenEvents();
 
         return $added;
+    }
+
+    /**
+     * One leg of a group call, from its tagged CDR: tcmember:<contact>:<the
+     * child's uniqueid>, with ":joined" once they pressed 1. A leg writes more
+     * than one CDR, so the best outcome seen wins: joined, then answered (a
+     * voicemail, or "not now"), then missed.
+     */
+    private function recordParticipant(array $cdr): void
+    {
+        $parts = explode(':', trim((string) $cdr['userfield']));
+        $uniqueid = trim((string) $cdr['uniqueid']);
+        $parent = (string) ($parts[2] ?? '');
+        if ($uniqueid === '' || $parent === '') {
+            return;
+        }
+
+        $status = ($parts[3] ?? '') === 'joined'
+            ? 'joined'
+            : (strtoupper(trim((string) $cdr['disposition'])) === 'ANSWERED' ? 'answered' : 'missed');
+
+        Database::pdo()->prepare(
+            "INSERT INTO call_participants (uniqueid, parent_uniqueid, contact_id, status, billsec, started_at)
+             VALUES (:uniqueid, :parent, :contact, :status, :billsec, :started)
+             ON DUPLICATE KEY UPDATE
+                status = IF(FIELD(VALUES(status), 'missed', 'answered', 'joined') > FIELD(status, 'missed', 'answered', 'joined'),
+                            VALUES(status), status),
+                billsec = GREATEST(billsec, VALUES(billsec))"
+        )->execute([
+            'uniqueid' => $uniqueid,
+            'parent' => $parent,
+            'contact' => ctype_digit((string) ($parts[1] ?? '')) ? (int) $parts[1] : null,
+            'status' => $status,
+            'billsec' => (int) $cdr['billsec'],
+            'started' => $this->timestamp((string) $cdr['start']),
+        ]);
+    }
+
+    /**
+     * Who each group call reached, keyed by the child's call uniqueid.
+     *
+     * @param  array<int,string> $uniqueids
+     * @return array<string,array<int,array{name:string,status:string,seconds:int}>>
+     */
+    public function participants(array $uniqueids): array
+    {
+        $uniqueids = array_values(array_filter(array_unique($uniqueids)));
+        if ($uniqueids === []) {
+            return [];
+        }
+
+        $marks = implode(',', array_fill(0, count($uniqueids), '?'));
+        $st = Database::pdo()->prepare(
+            "SELECT p.parent_uniqueid, p.status, p.billsec, c.name
+               FROM call_participants p
+               LEFT JOIN contacts c ON c.id = p.contact_id
+              WHERE p.parent_uniqueid IN ($marks)
+              ORDER BY FIELD(p.status, 'joined', 'answered', 'missed'), c.name"
+        );
+        $st->execute($uniqueids);
+
+        $out = [];
+        foreach ($st->fetchAll() as $row) {
+            $out[(string) $row['parent_uniqueid']][] = [
+                'name' => (string) ($row['name'] ?? 'Someone'),
+                'status' => (string) $row['status'],
+                'seconds' => (int) $row['billsec'],
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * "Anna joined · Tom didn't answer" — who a group call reached, in one line.
+     *
+     * @param array<int,array{name:string,status:string,seconds:int}> $people
+     */
+    public static function describeParticipants(array $people): string
+    {
+        $parts = [];
+        foreach ($people as $p) {
+            $parts[] = $p['name'] . ' ' . match ($p['status']) {
+                'joined' => 'joined',
+                'answered' => "answered but didn't join",
+                default => "didn't answer",
+            };
+        }
+
+        return implode(' · ', $parts);
+    }
+
+    /**
+     * Remove group-call member legs imported before the import learned to skip
+     * them. Only rows with nothing of their own attached — no recording, no
+     * transcript — so a refresh can't take anything away.
+     */
+    private function dropConfLegs(array $uniqueids): void
+    {
+        $uniqueids = array_values(array_filter($uniqueids, static fn($u): bool => $u !== ''));
+        foreach (array_chunk($uniqueids, 200) as $chunk) {
+            $marks = implode(',', array_fill(0, count($chunk), '?'));
+            Database::pdo()->prepare(
+                "DELETE FROM calls
+                  WHERE uniqueid IN ($marks)
+                    AND recording_path IS NULL
+                    AND (transcript IS NULL OR transcript = '')"
+            )->execute($chunk);
+        }
     }
 
     /**
@@ -211,11 +351,34 @@ final class CallRepository
             return null;
         }
 
+        /*
+         * A group call's member legs: each grown-up's phone, originated into
+         * the conference. The child's own row already stands for the call — who
+         * they called, how long for — so these would only add an "incoming
+         * call from our own number" per person.
+         */
+        $context = trim((string) $cdr['dcontext']);
+        if ($context === PjsipConfig::CONF_CONTEXT) {
+            return null;
+        }
+
         $src = trim((string) $cdr['src']);
         $dst = trim((string) $cdr['dst']);
-        $extension = $device === null ? null : (string) $device['extension'];
+        $extension = (string) $device['extension'];
 
-        $outbound = $extension !== null && $src === $extension;
+        /*
+         * Outgoing when the phone started it. The caller number alone can't say
+         * so: a call out through the line presents the line's own number, not
+         * the handset's extension. The phone being the originating channel in
+         * the phones' own context can. An originated test call also has the
+         * rung phone as originator, in that context, so it is told apart by
+         * the caller number it presents and stays inbound.
+         */
+        $fromPhone = $this->deviceForChannel((string) $cdr['channel'], $byUsername) !== null
+            && $context === PjsipConfig::DEVICES_CONTEXT
+            // The test call and listening in both ring the phone as 929.
+            && $src !== PjsipConfig::TEST_CALLER_NUMBER;
+        $outbound = $src === $extension || $fromPhone;
         $peerNumber = $outbound ? $dst : $src;
 
         // The dialplan tags refused calls; anything else follows the disposition.
@@ -264,10 +427,26 @@ final class CallRepository
         if ($number === PjsipConfig::TEST_CALLER_NUMBER) {
             return [PjsipConfig::TEST_CALLER_NAME, null];
         }
+        // An announcement paging the phone — named after its button.
+        if ($number === AnnouncementRepository::CALLER_NUMBER) {
+            $label = preg_match('/^"?([^"<]+?)"?\s*</', trim($clid), $m) ? trim($m[1]) : '';
 
-        $contact = (new ContactRepository())->findByNumber($number);
+            return [$label !== '' && $label !== $number ? 'Announcement: ' . $label : 'Announcement', null];
+        }
+
+        $contacts = new ContactRepository();
+        $contact = $contacts->findByNumber($number);
         if ($contact !== null) {
             return [(string) $contact['name'], (int) $contact['id']];
+        }
+
+        // A speed dial — how a child calls nearly everyone, and the only way to
+        // call a group, which has no number of its own.
+        if (preg_match('/^\d{1,4}$/', $number)) {
+            $contact = $contacts->findBySpeedDial($number);
+            if ($contact !== null) {
+                return [(string) $contact['name'], (int) $contact['id']];
+            }
         }
 
         // Fall back to the display name the caller presented, if any.
@@ -306,7 +485,9 @@ final class CallRepository
     public function all(int $limit = 200): array
     {
         $st = Database::pdo()->prepare(
-            'SELECT * FROM calls ORDER BY started_at DESC, id DESC LIMIT :limit'
+            'SELECT c.*, d.name AS device_name
+               FROM calls c LEFT JOIN devices d ON d.id = c.device_id
+              ORDER BY c.started_at DESC, c.id DESC LIMIT :limit'
         );
         $st->bindValue('limit', $limit, PDO::PARAM_INT);
         $st->execute();
@@ -394,6 +575,27 @@ final class CallRepository
         return $st->fetchAll();
     }
 
+    /**
+     * Which page of the unfiltered log a call is on, so a link to one call can
+     * open the log where it is. Same ordering as search(); null if it's gone.
+     */
+    public function pageOf(int $id, int $perPage = self::PER_PAGE): ?int
+    {
+        $st = Database::pdo()->prepare('SELECT started_at FROM calls WHERE id = ?');
+        $st->execute([$id]);
+        $started = $st->fetchColumn();
+        if ($started === false) {
+            return null;
+        }
+
+        $st = Database::pdo()->prepare(
+            'SELECT COUNT(*) FROM calls WHERE started_at > :at OR (started_at = :at2 AND id > :id)'
+        );
+        $st->execute(['at' => $started, 'at2' => $started, 'id' => $id]);
+
+        return intdiv((int) $st->fetchColumn(), max(1, $perPage)) + 1;
+    }
+
     public function countMatching(array $filters = []): int
     {
         [$where, $bind] = $this->filterSql($filters);
@@ -453,10 +655,17 @@ final class CallRepository
 
         return [
             'id' => (int) $row['id'],
+            // Asterisk's id for the call: how a group call finds its legs.
+            'uniqueid' => (string) ($row['uniqueid'] ?? ''),
             'name' => (string) ($row['peer_name'] ?? 'Unknown number'),
             'initial' => initial((string) ($row['peer_name'] ?? '?')),
             'color' => self::colourFor((string) ($row['peer_name'] ?? '')),
             'number' => (string) $row['peer_number'],
+            // What was dialled: for a call in from the line, which of our
+            // numbers it came in on — see TrunkRepository::lineNumberFor().
+            'dialled' => (string) ($row['dialled'] ?? ''),
+            // Which of our phones it was on — only where the query joined it.
+            'deviceName' => (string) ($row['device_name'] ?? ''),
             'dir' => (string) $row['direction'],
             'status' => (string) $row['status'],
             'date' => $today ? 'Today' : ($yesterday ? 'Yesterday' : date('D j M', $started)),

@@ -6,19 +6,26 @@
  * @var int    $unheard
  */
 $tabs = [
-    ['screen' => 'dashboard', 'label' => 'Home',      'glyph' => '▦'],
-    ['screen' => 'phones',    'label' => 'Phones',    'glyph' => '▮'],
-    ['screen' => 'contacts',  'label' => 'People',    'glyph' => '☺'],
-    ['screen' => 'calllog',   'label' => 'Log',       'glyph' => '≣'],
-    ['screen' => 'voicemail', 'label' => 'Voicemail', 'glyph' => '◌', 'dot' => $unheard > 0],
-    ['screen' => 'jokes',     'label' => 'Jokes',     'glyph' => '☺'],
+    ['screen' => 'dashboard', 'label' => 'Home',      'icon' => 'house'],
+    ['screen' => 'phones',    'label' => 'Phones',    'icon' => 'mobile-screen-button'],
+    ['screen' => 'contacts',  'label' => 'People',    'icon' => 'user-group'],
+    ['screen' => 'calllog',   'label' => 'Log',       'icon' => 'clock-rotate-left'],
+    ['screen' => 'voicemail', 'label' => 'Voicemail', 'icon' => 'voicemail', 'dot' => $unheard > 0],
+    ['screen' => 'jokes',     'label' => 'Jokes',     'icon' => 'face-laugh-beam'],
 ];
 ?>
-<nav class="tc-bottomnav">
+<?php /* Font Awesome solid icons, one per tab, each in the same fixed box so
+         the row lines up whatever the phone's own fonts do. */ ?>
+<nav class="tc-bottomnav" aria-label="Main">
   <?php foreach ($tabs as $tab): ?>
-    <a class="tc-tab <?= $screen === $tab['screen'] ? 'is-active' : '' ?>" href="<?= e(url(['screen' => $tab['screen']])) ?>">
-      <span class="tc-tab__glyph"><?= $tab['glyph'] ?><?php if (!empty($tab['dot'])): ?><span class="tc-tab__dot"></span><?php endif; ?></span>
-      <?= e($tab['label']) ?>
+    <?php $active = $screen === $tab['screen']; ?>
+    <a class="tc-tab <?= $active ? 'is-active' : '' ?>" href="<?= e(url(['screen' => $tab['screen']])) ?>"
+       <?= $active ? 'aria-current="page"' : '' ?>>
+      <span class="tc-tab__glyph">
+        <i class="fa-solid fa-<?= e($tab['icon']) ?>" aria-hidden="true"></i>
+        <?php if (!empty($tab['dot'])): ?><span class="tc-tab__dot" title="New messages"></span><?php endif; ?>
+      </span>
+      <span class="tc-tab__label"><?= e($tab['label']) ?></span>
     </a>
   <?php endforeach; ?>
 </nav>

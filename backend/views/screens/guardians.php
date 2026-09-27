@@ -9,7 +9,10 @@ $guardians = array_map(
 $inviteRole = $store->inviteRole();
 $canManage = Auth::can('guardians');
 ?>
-<div class="tc-stack" style="gap:16px;max-width:660px">
+<?php /* The grown-ups in the main column; your own Face ID sign-in and what
+         each role may do beside it on a wide screen, below it on a phone. */ ?>
+<div class="tc-split tc-split--main-first">
+<div class="tc-split__main tc-stack" style="gap:16px">
   <div class="tc-info-banner">
     <span class="tc-info-banner__icon tc-info-banner__icon--teal">♟</span>
     <?php if ($canManage): ?>
@@ -116,6 +119,69 @@ $canManage = Auth::can('guardians');
       </form>
     <?php endif; ?>
   </section>
+</div>
+
+<aside class="tc-split__side tc-stack" style="gap:16px">
+
+  <?php
+  /*
+   * Face ID / fingerprint sign-in for the grown-up looking at this page: one
+   * passkey per device, each made on that device. Only on the secure address —
+   * passkeys don't work on a bare IP address or plain http.
+   */
+  $passkeys = (new PasskeyRepository())->forGuardian((int) $me['id']);
+  ?>
+  <section class="tc-card tc-passkeys" data-tc-passkeys>
+    <div class="tc-card__intro">
+      <h2 class="tc-card__title"><i class="fa-solid fa-fingerprint" aria-hidden="true"></i> Sign in with Face ID</h2>
+      <p class="tc-card__hint">
+        Skip the password on your own phone: Face ID, Touch ID or a fingerprint
+        unlocks a passkey that only that phone holds. Set it up once on each
+        device you use.
+      </p>
+    </div>
+
+    <?php if ($passkeys !== []): ?>
+      <div class="tc-stack tc-stack--snug">
+        <?php foreach ($passkeys as $k): ?>
+          <div class="tc-passkey-row">
+            <i class="fa-solid fa-mobile-screen tc-passkey-row__icon" aria-hidden="true"></i>
+            <div class="tc-grow">
+              <div class="tc-passkey-row__name"><?= e($k['label'] !== '' ? $k['label'] : 'A device') ?></div>
+              <div class="tc-passkey-row__meta">
+                Added <?= e(date('j M Y', strtotime((string) $k['created_at']))) ?>
+                · <?= $k['last_used_at'] === null ? 'not used yet' : 'last used ' . e(date('j M, g:ia', strtotime((string) $k['last_used_at']))) ?>
+              </div>
+            </div>
+            <form method="post" action="/" class="tc-inline-form">
+              <?= form_fields() ?>
+              <input type="hidden" name="action" value="passkey_delete">
+              <input type="hidden" name="id" value="<?= (int) $k['id'] ?>">
+              <button class="tc-link tc-link--danger" type="submit">remove</button>
+            </form>
+          </div>
+        <?php endforeach; ?>
+      </div>
+    <?php endif; ?>
+
+    <?php if (WebAuthn::available()): ?>
+      <div class="tc-row tc-row--wrap tc-mt-14">
+        <button class="tc-btn tc-btn--teal" type="button" data-tc-passkey-add>
+          <i class="fa-solid fa-plus" aria-hidden="true"></i> Set up on this device
+        </button>
+        <span class="tc-micro" data-tc-passkey-status></span>
+      </div>
+    <?php else: ?>
+      <p class="tc-note tc-note--flush tc-mt-14">
+        Open twocans at its secure address to set this up — passkeys only work over
+        https with a proper name, not <?= e(WebAuthn::origin()) ?>.
+        <?php $host = (new DynamicDnsRepository())->get()['hostname'] ?? ''; ?>
+        <?php if ($host !== ''): ?>
+          Try <a class="tc-link" href="https://<?= e($host) ?>/?screen=guardians">https://<?= e($host) ?></a>.
+        <?php endif; ?>
+      </p>
+    <?php endif; ?>
+  </section>
 
   <div class="tc-grid tc-grid--roles">
     <div class="tc-card tc-card--sm" style="border-radius:16px;padding:14px 16px">
@@ -131,4 +197,5 @@ $canManage = Auth::can('guardians');
       <div class="tc-card__hint" style="margin-top:3px">See call logs &amp; voicemail. Can't change settings.</div>
     </div>
   </div>
+</aside>
 </div>

@@ -135,6 +135,41 @@ a { color: inherit; text-decoration: none; }
 .tc-muted   { font: 600 13px var(--tc-body); color: var(--tc-ink-3); }
 .tc-meta    { font: 600 12px var(--tc-body); color: var(--tc-ink-3); }
 .tc-micro   { font: 600 11px var(--tc-body); color: var(--tc-ink-4); }
+.tc-field-note { display: block; margin-top: 5px; font-weight: 600; }
+
+.tc-call-row__line { font-weight: 700; color: var(--tc-teal-deep); }
+
+/* Weekly schedule editor: rows of day chips and a from–until time. */
+.tc-sched__rows { display: flex; flex-direction: column; gap: 10px; }
+.tc-sched__row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px;
+  padding: 12px; border-radius: 14px; background: var(--tc-sunken-2); border: 1.5px solid var(--tc-border);
+}
+.tc-sched__days { display: flex; gap: 5px; }
+.tc-sched__times { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.tc-sched__times .tc-time-field { min-width: 118px; }
+.tc-sched__remove {
+  border: none; background: transparent; color: var(--tc-ink-4); font: 800 20px var(--tc-display);
+  cursor: pointer; padding: 4px 8px; border-radius: 8px;
+}
+.tc-sched__remove:hover { background: var(--tc-card); color: var(--tc-coral-lip); }
+.tc-sched__foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: 10px; }
+.tc-daychip { position: relative; cursor: pointer; }
+.tc-daychip input { position: absolute; opacity: 0; width: 0; height: 0; }
+.tc-daychip span[aria-hidden] {
+  display: flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border-radius: 50%;
+  font: 800 12px var(--tc-display); color: var(--tc-ink-4);
+  background: var(--tc-card); border: 1.5px solid var(--tc-border);
+}
+.tc-daychip input:checked + span { background: var(--tc-teal); border-color: var(--tc-teal); color: #fff; }
+.tc-daychip input:focus-visible + span { outline: 2px solid var(--tc-teal-deep); outline-offset: 2px; }
+.tc-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Phone line: one row per number, and the phone it rings. */
+.tc-ring-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.tc-ring-row__num { font: 800 14px var(--tc-display); color: var(--tc-ink); min-width: 150px; display: flex; flex-direction: column; }
+.tc-ring-row__pick { max-width: 300px; flex: 1; }
 
 /* ============================================================= LOGIN SCREEN */
 
@@ -270,6 +305,7 @@ a { color: inherit; text-decoration: none; }
 
 .tc-stack { display: flex; flex-direction: column; gap: 18px; }
 .tc-stack--tight { gap: 12px; }
+.tc-stack--snug  { gap: 4px; }
 .tc-narrow  { max-width: 680px; }
 .tc-narrow--log { max-width: 760px; }
 .tc-narrow--vm  { max-width: 720px; }
@@ -398,26 +434,42 @@ a { color: inherit; text-decoration: none; }
   backdrop-filter: blur(8px);
   border-top: 1.5px solid var(--tc-border-4);
   justify-content: space-around;
-  padding: 8px 6px 10px;
+  padding: 6px 4px 8px;
 }
 
 .tc-tab {
+  flex: 1 1 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 3px;
   border: none;
   background: transparent;
   cursor: pointer;
-  font: 800 10px var(--tc-body);
+  font: 800 10.5px var(--tc-body);
   color: var(--tc-ink-4);
-  padding: 2px 4px;
+  padding: 2px 0;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
 }
-.tc-tab.is-active { color: var(--tc-coral); }
-.tc-tab__glyph { font-size: 16px; position: relative; }
+/* The same box for every icon, so they share a centre line and a baseline. */
+.tc-tab__glyph {
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+  width: 44px; height: 28px; border-radius: 14px;
+  font-size: 18px; line-height: 1;
+  transition: background .15s ease, color .15s ease;
+}
+.tc-tab__glyph i { width: 22px; text-align: center; }
+.tc-tab__label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tc-tab.is-active { color: var(--tc-coral-lip); }
+.tc-tab.is-active .tc-tab__glyph { background: var(--tc-coral-bg); color: var(--tc-coral); }
+.tc-tab:active .tc-tab__glyph { background: var(--tc-sunken-2); }
 .tc-tab__dot {
-  position: absolute; top: -4px; right: -7px;
-  width: 7px; height: 7px; border-radius: 50%; background: var(--tc-coral);
+  position: absolute; top: 2px; right: 8px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--tc-coral); box-shadow: 0 0 0 2px rgba(255, 253, 248, .94);
 }
 
 /* ==================================================================== BUTTONS */
@@ -443,6 +495,8 @@ a { color: inherit; text-decoration: none; }
 
 .tc-btn--teal { background: var(--tc-teal-deep); color: #fff; box-shadow: 0 4px 0 var(--tc-teal-lip); }
 .tc-btn--teal:active { box-shadow: 0 2px 0 var(--tc-teal-lip); transform: translateY(2px); }
+.tc-btn--whatsapp { background: #25D366; color: #fff; box-shadow: 0 4px 0 #1DA851; }
+.tc-btn--whatsapp:active { box-shadow: 0 2px 0 #1DA851; transform: translateY(2px); }
 
 .tc-btn--sun { background: var(--tc-sun); color: #6E5212; box-shadow: 0 4px 0 #E6AE3D; padding: 10px 16px; font-size: 13px; border-radius: 12px; }
 .tc-btn--sun:active { box-shadow: 0 2px 0 #E6AE3D; transform: translateY(2px); }
@@ -529,6 +583,15 @@ a { color: inherit; text-decoration: none; }
 .tc-menu__item:hover { background: var(--tc-teal-bg); }
 .tc-menu__item.is-active { background: var(--tc-teal-bg); color: var(--tc-teal-lip); }
 .tc-menu__divider { height: 1.5px; background: var(--tc-border-3); margin: 5px 4px; }
+.tc-menu__item i { width: 18px; margin-right: 6px; text-align: center; color: var(--tc-ink-4); }
+.tc-menu__item.is-active i { color: inherit; }
+/* A <button> that looks like the links around it. */
+button.tc-menu__item { width: 100%; border: none; background: transparent; text-align: left; }
+.tc-menu__item--signout, .tc-menu__item--signout i { color: var(--tc-coral-lip); }
+.tc-menu__item--signout:hover { background: var(--tc-coral-bg); }
+.tc-menu__who { padding: 8px 12px 6px; }
+.tc-menu__name { font: 800 14px var(--tc-display); color: var(--tc-ink); }
+.tc-menu__role { font: 600 11px var(--tc-body); color: var(--tc-ink-4); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
 
 .tc-link { font: 800 12px var(--tc-body); color: var(--tc-teal-deep); cursor: pointer; background: none; border: none; padding: 0; }
 .tc-back { font: 800 13px var(--tc-display); color: var(--tc-ink-7); cursor: pointer; align-self: flex-start; }
@@ -626,7 +689,8 @@ a { color: inherit; text-decoration: none; }
 .tc-switch.is-on { background: var(--tc-teal); }
 .tc-switch.is-on::after { left: 23px; }
 
-/* On the teal gradient card the switch is translucent white. */
+/* Transparent-white switch, for the teal gradient cards only (Bedtime mode).
+   On a white .tc-card it is white on white — use the plain .tc-switch there. */
 .tc-switch--light { background: rgba(255, 255, 255, .22); }
 .tc-switch--light.is-on { background: rgba(255, 255, 255, .55); }
 
@@ -652,22 +716,35 @@ a { color: inherit; text-decoration: none; }
 .tc-card__title { font: 800 16px var(--tc-display); }
 .tc-card__head  { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
 .tc-card__hint  { font: 600 12px var(--tc-body); color: var(--tc-ink-3); }
+.tc-card__head--wrap { flex-wrap: wrap; gap: 10px; }
+.tc-card__lead  { margin: 0 0 14px; }
+/* A card's title with its explanation under it, and a smaller one partway down. */
+.tc-card__intro { margin-bottom: 14px; }
+.tc-card__intro .tc-card__hint { margin: 4px 0 0; line-height: 1.5; }
+.tc-card__intro--sub { margin-top: 20px; padding-top: 18px; border-top: 1.5px dashed var(--tc-border-3); }
+.tc-card__subtitle { font: 800 14px var(--tc-display); }
+.tc-card__hint--loose { line-height: 1.6; }
+.tc-card__after { margin: 10px 0 0; }
 
 .tc-divider { height: 1.5px; background: repeating-linear-gradient(90deg, var(--tc-border-3) 0 6px, transparent 6px 12px); }
 .tc-divider--fine { background: repeating-linear-gradient(90deg, #EFE0C9 0 5px, transparent 5px 10px); }
 
+/* The text flows as one paragraph beside the icon. (As a flex row, a <b> in
+   the middle of a sentence became a column of its own.) */
 .tc-info-banner {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  position: relative;
+  display: block;
+  min-height: 26px;
+  line-height: 1.5;
   background: var(--tc-sunken-2);
   border: 1.5px solid var(--tc-border);
   border-radius: 16px;
-  padding: 12px 16px;
+  padding: 12px 16px 12px 52px;
   font: 700 13px var(--tc-body);
   color: var(--tc-ink-3);
 }
 .tc-info-banner__icon {
+  position: absolute; left: 16px; top: 50%; transform: translateY(-50%);
   width: 26px; height: 26px; flex: none;
   border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
@@ -681,7 +758,7 @@ a { color: inherit; text-decoration: none; }
 
 .tc-grid { display: grid; gap: 18px; align-items: start; }
 .tc-grid--stats    { grid-template-columns: repeat(auto-fit,  minmax(150px, 1fr)); gap: 14px; }
-.tc-grid--panels   { grid-template-columns: repeat(auto-fit,  minmax(300px, 1fr)); }
+.tc-grid--stats4   { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
 .tc-grid--devices  { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
 .tc-grid--contacts { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
 .tc-grid--roles    { grid-template-columns: repeat(auto-fit,  minmax(170px, 1fr)); gap: 12px; }
@@ -745,6 +822,8 @@ a { color: inherit; text-decoration: none; }
 .tc-pill--ok    { background: var(--tc-green-bg); color: var(--tc-green-ink); }
 .tc-pill--bad   { background: var(--tc-red-bg); color: var(--tc-red-ink); }
 .tc-pill--muted { background: #F1E7D7; color: var(--tc-ink-3); }
+/* A count that wants a decision — how many people are waiting on the dashboard. */
+.tc-pill--coral { background: var(--tc-coral); color: #fff; }
 .tc-pill--lg    { font-size: 12px; padding: 5px 13px; }
 
 .tc-chip {
@@ -871,8 +950,8 @@ button.tc-role-pill { cursor: pointer; }
   text-align: left;
 }
 .tc-line-row:hover { background: var(--tc-sunken-2); }
-.tc-line-row__name { font: 800 14px var(--tc-display); color: var(--tc-ink); }
-.tc-line-row__meta { font: 600 12px var(--tc-body); color: var(--tc-ink-3); }
+.tc-line-row__name { display: block; font: 800 14px var(--tc-display); color: var(--tc-ink); }
+.tc-line-row__meta { display: block; font: 600 12px var(--tc-body); color: var(--tc-ink-3); }
 
 .tc-request {
   border: 1.5px solid var(--tc-border);
@@ -887,6 +966,16 @@ button.tc-role-pill { cursor: pointer; }
 .tc-request__actions form { flex: 1; display: flex; }
 .tc-request__actions .tc-btn { flex: 1; }
 
+/* Call log: the numbers the kids tried, folded away once dealt with. */
+.tc-tried > summary { list-style: none; cursor: pointer; }
+.tc-tried > summary::-webkit-details-marker { display: none; }
+.tc-tried__head { display: flex; align-items: center; gap: 12px; }
+.tc-tried__sub  { display: block; margin-top: 4px; line-height: 1.5; }
+.tc-tried__count { font: 700 12px var(--tc-body); color: var(--tc-ink-4); white-space: nowrap; }
+.tc-tried__count::after { content: " ▸"; }
+.tc-tried[open] .tc-tried__count::after { content: " ▾"; }
+.tc-tried__list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-top: 16px; }
+
 .tc-empty { text-align: center; padding: 18px; font: 700 13px var(--tc-body); color: var(--tc-ink-5); }
 
 .tc-bedtime {
@@ -898,15 +987,36 @@ button.tc-role-pill { cursor: pointer; }
 }
 .tc-bedtime__head  { display: flex; align-items: center; justify-content: space-between; }
 .tc-bedtime__state { font: 700 13px var(--tc-body); opacity: .92; margin-top: 8px; }
-.tc-bedtime__times { display: flex; gap: 8px; margin-top: 14px; }
-.tc-bedtime__slot  { flex: 1; background: rgba(255, 255, 255, .18); border-radius: 13px; padding: 10px 12px; }
+.tc-bedtime__times { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.tc-bedtime__slot  { flex: 1 1 120px; background: rgba(255, 255, 255, .18); border-radius: 13px; padding: 10px 12px; }
 .tc-bedtime__slot dt { font: 700 11px var(--tc-body); opacity: .8; }
 .tc-bedtime__slot dd { font: 800 18px var(--tc-display); margin: 0; }
 .tc-bedtime__foot  { font: 600 12px var(--tc-body); opacity: .85; margin-top: 11px; }
+.tc-bedtime__edit  { display: inline-block; margin-left: 4px; font-weight: 800; color: #fff; text-decoration: underline; text-underline-offset: 3px; }
+
+/* Dashboard: the queue that waits on a grown-up gets the wide column and the
+   at-a-glance cards sit beside it. A plain grid lined each row up by its
+   tallest card, and the queue is much taller than the rest, which left holes. */
+.tc-dashboard { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 1100px) {
+  .tc-dashboard { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .tc-grid--stats4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 
 .tc-recent-row { display: flex; align-items: center; gap: 12px; padding: 8px 6px; border-radius: 12px; }
+.tc-recent-row:hover { background: var(--tc-sunken-2); }
+a.tc-recent-row { color: inherit; text-decoration: none; }
+
+/* A call opened from the dashboard: land on it, and show which one it is. */
+.tc-card[id^="call-"] { scroll-margin-top: 90px; }
+.tc-card.is-focus { animation: tc-focus 2.4s ease-out 1; box-shadow: 0 0 0 2.5px var(--tc-teal); }
+@keyframes tc-focus { 0%, 40% { background: var(--tc-teal-bg); } 100% { background: var(--tc-card); } }
+@media (prefers-reduced-motion: reduce) { .tc-card.is-focus { animation: none; } }
 .tc-recent-row__name { font: 800 14px var(--tc-display); color: var(--tc-ink); }
 .tc-recent-row__meta { font: 600 11px var(--tc-body); color: var(--tc-ink-3); }
+.tc-recent-row__dur  { font: 800 14px var(--tc-display); color: var(--tc-teal-deep); font-variant-numeric: tabular-nums; }
 
 /* ==================================================================== PHONES */
 
@@ -955,7 +1065,20 @@ button.tc-role-pill { cursor: pointer; }
 .tc-add-tile__title { font: 800 15px var(--tc-display); }
 .tc-add-tile__hint  { font: 600 12px var(--tc-body); text-align: center; max-width: 170px; }
 
-.tc-device-head { display: flex; align-items: center; gap: 18px; }
+.tc-device-head { display: flex; align-items: center; gap: 18px; padding: 22px; }
+.tc-device-head__meta { font-size: 13px; }
+
+/* One phone's page: what a parent changes on the left, what they look up on
+   the right. One column, in that order, once there isn't room for both. */
+.tc-device { max-width: 1120px; }
+.tc-device__grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.tc-device__save { align-self: flex-start; }
+.tc-device__wording { margin-top: 16px; }
+.tc-device__wording .tc-textarea { margin-top: 6px; }
+.tc-device__remove { align-self: flex-start; }
+@media (max-width: 1100px) {
+  .tc-device__grid { grid-template-columns: 1fr; }
+}
 
 .tc-rule-row {
   display: flex;
@@ -1031,6 +1154,39 @@ button.tc-role-pill { cursor: pointer; }
 }
 
 .tc-vm-row { display: flex; align-items: center; gap: 13px; padding: 15px 18px; }
+.tc-vm-row--bare { padding: 0 0 14px; }
+
+/* Greetings screen: everything the line says, one card per listener, one
+   row per recording — play, where it plays, and the upload that replaces it. */
+.tc-greetings { max-width: 820px; }
+.tc-greetings__intro { margin: 0 4px; font-size: 13px; line-height: 1.5; }
+.tc-greetings__head  { margin-bottom: 4px; }
+.tc-greetings__head .tc-card__hint { margin-top: 3px; }
+.tc-greet {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  gap: 4px 14px;
+  align-items: center;
+  padding: 14px 0;
+  border-top: 1.5px dashed var(--tc-border-3);
+}
+.tc-greetings__head + .tc-greet { border-top: none; }
+.tc-greet__play  { align-self: start; }
+.tc-greet__stock {
+  display: flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; border-radius: 50%;
+  background: var(--tc-sunken-2); color: var(--tc-ink-4);
+  font-size: 16px;
+}
+.tc-greet__title { font: 800 14px var(--tc-display); color: var(--tc-ink); display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.tc-greet__when  { font: 600 12px var(--tc-body); color: var(--tc-ink-3); margin-top: 3px; line-height: 1.45; }
+.tc-greet__says  { font: 600 12px var(--tc-body); color: var(--tc-ink-4); font-style: italic; margin-top: 4px; }
+.tc-greet__actions { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.tc-greet__reset { font-size: 12px; }
+@media (max-width: 560px) {
+  .tc-greet { grid-template-columns: 44px minmax(0, 1fr); }
+  .tc-greet__actions { grid-column: 2; flex-direction: row; align-items: center; justify-content: flex-start; gap: 12px; }
+}
 .tc-vm-play {
   width: 46px; height: 46px; flex: none;
   border-radius: 50%;
@@ -1298,6 +1454,7 @@ button.tc-role-pill { cursor: pointer; }
   padding: 11px 13px;
   margin-bottom: 16px;
 }
+.tc-note--flush { margin: 0; }
 
 .tc-spinner-step { text-align: center; padding: 18px 0; }
 .tc-spinner {
@@ -1339,6 +1496,7 @@ button.tc-role-pill { cursor: pointer; }
 .tc-editor-head__fields { flex: 1; display: flex; flex-direction: column; gap: 8px; }
 .tc-editor-head__fields input { margin-top: 0; }
 .tc-editor-hint { font: 600 11px var(--tc-body); color: var(--tc-ink-4); margin: -6px 0 0; }
+.tc-editor-hint--warn { color: var(--tc-red-ink); }
 
 .tc-code-row {
   display: flex;
@@ -1387,6 +1545,9 @@ button.tc-role-pill { cursor: pointer; }
 .tc-win-card__label { font: 800 14px var(--tc-display); color: var(--tc-ink); }
 .tc-win-card__sub   { font: 600 11px var(--tc-body); color: var(--tc-ink-3); }
 .tc-win-radio { position: absolute; opacity: 0; width: 0; height: 0; }
+/* The custom window's own weekly times, only while Custom hours is picked. */
+.tc-win-custom { display: none; margin-top: 12px; }
+div:has(> .tc-win-grid #win-custom:checked) > .tc-win-custom { display: block; }
 .tc-win-radio:checked + .tc-win-card--teal { border: 2px solid var(--tc-teal-deep); background: var(--tc-teal-bg); }
 .tc-win-radio:checked + .tc-win-card--sun  { border: 2px solid var(--tc-sun-ink-2); background: var(--tc-sun-bg); }
 .tc-win-radio:checked + .tc-win-card--lav  { border: 2px solid var(--tc-lav-ink); background: var(--tc-lav-bg); }
@@ -1409,6 +1570,10 @@ button.tc-role-pill { cursor: pointer; }
 .tc-toggle-row--sos { border-color: var(--tc-red-bg); background: #FFF6F4; }
 .tc-toggle-row--sos .tc-toggle-row__title { color: var(--tc-red-ink); }
 .tc-toggle-row--sos .tc-toggle-row__hint  { color: #D6917F; }
+/* "Always put through": reassurance rather than alarm, so teal, not red. */
+.tc-toggle-row--always { border-color: var(--tc-teal-bg); background: #F3FBFA; }
+.tc-toggle-row--always .tc-toggle-row__title { color: var(--tc-teal-lip); }
+.tc-toggle-row--always .tc-toggle-row__hint  { color: #74A9A2; }
 
 /* ------------------------------------------------------------- listen modal */
 
@@ -1494,7 +1659,7 @@ button.tc-role-pill { cursor: pointer; }
 
 @media (max-width: 520px) {
   .tc-header__actions .tc-btn { padding: 10px 12px; font-size: 13px; }
-  .tc-grid--panels, .tc-grid--devices, .tc-grid--contacts { grid-template-columns: 1fr; }
+  .tc-grid--devices, .tc-grid--contacts { grid-template-columns: 1fr; }
   .tc-modal { padding: 0; align-items: flex-end; overflow: hidden; }
   .tc-modal__panel {
     margin: 0;
@@ -1520,9 +1685,13 @@ button.tc-role-pill { cursor: pointer; }
 /* Utility bits used sparingly in the views. */
 .tc-row      { display: flex; align-items: center; gap: 10px; }
 .tc-row--between { justify-content: space-between; }
+.tc-row--tight { gap: 8px; }
+.tc-row--wrap  { flex-wrap: wrap; }
 .tc-grow     { flex: 1; min-width: 0; }
+.tc-nowrap   { white-space: nowrap; }
 .tc-none     { flex: none; }
 .tc-mt-auto  { margin-top: auto; }
+.tc-mt-14    { margin-top: 14px; }
 .tc-inline-form { display: inline-flex; }
 
 /* ------------------------------------------------- add-a-guardian form ---- */
@@ -1637,8 +1806,8 @@ button.tc-role-pill { cursor: pointer; }
   letter-spacing: .04em;
 }
 .tc-dial--self .tc-dial__num { background: var(--tc-coral-bg); color: var(--tc-coral-lip); }
-.tc-dial__label { font: 800 14px var(--tc-display); color: var(--tc-ink); }
-.tc-dial__sub { font: 600 12px/1.4 var(--tc-body); color: var(--tc-ink-3); }
+.tc-dial__label { display: block; font: 800 14px var(--tc-display); color: var(--tc-ink); }
+.tc-dial__sub { display: block; font: 600 12px/1.4 var(--tc-body); color: var(--tc-ink-3); }
 
 /* Status pill stacked over the test-call button on the device header card. */
 .tc-device-head__side {
@@ -1953,12 +2122,13 @@ button.tc-role-pill { cursor: pointer; }
 .tc-joke-add__title { font: 800 15px var(--tc-display); margin-bottom: 2px; }
 
 /* The file input covers its label, so the whole pill is the target — the same
-   arrangement as the photo picker, and for the same reason. */
-.tc-joke-file { position: relative; overflow: hidden; cursor: pointer; flex: none; max-width: 100%; }
-.tc-joke-file input[type="file"] {
+   arrangement as the photo picker, and for the same reason. Used by both audio
+   uploads: the joke line and the message a refused caller hears. */
+.tc-audio-file { position: relative; overflow: hidden; cursor: pointer; flex: none; max-width: 100%; }
+.tc-audio-file input[type="file"] {
   position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%;
 }
-.tc-joke-file span {
+.tc-audio-file span {
   display: block; max-width: 200px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
@@ -2013,7 +2183,8 @@ button.tc-role-pill { cursor: pointer; }
 
 /* ========================================================== ASKS & GROUPS */
 
-/* "Hear them ask" — the child's own voice on a blocked-number request. */
+/* The clip on a card for a number nobody recognises: the child's own voice
+   asking who they meant, or the message an unknown caller left in the mailbox. */
 .tc-request__clip {
   display: flex;
   align-items: center;
@@ -2072,4 +2243,317 @@ button.tc-role-pill { cursor: pointer; }
   background: var(--tc-teal-bg);
   border-radius: 20px;
   padding: 2px 8px;
+}
+.tc-quiet-card__value a { color: inherit; text-decoration: none; border-bottom: 1.5px dashed currentColor; }
+
+/* A group call: who it reached. */
+.tc-call-row__who { font: 700 12px var(--tc-body); color: var(--tc-teal-deep); margin-top: 3px; }
+.tc-recent-row__who { color: var(--tc-teal-deep); font-weight: 700; }
+
+/* Announcements: the dashboard's buttons, and the screen that sets them up. */
+.tc-announce-bar__buttons { display: flex; flex-wrap: wrap; gap: 10px; }
+.tc-announce-btn {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 18px 12px 14px; border-radius: 16px; cursor: pointer;
+  background: var(--tc-sun-bg); border: 1.5px solid var(--tc-border);
+  font: 800 15px var(--tc-display); color: var(--tc-ink);
+  box-shadow: 0 3px 0 rgba(74, 59, 51, .08);
+}
+.tc-announce-btn:hover:not(:disabled) { transform: translateY(-1px); background: #FFE7A8; }
+.tc-announce-btn:active:not(:disabled) { transform: translateY(1px); box-shadow: none; }
+.tc-announce-btn:disabled { opacity: .5; cursor: not-allowed; }
+.tc-announce-btn__emoji { font-size: 22px; line-height: 1; }
+
+.tc-announce { max-width: 760px; }
+.tc-announce__card > summary { list-style: none; cursor: pointer; }
+.tc-announce__card > summary::-webkit-details-marker { display: none; }
+.tc-announce__head { display: flex; align-items: center; gap: 14px; }
+.tc-announce__emoji { font-size: 28px; line-height: 1; }
+.tc-announce__sum { display: block; margin-top: 3px; }
+.tc-announce__card[open] .tc-announce__toggle { visibility: hidden; }
+.tc-announce__form { display: flex; flex-direction: column; gap: 14px; margin-top: 18px; }
+.tc-announce__emoji-field { width: 80px; }
+.tc-announce__set { border: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.tc-announce__set legend { margin-bottom: 6px; }
+.tc-announce__choice { display: flex; gap: 10px; align-items: flex-start; font: 600 13px/1.45 var(--tc-body); color: var(--tc-ink-2); }
+.tc-announce__choice input { margin-top: 3px; }
+.tc-announce__phones { display: flex; flex-wrap: wrap; gap: 8px 16px; padding-left: 26px; font: 700 13px var(--tc-body); }
+.tc-announce__phone { display: flex; gap: 6px; align-items: center; }
+.tc-announce__url { word-break: break-all; }
+.tc-announce__code { font: 600 12px/1.5 ui-monospace, monospace; background: var(--tc-sunken-2); border-radius: 12px; padding: 12px; overflow-x: auto; white-space: pre; margin: 10px 0 0; }
+.tc-announce__foot { margin-top: 18px; }
+.tc-link--danger { color: var(--tc-coral-lip); }
+.tc-announce__form > .tc-btn { align-self: flex-start; }
+
+/* Icon picker: a button showing the icon, and a panel of emoji and icons. */
+.tc-iconpick { position: relative; margin-top: 4px; }
+.tc-iconpick__current {
+  display: flex; align-items: center; gap: 8px; height: 46px; padding: 0 12px;
+  border-radius: 12px; border: 1.5px solid var(--tc-border); background: var(--tc-card); cursor: pointer;
+  font-size: 22px; color: var(--tc-ink);
+}
+.tc-iconpick__caret { font-size: 11px; color: var(--tc-ink-4); }
+.tc-iconpick__panel {
+  position: absolute; z-index: 30; top: calc(100% + 6px); left: 0;
+  width: min(520px, calc(100vw - 48px)); padding: 12px;
+  background: var(--tc-card); border: 1.5px solid var(--tc-border); border-radius: 16px;
+  box-shadow: 0 16px 40px rgba(74, 59, 51, .18);
+}
+.tc-iconpick__bar { display: flex; gap: 8px; flex-wrap: wrap; }
+.tc-iconpick__search { flex: 1 1 220px; }
+.tc-iconpick__cat { flex: 0 1 190px; }
+.tc-iconpick__emoji { display: flex; flex-wrap: wrap; gap: 2px; margin: 10px 0; padding-bottom: 10px; border-bottom: 1.5px dashed var(--tc-border-3); }
+.tc-iconpick__grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(42px, 1fr)); gap: 4px;
+  max-height: 260px; overflow-y: auto;
+}
+.tc-iconpick__opt {
+  display: flex; align-items: center; justify-content: center; width: 42px; height: 42px;
+  border: none; border-radius: 10px; background: transparent; cursor: pointer;
+  font-size: 20px; color: var(--tc-ink-2);
+}
+.tc-iconpick__opt:hover { background: var(--tc-sunken-2); color: var(--tc-teal-deep); }
+.tc-iconpick__opt.is-on { background: var(--tc-teal); color: #fff; }
+.tc-iconpick__foot { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+.tc-announce-btn__emoji i { color: var(--tc-coral-lip); }
+.tc-announce__emoji i { color: var(--tc-coral-lip); }
+.tc-announce__note { margin: -4px 0 2px 26px; }
+
+/* Installed as an app: keep the bottom tabs clear of the iPhone home bar. */
+.tc-bottomnav { padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px)); }
+
+/* Face ID sign-in: the passkeys card, and the sign-in page's button. */
+.tc-passkeys .tc-card__title i { color: var(--tc-teal-deep); margin-right: 4px; }
+.tc-passkey-row { display: flex; align-items: center; gap: 12px; padding: 10px 4px; border-top: 1.5px dashed var(--tc-border-3); }
+.tc-passkey-row:first-child { border-top: none; }
+.tc-passkey-row__icon { font-size: 20px; color: var(--tc-ink-4); width: 24px; text-align: center; }
+.tc-passkey-row__name { font: 800 14px var(--tc-display); color: var(--tc-ink); }
+.tc-passkey-row__meta { font: 600 12px var(--tc-body); color: var(--tc-ink-3); }
+.tc-passkey-login { width: 100%; margin-top: 10px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.tc-passkey-login[hidden] { display: none; }
+
+/* Call log: filters and calls in the main column; the numbers the kids tried,
+   the privacy note and retention beside them on a wide screen, stacked above
+   the calls on a narrow one. */
+.tc-calllog {
+  display: grid; gap: 12px; max-width: 760px;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "filters" "side" "list";
+}
+.tc-calllog__filters { grid-area: filters; }
+.tc-calllog__side    { grid-area: side; }
+.tc-calllog__list    { grid-area: list; }
+.tc-call-row__note { font: 600 12px var(--tc-body); color: var(--tc-ink-4); margin-top: 3px; }
+@media (min-width: 1180px) {
+  .tc-calllog {
+    max-width: 1180px; column-gap: 20px; align-items: start;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    grid-template-areas: "filters side" "list side";
+  }
+  /* Sticky within .tc-content, which already starts below the header and has
+     its own padding — so no offset of its own. */
+  .tc-calllog__side {
+    position: sticky; top: 0;
+    max-height: calc(100vh - 140px); overflow-y: auto;
+  }
+  /* Taller than the screen, the column scrolls; its cards keep their height
+     rather than being squeezed — squeezed, their text spilled over each other. */
+  .tc-calllog__side > * { flex-shrink: 0; }
+  .tc-calllog__side .tc-tried__list { grid-template-columns: minmax(0, 1fr); }
+  /* The title gets the width; the count and badge drop below it. */
+  .tc-calllog__side .tc-tried__head { flex-wrap: wrap; row-gap: 8px; }
+  .tc-calllog__side .tc-tried__head > .tc-grow { flex-basis: 100%; }
+  .tc-calllog__side .tc-retention { flex-direction: column; align-items: flex-start; }
+  .tc-calllog__side .tc-retention > * { flex: none; }
+}
+
+/* Adult mode: impossible to miss on the phone's page, the phones list and the
+   dashboard — a child's phone must never sit in it unnoticed. */
+.tc-adult-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 11px; border-radius: 999px;
+  background: var(--tc-red); color: #fff;
+  font: 800 12px var(--tc-display); letter-spacing: .02em; white-space: nowrap;
+}
+.tc-adult-badge--sm { padding: 2px 8px; font-size: 10.5px; gap: 4px; }
+.tc-device-head.is-adult { border-color: var(--tc-red); box-shadow: 0 0 0 3px var(--tc-red-bg), var(--tc-shadow-card2); }
+.tc-adult-banner {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding: 18px 20px; border-radius: 20px;
+  background: var(--tc-red); color: #fff;
+  box-shadow: 0 10px 26px rgba(220, 70, 60, .25);
+}
+.tc-adult-banner__icon { font-size: 26px; }
+.tc-adult-banner__title { font: 800 16px var(--tc-display); }
+.tc-adult-banner__text { font: 600 13px/1.5 var(--tc-body); opacity: .95; margin-top: 3px; }
+.tc-adult-banner .tc-btn--white { background: #fff; color: var(--tc-red); box-shadow: 0 4px 0 rgba(0, 0, 0, .12); }
+.tc-adult-off { border-style: dashed; }
+.tc-adult-card { border-color: var(--tc-red-border); }
+.tc-adult-card .tc-card__title i { color: var(--tc-red); margin-right: 4px; }
+
+/* Confirmation dialog. */
+.tc-dialog {
+  border: none; padding: 0; border-radius: 22px; max-width: min(460px, calc(100vw - 32px));
+  box-shadow: 0 24px 60px rgba(74, 59, 51, .3); background: var(--tc-card); color: var(--tc-ink);
+}
+.tc-dialog::backdrop { background: rgba(60, 45, 35, .45); backdrop-filter: blur(2px); }
+.tc-dialog__body { padding: 24px; }
+.tc-dialog__icon {
+  width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  background: var(--tc-red-bg); color: var(--tc-red); font-size: 22px; margin-bottom: 12px;
+}
+.tc-dialog__title { font: 800 19px var(--tc-display); margin: 0 0 10px; }
+.tc-dialog__lead { font: 600 13.5px/1.5 var(--tc-body); color: var(--tc-ink-2); margin: 0 0 10px; }
+.tc-dialog__list { margin: 0 0 12px; padding-left: 20px; font: 600 13.5px/1.6 var(--tc-body); color: var(--tc-ink-2); }
+.tc-dialog__actions { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+
+/* A main column with a sidebar beside it on a wide screen, above it on a
+   narrow one — the jokes screen. Same shape as the call log's. */
+.tc-split {
+  display: grid; gap: 12px; max-width: 760px;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "side" "main";
+}
+.tc-split__side { grid-area: side; }
+.tc-split__main { grid-area: main; }
+@media (min-width: 1180px) {
+  .tc-split {
+    max-width: 1180px; column-gap: 20px; align-items: start;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    grid-template-areas: "main side";
+  }
+  .tc-split__side { position: sticky; top: 0; max-height: calc(100vh - 140px); overflow-y: auto; }
+  .tc-split__side > * { flex-shrink: 0; }
+  .tc-split__side .tc-retention { flex-direction: column; align-items: flex-start; }
+  .tc-split__side .tc-retention > * { flex: none; }
+  .tc-split__side .tc-joke-add { flex-direction: column; align-items: stretch; }
+  .tc-split__side .tc-joke-add > * { flex: none; }
+}
+
+/* A joke's words: the title, and for a grown-up, the edit box too. */
+.tc-joke-title-form { margin: 0; }
+.tc-joke-title {
+  display: block; width: 100%; box-sizing: border-box;
+  resize: none; overflow: hidden; field-sizing: content; min-height: 0;
+  font: 800 15px/1.35 var(--tc-display); color: var(--tc-ink);
+  background: transparent; border: 1.5px solid transparent; border-radius: 9px;
+  padding: 3px 8px; margin-left: -9px;
+}
+.tc-joke-title::placeholder { color: var(--tc-ink-4); font-weight: 700; }
+.tc-joke-title:hover { border-color: var(--tc-border-3); border-style: dashed; }
+.tc-joke-title:focus { outline: none; background: var(--tc-card); border-color: var(--tc-teal); border-style: solid; }
+
+/* Two equal columns on a wide screen (the phone line), one on a narrow one. */
+.tc-twocol { display: grid; gap: 18px; max-width: 680px; align-items: start; }
+@media (min-width: 1180px) {
+  .tc-twocol { max-width: 1240px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Voicemail: messages two a row on a wide screen. */
+.tc-vm-page { max-width: 720px; }
+.tc-vm-grid { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); align-items: start; }
+@media (min-width: 1180px) {
+  .tc-vm-page { max-width: 1240px; }
+  .tc-vm-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.tc-photo-note--pending { color: var(--tc-teal-deep); font-weight: 800; }
+
+/* A split whose main column comes first on a phone too (Family & guardians). */
+.tc-split--main-first { grid-template-areas: "main" "side"; }
+@media (min-width: 1180px) {
+  .tc-split--main-first { grid-template-areas: "main side"; }
+  .tc-split__side .tc-grid--roles { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Phones: the line at a glance, then roomier cards of equal height. */
+.tc-phones { max-width: 1240px; }
+.tc-phones .tc-grid--devices { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); align-items: stretch; }
+.tc-phones .tc-add-tile { min-height: 200px; }
+
+/* Home Assistant screen. */
+.tc-ha-status { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.tc-ha-status__icon { font-size: 26px; width: 30px; text-align: center; }
+.tc-ha-status__title { font: 800 16px var(--tc-display); color: var(--tc-ink); margin-bottom: 2px; }
+.tc-ha-status--ok  { border-color: var(--tc-teal); }
+.tc-ha-status--ok .tc-ha-status__icon  { color: var(--tc-teal-deep); }
+.tc-ha-status--bad { border-color: var(--tc-red-border); }
+.tc-ha-status--bad .tc-ha-status__icon { color: var(--tc-red); }
+.tc-ha-status--off .tc-ha-status__icon { color: var(--tc-ink-4); }
+.tc-ha-grid { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.tc-ha-grid__wide { grid-column: 1 / -1; }
+.tc-ha-grid .tc-input { margin-top: 5px; width: 100%; box-sizing: border-box; }
+.tc-ha-toggle { display: flex; gap: 10px; align-items: center; font: 600 13.5px var(--tc-body); color: var(--tc-ink-2); }
+.tc-ha-list { margin: 0 0 12px; padding-left: 18px; font: 600 13px/1.55 var(--tc-body); color: var(--tc-ink-2); }
+.tc-ha-list li + li { margin-top: 6px; }
+@media (max-width: 560px) { .tc-ha-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* ------------------------------------------------------------------ hello
+   The self-service page a grandparent opens from a link: their photo and
+   their name, spoken. Built on the sign-in page's card. */
+.tc-form-error[hidden] { display: none; }
+.tc-avatar--96 { --tc-avatar-size: 96px; font-size: 38px; }
+.tc-hello { max-width: 440px; }
+.tc-hello__title { font: 800 26px var(--tc-display); margin: 0; line-height: 1.15; }
+.tc-hello__lead { font: 600 15px/1.5 var(--tc-body); color: var(--tc-ink-6); margin: 0; }
+.tc-hello__part {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 10px;
+  padding-top: 14px; border-top: 1.5px dashed var(--tc-border);
+}
+.tc-hello__step { display: flex; align-items: center; gap: 9px; font: 800 17px var(--tc-display); margin: 0; }
+.tc-hello__step span {
+  display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%;
+  background: var(--tc-teal-bg); color: var(--tc-teal-deep); font-size: 14px;
+}
+.tc-hello__photo { align-self: center; }
+.tc-hello__hint { font: 600 13.5px/1.5 var(--tc-body); color: var(--tc-ink-6); margin: 0; }
+.tc-hello__photo + .tc-hello__hint { align-self: center; text-align: center; }
+.tc-hello__recorder, .tc-hello__rec, .tc-hello__upload { width: 100%; }
+.tc-hello__recorder { display: flex; flex-direction: column; gap: 10px; }
+.tc-hello__rec.is-recording { background: var(--tc-red); animation: tc-pulse 1s ease-in-out infinite; }
+.tc-hello__now, .tc-hello__take {
+  display: flex; flex-direction: column; gap: 6px; width: 100%;
+  font: 700 12.5px var(--tc-body); color: var(--tc-ink-6);
+}
+.tc-hello__now audio, .tc-hello__take audio { width: 100%; }
+.tc-hello__take[hidden], .tc-hello__rec[hidden] { display: none; }
+.tc-hello__upload { justify-content: center; gap: 8px; }
+.tc-hello__done {
+  display: flex; gap: 9px; align-items: flex-start;
+  background: var(--tc-teal-bg); color: var(--tc-teal-deep);
+  border-radius: 14px; padding: 11px 14px; font: 700 14px/1.4 var(--tc-body);
+}
+@keyframes tc-pulse { 50% { opacity: .78; } }
+.tc-hello__photo-actions { display: flex; gap: 8px; width: 100%; }
+.tc-hello__photo-actions > * { flex: 1; justify-content: center; }
+.tc-hello__camera { position: relative; gap: 8px; }
+.tc-hello__camera input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+.tc-hello__webcam { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+.tc-hello__webcam[hidden] { display: none; }
+.tc-hello__webcam video {
+  width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 20px;
+  background: var(--tc-ink); transform: scaleX(-1);
+}
+.tc-hello__photo-actions .tc-btn { white-space: nowrap; padding-left: 10px; padding-right: 10px; }
+
+/* ------------------------------------------------------------ router ports */
+.tc-port-row {
+  display: flex; align-items: flex-start; gap: 12px; cursor: pointer;
+  padding: 12px 14px; border: 1.5px solid var(--tc-border); border-radius: 16px; background: var(--tc-card);
+}
+.tc-port-row input { margin-top: 3px; flex: none; accent-color: var(--tc-teal-deep); }
+.tc-port-row__title { display: block; font: 800 14px var(--tc-display); }
+.tc-port-row__why { display: block; font: 600 12.5px/1.45 var(--tc-body); color: var(--tc-ink-6); }
+.tc-port-row__bad { display: block; font: 700 12.5px/1.45 var(--tc-body); color: var(--tc-red-ink); margin-top: 4px; }
+.tc-port-row__ports { flex: none; font: 600 12.5px var(--tc-body); color: var(--tc-ink-6); white-space: nowrap; text-align: right; }
+.tc-port-row__ports b { color: var(--tc-ink); }
+.tc-port-ok { color: var(--tc-teal-deep); margin-left: 4px; }
+.tc-port-bad { color: var(--tc-red); margin-left: 4px; }
+.tc-ports-status {
+  margin-top: 12px; border-radius: 14px; padding: 11px 14px; font: 700 13.5px/1.45 var(--tc-body);
+  background: var(--tc-teal-bg); color: var(--tc-teal-deep);
+}
+.tc-ports-status--bad { background: var(--tc-red-bg); color: var(--tc-red-ink); }
+@media (max-width: 520px) {
+  .tc-port-row { flex-wrap: wrap; }
+  .tc-port-row__ports { width: 100%; text-align: left; padding-left: 26px; }
 }

@@ -6,7 +6,7 @@
 $rows = array_map([VoicemailRepository::class, 'toView'], $voicemails->all());
 $canDelete = Auth::can('voicemail');
 ?>
-<div class="tc-stack tc-stack--tight tc-narrow--vm">
+<div class="tc-stack tc-stack--tight tc-vm-page">
   <div class="tc-info-banner">
     <span class="tc-info-banner__icon tc-info-banner__icon--sun">✉</span>
     Missed callers can leave a message. We transcribe each one so you can read it
@@ -24,6 +24,8 @@ $canDelete = Auth::can('voicemail');
     </div>
   <?php endif; ?>
 
+  <?php /* Two messages a row on a wide screen: each is mostly its transcript. */ ?>
+  <div class="tc-vm-grid">
   <?php foreach ($rows as $v): ?>
     <article class="tc-card tc-card--flat">
       <div class="tc-vm-row">
@@ -47,6 +49,20 @@ $canDelete = Auth::can('voicemail');
           <div class="tc-call-row__meta">
             <?= e($v['number']) ?> · <?= e($v['date']) ?> <?= e($v['time']) ?> · <?= e($v['dur']) ?>
           </div>
+          <?php /* No transcript to show: say why in a line, not a box. */ ?>
+          <?php if ($v['transcript'] === ''): ?>
+            <div class="tc-call-row__note">
+              <?php if ($v['contentExpired']): ?>
+                Deleted — older than <?= e((new SettingsRepository())->retentionLabel()) ?>.
+              <?php elseif ($v['transcriptStatus'] === 'pending' || $v['transcriptStatus'] === 'running'): ?>
+                <span class="tc-transcribing">Transcribing…</span>
+              <?php elseif ($v['transcriptStatus'] === 'failed'): ?>
+                Couldn't transcribe this one — play it to listen.
+              <?php else: ?>
+                Nothing audible in this message.
+              <?php endif; ?>
+            </div>
+          <?php endif; ?>
         </div>
 
         <?php if ($v['hasAudio']): ?>
@@ -73,19 +89,8 @@ $canDelete = Auth::can('voicemail');
 
       <?php if ($v['transcript'] !== ''): ?>
         <div class="tc-transcript">“<?= e($v['transcript']) ?>”</div>
-      <?php else: ?>
-        <div class="tc-transcript tc-transcript--empty">
-          <?php if ($v['contentExpired']): ?>
-            Message deleted — it was older than <?= e((new SettingsRepository())->retentionLabel()) ?>.
-          <?php elseif ($v['transcriptStatus'] === 'pending' || $v['transcriptStatus'] === 'running'): ?>
-            <span class="tc-transcribing">Listening to this message… the transcript will appear shortly.</span>
-          <?php elseif ($v['transcriptStatus'] === 'failed'): ?>
-            Couldn't transcribe this one — play it above.
-          <?php else: ?>
-            Nothing audible in this message.
-          <?php endif; ?>
-        </div>
       <?php endif; ?>
     </article>
   <?php endforeach; ?>
+  </div>
 </div>

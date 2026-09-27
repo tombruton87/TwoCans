@@ -61,7 +61,7 @@ $activeCall = $activeCalls[0] ?? null;
                 break;
             case 'calllog':
                 view('screens/calllog', ['store' => $store, 'calls' => $calls,
-                    'filters' => $callFilters, 'page' => $callPage]);
+                    'filters' => $callFilters, 'page' => $callPage, 'focus' => $focusCall]);
                 break;
             case 'voicemail':
                 view('screens/voicemail', ['store' => $store, 'voicemails' => $voicemails]);
@@ -74,7 +74,7 @@ $activeCall = $activeCalls[0] ?? null;
                 view('screens/guardians', ['store' => $store]);
                 break;
             case 'trunk':
-                view('screens/trunk', ['store' => $store]);
+                view('screens/trunk', ['store' => $store, 'devices' => $devices]);
                 break;
             case 'dialplan':
                 view('screens/dialplan', ['store' => $store, 'rules' => new DialplanRuleRepository()]);
@@ -84,6 +84,15 @@ $activeCall = $activeCalls[0] ?? null;
                 break;
             case 'notifications':
                 view('screens/notifications', ['store' => $store]);
+                break;
+            case 'greetings':
+                view('screens/greetings', ['store' => $store]);
+                break;
+            case 'announcements':
+                view('screens/announcements', ['store' => $store]);
+                break;
+            case 'homeassistant':
+                view('screens/homeassistant', ['store' => $store]);
                 break;
             default:
                 view('screens/dashboard', [
@@ -112,6 +121,9 @@ if ($trunkWizard > 0) {
 }
 if ($editingContact !== null) {
     view('modals/contact_editor', ['contact' => Presenter::contact(ContactRepository::toView($editingContact))]);
+}
+if (!empty($editBedtime)) {
+    view('modals/bedtime', ['rules' => (new SettingsRepository())->quietRules()]);
 }
 if ($passwordFor !== null) {
     view('modals/guardian_password', [
