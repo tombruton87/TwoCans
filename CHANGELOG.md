@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-28
+
 ### Added
 
 - Initial public release.
@@ -221,3 +223,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rang in and left a message. The numbers a child tried to call moved to a
   **Numbers the kids tried** log on the call log, one card per number with the
   same two buttons. Both leave out anyone who has since been added as a contact.
+
+[Unreleased]: https://github.com/tombruton87/TwoCans/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/tombruton87/TwoCans/releases/tag/v0.1.0
