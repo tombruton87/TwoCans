@@ -170,6 +170,14 @@ final class Auth
             return null;
         }
 
+        // Signed out everywhere after this session began (bin/reset-owner.php).
+        $cutoff = $user['signed_out_at'] ?? null;
+        if ($cutoff !== null && (int) ($_SESSION['auth']['signed_in_at'] ?? 0) < strtotime((string) $cutoff)) {
+            unset($_SESSION['auth']);
+
+            return null;
+        }
+
         return self::$cachedUser = $user;
     }
 

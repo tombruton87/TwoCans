@@ -170,3 +170,15 @@ function fmt_duration(int $seconds): string
 
     return intdiv($seconds, 60) . ':' . str_pad((string) ($seconds % 60), 2, '0', STR_PAD_LEFT);
 }
+
+/**
+ * The twocans release this code is: backend/VERSION, which a release bumps.
+ * Baked into the web image along with the code, so it is also the version
+ * that is running.
+ */
+function app_version(): string
+{
+    $version = trim((string) @file_get_contents(__DIR__ . '/../VERSION'));
+
+    return $version !== '' ? $version : 'unknown';
+}

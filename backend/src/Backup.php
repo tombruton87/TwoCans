@@ -70,6 +70,9 @@ final class Backup
                 return ['ok' => false, 'error' => trim($r['stderr']) !== '' ? trim($r['stderr']) : 'Could not build the backup archive'];
             }
 
+            // The whole database is in there: for its owner's eyes only.
+            @chmod($target, 0600);
+
             return ['ok' => true, 'name' => $name];
         } finally {
             $this->removeTree($staging);

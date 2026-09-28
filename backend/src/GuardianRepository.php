@@ -8,7 +8,7 @@ declare(strict_types=1);
 final class GuardianRepository
 {
     private const COLUMNS = 'id, name, email, password_hash, role, color, status,
-                             password_set_at, last_login_at, invited_at, created_at';
+                             password_set_at, last_login_at, signed_out_at, invited_at, created_at';
 
     /** Avatar colours cycled for new guardians, from the design palette. */
     private const PALETTE = ['#6FB7E8', '#A78BD0', '#5BC7B8', '#FFC857'];
@@ -123,6 +123,40 @@ final class GuardianRepository
                 SET role = CASE role WHEN 'Admin' THEN 'Viewer' ELSE 'Admin' END
               WHERE id = ? AND role <> 'Owner'"
         )->execute([$id]);
+    }
+
+    /** The Owner — normally exactly one; none if the household has lost it. */
+    public function owners(): array
+    {
+        return Database::pdo()
+            ->query("SELECT " . self::COLUMNS . " FROM guardians WHERE role = 'Owner' ORDER BY id")
+            ->fetchAll();
+    }
+
+    /** Change a grown-up's sign-in email. The caller checks nobody else has it. */
+    public function setEmail(int $id, string $email): void
+    {
+        Database::pdo()->prepare('UPDATE guardians SET email = ? WHERE id = ?')
+            ->execute([mb_strtolower(trim($email)), $id]);
+    }
+
+    /**
+     * Make a grown-up the Owner — recovery only, for a household whose Owner
+     * is gone (bin/reset-owner.php). The web app never does this: the Owner
+     * role is otherwise fixed.
+     */
+    public function makeOwner(int $id): void
+    {
+        Database::pdo()->prepare("UPDATE guardians SET role = 'Owner', status = 'active' WHERE id = ?")
+            ->execute([$id]);
+    }
+
+    /** End every session this grown-up already has open — see migration 046. */
+    public function signOutEverywhere(int $id): void
+    {
+        // PHP's clock, not the database's: Auth::user() compares it with PHP's.
+        Database::pdo()->prepare('UPDATE guardians SET signed_out_at = ? WHERE id = ?')
+            ->execute([date('Y-m-d H:i:s'), $id]);
     }
 
     /** The Owner cannot be removed — it would orphan the household. */

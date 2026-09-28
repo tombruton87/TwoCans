@@ -35,6 +35,14 @@ docker compose exec web php /var/www/html/bin/test.php
 - Run `php -l` on changed PHP files, and add a test under `backend/tests/` where
   it makes sense.
 
+## Making a release
+
+1. Set the version in `backend/VERSION` (it's baked into the web image, and
+   `./twocans version` and `./twocans update` compare it with GitHub's latest).
+2. Move the changelog's **Unreleased** entries under a new version heading.
+3. Commit, tag `vX.Y.Z`, push both, and publish the GitHub release.
+4. Build the web image from the tag and push it as `X.Y.Z` and `latest`.
+
 ## Opening a PR
 
 - One logical change per PR. Fill in the issue template.

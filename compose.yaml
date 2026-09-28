@@ -41,6 +41,10 @@ services:
       # inside one is asking for trouble. The dialplan plays it by absolute path.
       - ./storage:/var/lib/twocans:ro
       - asterisk-lib:/var/lib/asterisk
+      # The spoken prompts install.sh fetches. The image declares this folder a
+      # volume of its own; left unnamed, it is lost whenever the stack is taken
+      # down, and group calls then admit nobody.
+      - asterisk-sounds:/var/lib/asterisk/sounds
       - asterisk-spool:/var/spool/asterisk
       - asterisk-log:/var/log/asterisk
     environment:
@@ -244,6 +248,7 @@ volumes:
   mariadb-data:
   whisper-models:
   asterisk-lib:
+  asterisk-sounds:
   asterisk-spool:
   asterisk-log:
 

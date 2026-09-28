@@ -44,6 +44,8 @@ require __DIR__ . '/CallerNameStore.php';
 require __DIR__ . '/ContactLinkRepository.php';
 require __DIR__ . '/RouterPorts.php';
 require __DIR__ . '/PortOpener.php';
+require __DIR__ . '/Cli.php';
+require __DIR__ . '/Redactor.php';
 require __DIR__ . '/GreetingStore.php';
 require __DIR__ . '/Greetings.php';
 require __DIR__ . '/Schedule.php';

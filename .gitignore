@@ -6,6 +6,8 @@
 docker/asterisk/cdr/*
 docker/asterisk/recordings/*
 docker/asterisk/voicemail/*
+# What a child said when a call they tried wasn't allowed — their voice.
+docker/asterisk/asks/*
 storage/photos/*
 storage/jokes/*
 # A parent's recorded "nobody can take your call" message. Their voice, and
@@ -14,6 +16,9 @@ storage/refusals/*
 
 # Backups are the same recordings and photos, plus the database — never commit.
 storage/backups/*
+# ./twocans export and ./twocans report — household data, never in git.
+storage/exports/*
+storage/reports/*
 
 # Generated Asterisk config, written from the database at runtime. The
 # placeholders stay: pjsip.conf and extensions.conf include generated/*.conf,
@@ -38,3 +43,6 @@ docker/nginx/acme/*
 # with storage/refusals mounted (see the directory's README). It holds a copy of
 # the running containers' environment, secrets included.
 .stopgap-refusals/
+
+# Asterisk's control passwords, written by install.sh from .env — never in git.
+docker/asterisk/etc/secrets/

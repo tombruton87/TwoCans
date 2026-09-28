@@ -23,9 +23,37 @@ git clone https://github.com/tombruton87/TwoCans.git && cd TwoCans
 ./install.sh
 ```
 
-`install.sh` checks the prerequisites, works out your LAN address, writes `.env`
-with fresh secrets, pulls the images and starts everything (it also installs
-Asterisk's sound prompts). Then open the URL it prints and complete first-run setup.
+`install.sh` walks you through it:
+
+- **checks the software** — Docker, Compose, and the few tools it uses — plus memory
+  and disk, and on a Raspberry Pi builds the images locally (the published ones are
+  Intel/AMD only);
+- **asks a few questions** — this machine's address, timezone, country code, and
+  which speech-to-text model — suggesting an answer for each (Enter takes it);
+- **checks the ports** — web, HTTPS, the phones' SIP port, the phone line's SIP port
+  and the call audio range. If something else holds the web or HTTPS port it asks
+  whether to use another, and suggests a free one; the SIP ports and call audio
+  can't move, so a clash there is reported for you to free;
+- **checks the firewall** — reads ufw's or firewalld's rules (with sudo, asking first),
+  checks each port against them, and offers to add only what's missing;
+- **checks this machine** — that its address won't change (one handed out by your
+  router can), that Docker starts on boot, and that the clock is kept in time,
+  offering to fix the last two;
+- writes `.env` with fresh passwords, pulls the images, starts everything, installs
+  Asterisk's spoken prompts, and sets up the database.
+
+Then open the URL it prints and complete first-run setup.
+
+```bash
+./install.sh --check        # check everything, change nothing
+./install.sh --yes          # take every suggestion, ask nothing
+./install.sh --reconfigure  # answer the questions again (passwords are kept)
+./install.sh --uninstall    # stop and remove twocans; your data is kept unless you say so
+./install.sh --reset-owner  # locked out? reset the Owner's password, email or passkeys
+```
+
+**To update:** `git pull && ./install.sh` — it keeps your settings and passwords, and
+only restarts the phone service if something it depends on changed.
 
 ### Or by hand — copy the example compose
 
@@ -45,6 +73,18 @@ Edit `compose.yml` before you start:
 - **`APP_KEY`** — a 64-hex-char key: `php -r "echo bin2hex(random_bytes(32)), PHP_EOL;"`
 - **`TZ`** — your timezone
 
+Asterisk reads its two control passwords from files of their own, kept out of git.
+Write them with the same values as `ARI_PASSWORD` and `AMI_PASSWORD`:
+
+```bash
+mkdir -p docker/asterisk/etc/secrets
+printf 'password = %s\n' 'your-ARI_PASSWORD' > docker/asterisk/etc/secrets/ari.conf
+printf 'secret = %s\n' 'your-AMI_PASSWORD' > docker/asterisk/etc/secrets/manager.conf
+```
+
+This route doesn't fetch Asterisk's spoken prompts, which group calls need —
+`./install.sh` does, and is safe to run afterwards.
+
 Then open `http://<your-ip>:8083` and create the household Owner.
 
 `docker compose up` pulls the images from Docker Hub (`hamletdigital/...`); the app
@@ -56,6 +96,8 @@ is baked into `twocans-web`, so nothing is built. The optional `cloudflared` and
 ```yaml
 # TwoCans example compose. Edit the values, then: docker compose up -d
 # (copy with: cp compose.example.yml compose.yml)
+# Asterisk reads ARI_PASSWORD and AMI_PASSWORD from files kept out of git —
+# write them first (see the README), or use ./install.sh, which does it all.
 
 services:
   asterisk:
@@ -65,6 +107,8 @@ services:
     ports:
       - "5060:5060/udp"
       - "5060:5060/tcp"
+      # The SIP trunk, on its own port so it can advertise the public address.
+      - "${TRUNK_SIP_PORT:-5062}:${TRUNK_SIP_PORT:-5062}/udp"
       - "10000-10100:10000-10100/udp"
     volumes:
       - ./docker/asterisk/etc:/etc/asterisk
@@ -74,6 +118,10 @@ services:
       - ./docker/asterisk/asks:/var/spool/asterisk/asks
       - ./storage:/var/lib/twocans:ro
       - asterisk-lib:/var/lib/asterisk
+      # The spoken prompts install.sh fetches. The image declares this folder a
+      # volume of its own; left unnamed, it is lost whenever the stack is taken
+      # down, and group calls then admit nobody.
+      - asterisk-sounds:/var/lib/asterisk/sounds
       - asterisk-spool:/var/spool/asterisk
       - asterisk-log:/var/log/asterisk
     environment:
@@ -235,6 +283,7 @@ volumes:
   mariadb-data:
   whisper-models:
   asterisk-lib:
+  asterisk-sounds:
   asterisk-spool:
   asterisk-log:
 
@@ -242,6 +291,24 @@ networks:
   twocans:
     driver: bridge
 ```
+
+## Looking after it
+
+Once it's installed, `./twocans` does the rest — run it on its own for the list:
+
+| | |
+|---|---|
+| `./twocans status` | is everything working? Containers, phones, the phone line and its credit, today's calls, backups and disk space |
+| `./twocans logs [part]` | follow what's happening — `phone`, `web`, `transcription`, `database` or `all` |
+| `./twocans backup` · `backups` · `restore` | make a backup, list them, or put one back (it asks, and keeps a safety copy) |
+| `./twocans export` | your data in one zip: the call log, voicemails and contacts as spreadsheets, and the recordings |
+| `./twocans version` · `update` | what's installed and what's newest, and updating to it |
+| `./twocans report` | a support report for a GitHub issue, with passwords, names, numbers and addresses taken out |
+| `./twocans reset-owner` | locked out? reset the Owner's password, email or passkeys |
+| `./twocans check` · `uninstall` | the installer's checks, or removing twocans (your data is kept unless you say) |
+
+Backups, exports and reports land in `storage/backups`, `storage/exports` and
+`storage/reports`, readable only by you — they hold your family's calls.
 
 ## What runs
 

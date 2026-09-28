@@ -20,6 +20,10 @@ services:
       # Asterisk config - PHP backend writes generated config here
       - ./docker/asterisk/etc:/etc/asterisk
       - asterisk-lib:/var/lib/asterisk
+      # The spoken prompts install.sh fetches. The image declares this folder a
+      # volume of its own; left unnamed, it is lost whenever the stack is taken
+      # down, and group calls then admit nobody.
+      - asterisk-sounds:/var/lib/asterisk/sounds
       - asterisk-spool:/var/spool/asterisk
       - asterisk-log:/var/log/asterisk
     environment:
@@ -167,6 +171,7 @@ volumes:
   mariadb-data:
     driver: local
   asterisk-lib:
+  asterisk-sounds:
     driver: local
   asterisk-spool:
     driver: local

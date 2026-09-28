@@ -4,11 +4,12 @@ declare(strict_types=1);
 /**
  * Set or reset a guardian's password from the command line.
  *
- * This is the recovery path when the Owner is locked out, and — until invitation
- * emails are wired up — the way an invited guardian gets a usable password.
+ * For any grown-up, by email — until invitation emails are wired up, the way an
+ * invited one gets a usable password. For a locked-out Owner, reset-owner.php
+ * does more (and needs no email): ./install.sh --reset-owner
  *
- *   docker exec -it twocans-php php /var/www/html/bin/set-password.php you@home.co
- *   docker exec twocans-php php /var/www/html/bin/set-password.php --list
+ *   docker compose exec web php /var/www/html/bin/set-password.php you@home.co
+ *   docker compose exec web php /var/www/html/bin/set-password.php --list
  *
  * The password is read from the terminal rather than argv, so it never lands in
  * shell history or the process list.
@@ -47,11 +48,9 @@ if ($guardian === null) {
 
 echo "Setting a new password for {$guardian['name']} <{$guardian['email']}> ({$guardian['role']})\n";
 
-$password = prompt_hidden('New password: ');
-$confirm = prompt_hidden('Again: ');
-
-if (($problem = Auth::passwordProblem($password, $confirm)) !== null) {
-    fwrite(STDERR, "\n{$problem}\n");
+$password = Cli::newPassword();
+if ($password === null) {
+    fwrite(STDERR, "\nNo password set.\n");
     exit(1);
 }
 
@@ -61,21 +60,3 @@ $repo->setPassword((int) $guardian['id'], $password);
 Database::pdo()->prepare('DELETE FROM login_attempts WHERE email = ?')->execute([$guardian['email']]);
 
 echo "\nPassword updated. Any sign-in lockout for this account has been cleared.\n";
-
-/** Read a line from the terminal without echoing it. */
-function prompt_hidden(string $label): string
-{
-    echo $label;
-
-    if (!stream_isatty(STDIN)) {
-        // Non-interactive (piped input): can't disable echo, just read.
-        return rtrim((string) fgets(STDIN), "\r\n");
-    }
-
-    shell_exec('stty -echo 2>/dev/null');
-    $value = rtrim((string) fgets(STDIN), "\r\n");
-    shell_exec('stty echo 2>/dev/null');
-    echo "\n";
-
-    return $value;
-}

@@ -142,11 +142,81 @@ Clone it anywhere and run the installer — or copy the example compose
 ./install.sh
 ```
 
-It checks Docker is present and working, finds this machine's LAN address,
-checks the ports are free, writes `.env` with freshly generated secrets, brings
-the stack up, applies migrations and generates Asterisk's config. `./install.sh
---check` runs the checks and changes nothing. Re-running it keeps an existing
-`.env`.
+It checks the software (Docker, Compose and the tools it uses, plus memory and
+disk), asks a few questions with a suggested answer for each (this machine's
+address, timezone, country code, speech-to-text model), checks every port twocans
+publishes — offering another port for the web interface or HTTPS if something
+else holds it, and reporting a clash on the SIP ports or call audio range, which
+can't move, and checks the
+firewall: it reads ufw's or firewalld's rules (with sudo, asking first — the rules
+are root's to read), checks each port against them, and offers to add only what's
+missing. It also says when ufw is installed but switched off. Then it writes
+`.env` with freshly generated passwords, writes Asterisk's password files, pulls the
+images (or builds them, on ARM), brings the stack up, installs the spoken prompts,
+applies migrations and generates Asterisk's config.
+
+| | |
+|---|---|
+| `./install.sh --check` | run every check, change nothing |
+| `./install.sh --yes` | take every suggested answer, ask nothing |
+| `./install.sh --reconfigure` | answer the questions again; passwords are kept |
+| `./install.sh --no-start` | write the configuration, start nothing |
+| `./install.sh --write-secrets` | only rewrite Asterisk's password files from `.env` |
+| `./install.sh --uninstall` | stop and remove twocans; data is kept unless you type `delete` |
+| `./install.sh --reset-owner` | reset the Owner account — see below |
+
+### Looking after it: `./twocans`
+
+After installing, one command covers the day-to-day; `./twocans` on its own lists
+it all. It finds the app's container itself, so it works on a standard install
+and on a development setup alike.
+
+- **`status`** — each container, then the app's own view: the system checks
+  (only failures are spelt out), each phone online or when it was last seen, the
+  phone line and its credit, today's calls and unheard voicemails, the newest
+  backup (a warning after a week, or with none), and free disk.
+- **`logs [part]`** — `phone`, `web`, `transcription`, `database` or `all`; several
+  at once are interleaved, each line marked with where it came from.
+- **`backup`**, **`backups`**, **`restore [name]`** — restore shows what's in the
+  backup, asks, and then `bin/restore.php` asks for `RESTORE` to be typed and
+  writes a safety dump first.
+- **`export [--no-audio]`** — `storage/exports/twocans-export-….zip`: `calls.csv`,
+  `voicemails.csv` and `contacts.csv` (with transcripts), and the recordings and
+  voicemails named by date and who. Built with PHP's Phar, so no zip extension.
+- **`version`**, **`update`** — the version in the folder, the one running (from
+  `backend/VERSION`, baked into the image) and GitHub's latest; `update` stops if
+  files were changed by hand, pulls, then runs `./install.sh`.
+- **`report`** — versions, the installer's checks, status, system checks, Asterisk's
+  transports and registrations, and each container's recent log, run through
+  `bin/redact.php`: every password and token twocans holds, names and emails of
+  contacts, grown-ups and phones, phone numbers, the house's domain, public IPs
+  and provider IDs are replaced. Home-network addresses and errors stay. Written
+  to `storage/reports/`; read it before sharing.
+- **`reset-owner`**, **`check`**, **`uninstall`** — the installer's own.
+
+**Locked out?** `./install.sh --reset-owner` (or `make reset-owner`) shows the
+Owner account and asks, one at a time: a new sign-in email, a new password (which
+also clears any sign-in lockout), whether to remove its passkeys (do this if a phone
+that had one is lost), and whether to sign out every browser already signed in. It
+lists what it's about to do and asks once more before changing anything. If the
+household has no Owner, it makes one — from an existing grown-up, or new. It needs
+no other proof: being at the machine is the proof. `bin/set-password.php` still
+sets any grown-up's password by email.
+
+It also checks this machine: that its address won't change (one handed out by
+your router over DHCP can — reserve it there), that Docker starts on boot (or the
+line stays down after a power cut), and that the clock is kept in time
+(certificates and phone logins fail when it drifts), offering to fix the last two.
+
+`--uninstall` stops twocans and removes its containers, then asks: type `delete`
+to also remove its data — the database, recordings, voicemails, photos, backups,
+`.env` and passwords — or press Enter to keep it, so `./install.sh` brings it back
+as it was. It offers to remove the images and any ufw rules the installer added,
+and only ever removes data: the repo's own files stay.
+
+It is also the updater: `git pull && ./install.sh` keeps `.env` and its passwords,
+asks before cutting off a call in progress, and restarts Asterisk only when its
+transports or passwords changed.
 
 There's also a `Makefile` with quick controls once you're set up — `make up`,
 `make migrate`, `make status`, `make backup` and more (`make help` lists them).
@@ -207,12 +277,16 @@ cp .env.example .env
 #      DB_PASSWORD, DB_ROOT_PASSWORD, ARI_PASSWORD, AMI_PASSWORD, APP_KEY
 #        — generate each with:  php -r "echo bin2hex(random_bytes(16)), PHP_EOL;"
 
-# 3. Pull the published images and start the whole stack.
+# 3. Asterisk reads its control passwords from files kept out of git;
+#    this writes them from ARI_PASSWORD and AMI_PASSWORD in .env.
+./install.sh --write-secrets
+
+# 4. Pull the published images and start the whole stack.
 docker compose up -d
 
 #    (or build from source:  docker compose -f compose.yaml -f compose.build.yml up -d --build)
 
-# 4. Apply the schema, write the SIP transports, then reload Asterisk.
+# 5. Apply the schema, write the SIP transports, then reload Asterisk.
 docker compose exec web php /var/www/html/bin/migrate.php
 docker compose exec web php /var/www/html/bin/apply-config.php
 docker compose restart asterisk
@@ -221,9 +295,10 @@ docker compose restart asterisk
 Then open `$APP_URL` (default http://192.168.1.10:8083) and create your account.
 
 > **Sound prompts:** Compose alone does not install Asterisk's English prompt
-> files, so spoken prompts and group-call announcements stay silent until they
-> are added. `./install.sh` fetches them; you can run it later on top of an
-> existing `.env` to pick them up. Calls still connect without them.
+> files, so spoken prompts stay silent — and group calls admit nobody, since
+> ConfBridge can't open the prompt it plays — until they are added.
+> `./install.sh` fetches them into their own volume; you can run it later on top
+> of an existing `.env` to pick them up.
 
 ### Moving it to another machine
 
