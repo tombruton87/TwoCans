@@ -147,6 +147,24 @@ cmd_status() {
     fi
   done
 
+  # Where browsers find it: the .local name (when published) and the address.
+  local env_name env_port env_ip url
+  env_name=$(grep -E '^MDNS_NAME=' .env 2>/dev/null | cut -d= -f2- || true)
+  env_port=$(grep -E '^HTTP_PORT=' .env 2>/dev/null | cut -d= -f2- || true); env_port=${env_port:-8083}
+  env_ip=$(grep -E '^SIP_DOMAIN=' .env 2>/dev/null | cut -d= -f2- || true)
+  section "Where to find it"
+  [[ -n "$env_ip" ]] && ok "http://$env_ip:$env_port"
+  if [[ -n "$env_name" ]]; then
+    url="http://${env_name}.local:$env_port"
+    if getent ahostsv4 "${env_name}.local" 2>/dev/null | awk '{print $1}' | grep -qx "$env_ip"; then
+      ok "$url"
+    elif grep -q "^# twocans (install.sh)$" /etc/avahi/hosts 2>/dev/null; then
+      note "$url — announced; this machine can't look up .local names, so try it from a phone"
+    else
+      note "$url isn't set up — ./install.sh offers to"
+    fi
+  fi
+
   if [[ -z "$APP" ]]; then
     echo; warn "The app isn't running, so that's all there is to show."
     return
@@ -317,6 +335,12 @@ cmd_update() {
   # repo's copy; it's written again after the update. Anything else changed by
   # hand has to be sorted out first, rather than lost.
   git checkout -- docker/asterisk/etc/voicemail.conf 2>/dev/null || true
+  # An install from 0.1.1 or earlier wrote Asterisk's passwords into these; the
+  # installer keeps them in docker/asterisk/etc/secrets/ now, so put them back.
+  local conf
+  for conf in docker/asterisk/etc/ari.conf docker/asterisk/etc/manager.conf; do
+    grep -qE '^(password|secret) = ' "$conf" 2>/dev/null && git checkout -- "$conf" 2>/dev/null || true
+  done
   local changed
   changed=$(git status --porcelain --untracked-files=no 2>/dev/null || true)
   if [[ -n "$changed" ]]; then
@@ -387,6 +411,13 @@ cmd_report() {
       docker exec twocans-asterisk asterisk -rx 'pjsip show transports' 2>&1 | grep -E 'Transport:|^ *[0-9]' | head -20
       docker exec twocans-asterisk asterisk -rx 'pjsip show registrations' 2>&1 | head -20
       docker exec twocans-asterisk asterisk -rx 'core show channels count' 2>&1
+      echo
+    fi
+    local last_install
+    last_install=$(ls -t storage/reports/install-*.log 2>/dev/null | head -1 || true)
+    if [[ -n "$last_install" ]]; then
+      echo "== The last install: $last_install (last 200 lines)"
+      tail -200 "$last_install"
       echo
     fi
     local c

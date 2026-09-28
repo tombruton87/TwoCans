@@ -47,7 +47,7 @@ $canNotifications = Auth::can('notifications');
              live, since the sidebar that carries it is hidden there. */ ?>
     <div class="tc-menu" data-tc-menu>
       <button type="button"
-              class="tc-account <?= in_array($screen, ['guardians', 'trunk', 'dialplan', 'greetings', 'announcements', 'homeassistant', 'system', 'notifications'], true) ? 'is-active' : '' ?>"
+              class="tc-account <?= in_array($screen, ['start', 'guardians', 'trunk', 'dialplan', 'greetings', 'announcements', 'homeassistant', 'system', 'notifications'], true) ? 'is-active' : '' ?>"
               data-tc-menu-toggle aria-haspopup="menu" aria-expanded="false"
               title="Account and settings">
         <?= e(initial($user['name'])) ?>
@@ -61,6 +61,16 @@ $canNotifications = Auth::can('notifications');
         </div>
         <div class="tc-menu__divider" role="separator"></div>
 
+        <?php if (Auth::can('devices')): ?>
+          <?php $gettingStarted = (new Onboarding())->progress(); ?>
+          <a class="tc-menu__item <?= $screen === 'start' ? 'is-active' : '' ?>" role="menuitem"
+             href="<?= e(url(['screen' => 'start'])) ?>">
+            <i class="fa-solid fa-flag-checkered" aria-hidden="true"></i> Getting started
+            <?php if ($gettingStarted['done'] < $gettingStarted['total']): ?>
+              <span class="tc-menu__badge"><?= (int) $gettingStarted['done'] ?>/<?= (int) $gettingStarted['total'] ?></span>
+            <?php endif; ?>
+          </a>
+        <?php endif; ?>
         <a class="tc-menu__item <?= $screen === 'guardians' ? 'is-active' : '' ?>" role="menuitem"
            href="<?= e(url(['screen' => 'guardians'])) ?>">
           <i class="fa-solid fa-user-group" aria-hidden="true"></i> Family &amp; guardians

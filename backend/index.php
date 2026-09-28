@@ -245,6 +245,10 @@ if ($screen === 'system' && !Auth::can('system')) {
 if ($screen === 'homeassistant' && !Auth::can('system')) {
     $screen = 'dashboard';
 }
+// Getting started walks through adding phones: for those who may.
+if ($screen === 'start' && !Auth::can('devices')) {
+    $screen = 'dashboard';
+}
 // Notifications hold the Mailgun key and recipients — Owner only.
 if ($screen === 'notifications' && !Auth::can('notifications')) {
     $screen = 'dashboard';

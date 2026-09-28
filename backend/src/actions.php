@@ -56,7 +56,8 @@ if ($action === 'setup') {
     $guardians->recordLogin($ownerId);   // setup signs you in, so count it as one
     take_old();
     flash('Welcome to twocans 🎉');
-    redirect(url(['screen' => 'dashboard']));
+    // Straight into the Getting started guide — see Onboarding.
+    redirect(url(['screen' => 'start']));
 }
 
 if ($action === 'login') {
@@ -716,13 +717,37 @@ switch ($action) {
             );
             $ami->disconnect();
 
-            flash(($reply['response'] ?? '') === 'Success'
+            $rang = ($reply['response'] ?? '') === 'Success';
+            if ($rang) {
+                (new Onboarding())->markTested();
+            }
+            flash($rang
                 ? $target['name'] . ' should be ringing now ☎'
                 : 'Asterisk refused the call: ' . ($reply['message'] ?? 'no reply'));
         } catch (Throwable $e) {
             flash('Could not reach Asterisk: ' . $e->getMessage());
         }
         break;
+
+    case 'onboarding':
+        // The Getting started guide: put it off, finish it, open it again, or
+        // skip (or un-skip) the phone line step.
+        $onboarding = new Onboarding();
+        $do = (string) ($_POST['do'] ?? '');
+        if ($do === 'later') {
+            $onboarding->setState('later');
+            flash('No rush — Getting started is in the menu whenever you want it');
+            redirect(url(['screen' => 'dashboard']));
+        }
+        if ($do === 'done') {
+            $onboarding->setState('done');
+            flash('All set 🎉');
+            redirect(url(['screen' => 'dashboard']));
+        }
+        if ($do === 'skip-line' || $do === 'unskip-line') {
+            $onboarding->skip('line', $do === 'skip-line');
+        }
+        redirect(url(['screen' => 'start']));
 
     case 'device_pick_model':
         $type = (string) ($_POST['type'] ?? '');

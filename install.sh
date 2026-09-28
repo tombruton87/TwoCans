@@ -60,6 +60,9 @@ is_timezone() {
 is_country_code() {
   [[ "$1" =~ ^[1-9][0-9]{0,2}$ ]] || { echo "    Just the digits, without + or 00 — 44 for the UK, 1 for the US."; return 1; }
 }
+is_hostname() {
+  [[ "$1" =~ ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$ ]] || { echo "    Lower-case letters, digits and dashes — like twocans or smith-phones."; return 1; }
+}
 is_model() {
   [[ "$1" == base || "$1" == small ]] || { echo "    base or small."; return 1; }
 }
@@ -121,6 +124,22 @@ if $SECRETS_ONLY; then
 fi
 
 # ================================================================= software
+# A record of the run, for when something goes wrong: everything shown from
+# here, without the colours and the spinner, in storage/reports/ — readable
+# only by you, and picked up by ./twocans report. It never shows a password.
+INSTALL_LOG=""
+if mkdir -p storage/reports 2>/dev/null; then
+  INSTALL_LOG="storage/reports/install-$(date +%Y%m%d-%H%M%S)$($CHECK_ONLY && echo -check || true).log"
+  if : > "$INSTALL_LOG" 2>/dev/null; then
+    chmod 600 "$INSTALL_LOG"
+    { echo "twocans install.sh $* — $(date '+%Y-%m-%d %H:%M %Z') — twocans $(cat backend/VERSION 2>/dev/null)"; echo; } >> "$INSTALL_LOG"
+    exec > >(tee >(sed -u -e 's/\x1b\[[0-9;]*[A-Za-z]//g' -e 's/\r/\n/g' \
+      | grep --line-buffered -v '^[[:space:]]*[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]' >> "$INSTALL_LOG")) 2>&1
+  else
+    INSTALL_LOG=""
+  fi
+fi
+
 banner
 $CHECK_ONLY && { echo; echo "  ${dim}Checking only: nothing will be changed.${off}"; }
 
@@ -162,27 +181,69 @@ ok "curl, tar, ss and ip"
 command -v git >/dev/null 2>&1 && ok "git — for updates (./twocans update)" \
   || warn "git isn't installed — you'll need it to update twocans later"
 
+# Who is running this. $USER isn't set everywhere (cron, docker exec, some
+# non-login shells), so ask the system.
+ME=$(id -un)
+
+# Carry on in this same session once we're in the docker group — a new group
+# only reaches new logins, and nobody wants to log out halfway through.
+rerun_with_docker_group() {
+  note "Carrying on with your new docker group (it applies to new logins from now on)."
+  exec sg docker -c "$(printf '%q ' "$0" "$@")"
+}
+
 if ! command -v docker >/dev/null 2>&1; then
   bad "Docker isn't installed."
-  note "twocans doesn't install Docker for you. Follow"
-  note "  https://docs.docker.com/engine/install/"
-  note "then run ./install.sh again."
-  exit 1
+  if ! $CHECK_ONLY && $CAN_PROMPT && [[ "$(uname -s)" == Linux ]] \
+    && confirm "Install it now, with Docker's official script (get.docker.com)? (uses sudo)" y; then
+    GET_DOCKER=$(mktemp)
+    curl -fsSL https://get.docker.com -o "$GET_DOCKER" || die "Couldn't download Docker's install script — check this machine is online."
+    note "This takes a few minutes; sudo may ask for your password first."
+    sudo -v || die "sudo is needed to install Docker."
+    quietly "Installing Docker" sudo sh "$GET_DOCKER"
+    rm -f "$GET_DOCKER"
+    sudo systemctl enable --now docker >/dev/null 2>&1 || true
+    ok "Docker installed"
+    if ! id -nG "$ME" | tr ' ' '\n' | grep -qx docker; then
+      sudo usermod -aG docker "$ME" && ok "added $ME to the docker group"
+      rerun_with_docker_group "$@"
+    fi
+  else
+    note "Install it with Docker's official script, then run ./install.sh again:"
+    note "  curl -fsSL https://get.docker.com | sudo sh"
+    note "(or see https://docs.docker.com/engine/install/)"
+    exit 1
+  fi
 fi
 ok "docker $(docker --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
 
-docker compose version >/dev/null 2>&1 || die "Docker Compose v2 is needed (the 'docker compose' command). It comes with current Docker."
+if ! docker compose version >/dev/null 2>&1; then
+  bad "Docker Compose v2 (the 'docker compose' command) is missing."
+  note "Docker from your distribution's own packages can lack it. Docker's official"
+  note "script installs it: curl -fsSL https://get.docker.com | sudo sh"
+  note "(on Ubuntu, 'sudo apt install docker-compose-v2' also works)"
+  exit 1
+fi
 ok "docker compose $(docker compose version --short 2>/dev/null || echo v2)"
 
 if ! docker info >/dev/null 2>&1; then
   if docker info 2>&1 | grep -qi "permission denied"; then
     bad "You don't have permission to use Docker."
-    note "Add yourself to the docker group, then log out and back in:"
-    note "  sudo usermod -aG docker \$USER"
-  else
-    bad "Docker isn't running. Start it with: sudo systemctl start docker"
+    if ! $CHECK_ONLY && $CAN_PROMPT && confirm "Add yourself to the docker group? (uses sudo)" y; then
+      sudo usermod -aG docker "$ME" && ok "added $ME to the docker group"
+      rerun_with_docker_group "$@"
+    fi
+    note "To fix it: sudo usermod -aG docker \$USER — then log out and back in."
+    exit 1
   fi
-  exit 1
+  bad "Docker isn't running."
+  if ! $CHECK_ONLY && $CAN_PROMPT && confirm "Start it, and have it start on boot? (uses sudo)" y; then
+    sudo systemctl enable --now docker >/dev/null 2>&1 || die "That didn't work — try: sudo systemctl start docker"
+    wait_for "Waiting for Docker" 30 docker info || die "Docker didn't come up — try: sudo systemctl status docker"
+  else
+    note "Start it with: sudo systemctl enable --now docker"
+    exit 1
+  fi
 fi
 ok "docker is running and usable"
 
@@ -249,6 +310,12 @@ if $UNINSTALL; then
     fi
   fi
 
+  # The .local name install.sh published.
+  REMOVE_NAME=false
+  if grep -q '^# twocans (install.sh)$' /etc/avahi/hosts 2>/dev/null; then
+    confirm "Stop announcing its name on your network (in /etc/avahi/hosts)? (uses sudo)" y && REMOVE_NAME=true
+  fi
+
   echo
   if $WIPE; then
     quietly "Stopping twocans and removing its volumes" "${COMPOSE[@]}" down -v --remove-orphans
@@ -281,6 +348,11 @@ if $UNINSTALL; then
       docker image rm "$image" >/dev/null 2>&1 || true
     done
     ok "images removed"
+  fi
+
+  if $REMOVE_NAME; then
+    sudo sed -i '/^# twocans (install.sh)$/{N;d}' /etc/avahi/hosts \
+      && { sudo systemctl reload avahi-daemon 2>/dev/null || true; } && ok "name no longer announced"
   fi
 
   if ((${#UFW_RULES[@]})); then
@@ -345,6 +417,7 @@ TRUNK_SIP_PORT=$(env_get TRUNK_SIP_PORT); TRUNK_SIP_PORT=${TRUNK_SIP_PORT:-5062}
 RTP_START=$(env_get RTP_PORT_START); RTP_START=${RTP_START:-10000}
 RTP_END=$(env_get RTP_PORT_END); RTP_END=${RTP_END:-10100}
 WHISPER_MODEL=$(env_get WHISPER_MODEL); WHISPER_MODEL=${WHISPER_MODEL:-base}
+MDNS_NAME=$(env_get MDNS_NAME); MDNS_NAME=${MDNS_NAME:-twocans}
 
 [[ -n "$LAN_IP" ]] || LAN_IP="192.168.1.10"
 
@@ -464,6 +537,10 @@ if ! $CHECK_ONLY && { $FIRST_INSTALL || $RECONFIGURE; }; then
   if ! ip -4 -o addr show 2>/dev/null | grep -q " ${LAN_IP}/"; then
     warn "$LAN_IP isn't one of this machine's addresses — phones won't find it unless it forwards here"
   fi
+
+  explain "A name for it on your home network, so browsers can find it as" \
+          "http://<name>.local instead of an address. Change it if there's more than one."
+  ask MDNS_NAME "Name on your network" "$MDNS_NAME" is_hostname
 
   explain "Bedtime and call hours follow this."
   ask TZ_NAME "Timezone" "$TZ_NAME" is_timezone
@@ -736,15 +813,77 @@ else
   note "Couldn't check the clock (no timedatectl here) — make sure it's kept in time."
 fi
 
+# 4. A name on the home network — http://twocans.local — published through
+#    Avahi (the mDNS service most Linux machines run, a Raspberry Pi included)
+#    as one line in /etc/avahi/hosts. Phones still use the address: SIP
+#    doesn't look up .local names.
+MDNS_FQDN="${MDNS_NAME}.local"
+MDNS_URL="http://${MDNS_FQDN}$([[ "$HTTP_PORT" == 80 ]] || echo ":$HTTP_PORT")"
+name_ips() { getent ahostsv4 "$1" 2>/dev/null | awk '{print $1}' | sort -u || true; }
+publish_name() {
+  sudo sh -c "sed -i '/^# twocans (install.sh)\$/{N;d}' /etc/avahi/hosts 2>/dev/null; printf '# twocans (install.sh)\n%s %s\n' '$LAN_IP' '$MDNS_FQDN' >> /etc/avahi/hosts" \
+    && { sudo systemctl reload avahi-daemon 2>/dev/null || sudo avahi-daemon -r 2>/dev/null; }
+}
+AVAHI_ON=false
+systemctl is-active --quiet avahi-daemon 2>/dev/null && AVAHI_ON=true
+CAN_RESOLVE=false
+grep -qE '^hosts:.*mdns' /etc/nsswitch.conf 2>/dev/null && CAN_RESOLVE=true
+
+MDNS_OK=false
+if grep -qx "$LAN_IP" <<< "$(name_ips "$MDNS_FQDN")"; then
+  MDNS_OK=true
+  ok "reachable by name as $MDNS_URL"
+elif [[ -n "$(name_ips "$MDNS_FQDN")" ]]; then
+  warn "$MDNS_FQDN is already another machine's ($(name_ips "$MDNS_FQDN" | head -1))"
+  note "Pick another name with ./install.sh --reconfigure."
+else
+  if ! $AVAHI_ON && ! $CHECK_ONLY && command -v apt-get >/dev/null 2>&1 \
+    && confirm "Install Avahi, so browsers can find twocans as $MDNS_FQDN? (uses sudo)" y; then
+    quietly "Installing Avahi" sudo apt-get install -y avahi-daemon libnss-mdns
+    sudo systemctl enable --now avahi-daemon >/dev/null 2>&1 || true
+    systemctl is-active --quiet avahi-daemon 2>/dev/null && AVAHI_ON=true
+    grep -qE '^hosts:.*mdns' /etc/nsswitch.conf 2>/dev/null && CAN_RESOLVE=true
+  fi
+  if ! $AVAHI_ON; then
+    note "No Avahi here, so no .local name — use the address. (Avahi is the"
+    note "avahi-daemon package; install it and run ./install.sh again for one.)"
+  elif $CHECK_ONLY; then
+    note "Not reachable as $MDNS_FQDN yet — ./install.sh will offer to set it up."
+  elif confirm "Make it reachable as $MDNS_URL? (adds a line to /etc/avahi/hosts; uses sudo)" y; then
+    if publish_name; then
+      if ! $CAN_RESOLVE; then
+        ok "published as $MDNS_FQDN — this machine can't look up .local names itself, so try it from a phone or laptop"
+        MDNS_OK=true
+      elif wait_for "Checking the name" 15 bash -c "getent ahostsv4 '$MDNS_FQDN' | grep -q '^$LAN_IP '"; then
+        ok "reachable by name as $MDNS_URL"
+        MDNS_OK=true
+      else
+        warn "published, but $MDNS_FQDN doesn't answer yet — give it a minute, then: ./twocans status"
+      fi
+    else
+      warn "couldn't publish the name — the address still works"
+    fi
+  fi
+fi
+
 if $CHECK_ONLY; then
   section "Summary"
   if (( PORT_PROBLEMS > 0 )); then warn "Some ports need sorting out — see above."
   else ok "Everything checks out. Run ./install.sh to set up."; fi
+  [[ -n "$INSTALL_LOG" ]] && note "A copy of this is in $INSTALL_LOG"
   exit 0
 fi
 
 # ============================================================ configuration
 section "Configuration"
+
+# Whose files the app's are: yours. Run as root (or through sudo), that's the
+# person behind sudo, else 1000 — never root itself, which the app can't run as.
+APP_UID=$(id -u); APP_GID=$(id -g)
+if (( APP_UID == 0 )); then
+  APP_UID=${SUDO_UID:-1000}; APP_GID=${SUDO_GID:-1000}
+  (( APP_UID == 0 )) && { APP_UID=1000; APP_GID=1000; }
+fi
 
 if $FIRST_INSTALL; then
   cat > "$ENV_FILE" <<EOF
@@ -763,6 +902,10 @@ HTTP_PORT=${HTTP_PORT}
 HTTPS_PORT=${HTTPS_PORT}
 TZ=${TZ_NAME}
 
+# The name browsers can use on your home network: http://<this>.local — see
+# /etc/avahi/hosts, which install.sh writes.
+MDNS_NAME=${MDNS_NAME}
+
 # Phone numbers typed without a country code are taken to be from here.
 DEFAULT_COUNTRY_CODE=${COUNTRY}
 
@@ -774,8 +917,8 @@ RTP_PORT_START=${RTP_START}
 RTP_PORT_END=${RTP_END}
 
 # Run the app as your user so its files stay editable from here.
-HOST_UID=$(id -u)
-HOST_GID=$(id -g)
+HOST_UID=${APP_UID}
+HOST_GID=${APP_GID}
 
 # --- passwords, made once ------------------------------------------------------
 DB_NAME=twocans
@@ -823,6 +966,11 @@ else
   env_set RTP_PORT_START "$RTP_START"
   env_set RTP_PORT_END "$RTP_END"
   env_set WHISPER_MODEL "$WHISPER_MODEL"
+  env_set MDNS_NAME "$MDNS_NAME"
+  # An older install run as root recorded 0, which the app can't run as.
+  if [[ "$(env_get HOST_UID)" == 0 || -z "$(env_get HOST_UID)" ]]; then
+    env_set HOST_UID "$APP_UID"; env_set HOST_GID "$APP_GID"
+  fi
   # A password missing from an older .env is made now; existing ones never change.
   for key in DB_PASSWORD DB_ROOT_PASSWORD APP_KEY ARI_PASSWORD AMI_PASSWORD; do
     [[ -n "$(env_get "$key")" && "$(env_get "$key")" != change-me ]] || env_set "$key" "$(secret)"
@@ -935,17 +1083,24 @@ else warn "the web app isn't answering yet — check: docker compose logs web"; 
 # ================================================================= done
 
 echo
+OPEN_AT=("Open $APP_URL")
+$MDNS_OK && OPEN_AT=("Open $MDNS_URL" "  (or $APP_URL)")
 if $FIRST_INSTALL; then
-  box "twocans is running" "" "Open $APP_URL" "and create your account."
+  box "twocans is running" "" "${OPEN_AT[@]}" "and create your account."
 else
-  box "twocans is up to date and running" "" "Open $APP_URL"
+  box "twocans is up to date and running" "" "${OPEN_AT[@]}"
 fi
 echo
 echo "  Phones register to ${bold}${SIP_DOMAIN}:${SIP_PORT}${off} and must be on the same network."
+if [[ "$APP_URL" == http://* ]]; then
+  echo "  Face ID sign-in, and adding twocans to a phone's home screen, need HTTPS: give it"
+  echo "  an address and certificate under Phone line → Where the outside world finds you."
+fi
 echo "  For calls from a phone line, the router must let in ${TRUNK_SIP_PORT}/udp and"
 echo "  ${RTP_START}–${RTP_END}/udp — see Phone line → Opening the router, in the app."
 echo
 echo "  ${dim}Is everything working?${off}  ./twocans status"
 echo "  ${dim}Update later with:${off}       ./twocans update"
 echo "  ${dim}Everything else:${off}         ./twocans help"
+[[ -n "$INSTALL_LOG" ]] && echo "  ${dim}A record of this install:${off} $INSTALL_LOG"
 echo

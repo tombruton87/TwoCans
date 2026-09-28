@@ -25,6 +25,26 @@ $onlineCount = count(array_filter($deviceRows, static fn($d) => $d['online']));
 ?>
 <div class="tc-stack">
 
+  <?php /* Until the Getting started guide is done or put off — see Onboarding. */ ?>
+  <?php $onboarding = new Onboarding(); ?>
+  <?php if (Auth::can('devices') && $onboarding->remind()): ?>
+    <?php $gs = $onboarding->progress(); ?>
+    <section class="tc-start-banner">
+      <i class="fa-solid fa-flag-checkered" aria-hidden="true"></i>
+      <div class="tc-grow">
+        <b>Finish setting up</b> — <?= (int) $gs['done'] ?> of <?= (int) $gs['total'] ?> steps done
+        <div class="tc-start__bar tc-start__bar--sm"><span style="width:<?= (int) round(100 * $gs['done'] / max(1, $gs['total'])) ?>%"></span></div>
+      </div>
+      <a class="tc-btn tc-btn--coral tc-btn--sm" href="<?= e(url(['screen' => 'start'])) ?>">Continue</a>
+      <form method="post" action="/">
+        <?= form_fields() ?>
+        <input type="hidden" name="action" value="onboarding">
+        <input type="hidden" name="do" value="later">
+        <button class="tc-link" type="submit">Later</button>
+      </form>
+    </section>
+  <?php endif; ?>
+
   <?php foreach ($activeCalls as $call): ?>
     <div class="tc-livebar">
       <span class="tc-livebar__dot"></span>

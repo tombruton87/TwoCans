@@ -91,6 +91,9 @@ $activeCall = $activeCalls[0] ?? null;
             case 'announcements':
                 view('screens/announcements', ['store' => $store]);
                 break;
+            case 'start':
+                view('screens/start', ['store' => $store, 'devices' => $devices]);
+                break;
             case 'homeassistant':
                 view('screens/homeassistant', ['store' => $store]);
                 break;

@@ -20,10 +20,15 @@ RUN apk add --no-cache tzdata libqrencode-tools libjpeg-turbo libpng libwebp ffm
 RUN apk add --no-cache openssl certbot certbot-dns-cloudflare supervisor
 
 # Run the pool as the host user so bind-mounted code stays editable on both sides.
-RUN addgroup -g "${GID}" twocans 2>/dev/null || true \
- && adduser -u "${UID}" -G twocans -S -H -D twocans 2>/dev/null || true \
+# Never as root: an id of 0 (the installer run as root) would leave no twocans
+# user at all, and PHP-FPM refuses to start — so it falls back to 1000.
+RUN APP_UID="${UID}"; APP_GID="${GID}"; \
+    if [ "${APP_UID}" = 0 ] || [ "${APP_GID}" = 0 ]; then APP_UID=1000; APP_GID=1000; fi; \
+    addgroup -g "${APP_GID}" twocans 2>/dev/null || true \
+ && adduser -u "${APP_UID}" -G twocans -S -H -D twocans 2>/dev/null || true \
+ && id twocans >/dev/null \
  && mkdir -p /var/log/php-fpm /var/log/nginx \
- && chown -R "${UID}:${GID}" /var/log/php-fpm
+ && chown -R twocans:twocans /var/log/php-fpm
 
 COPY docker/web/php.ini /usr/local/etc/php/conf.d/zz-twocans.ini
 COPY docker/web/www.conf /usr/local/etc/php-fpm.d/zz-twocans.conf

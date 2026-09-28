@@ -201,7 +201,7 @@ $low = $store->isLowCredit();
   $cloudflareSaved = (bool) $ddns['configured'];
   $cloudflareActive = (bool) $ddns['enabled'] && $cloudflareSaved;
   ?>
-  <section class="tc-card tc-card--lg">
+  <section class="tc-card tc-card--lg" id="outside">
     <div class="tc-trunk-name" style="margin-bottom:6px">
       <h2>Where the outside world finds you</h2>
       <?php if ($cloudflareActive): ?>

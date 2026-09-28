@@ -14,22 +14,32 @@ transcription, voicemail and live listen-in are real, in MariaDB and Asterisk.
 
 ## Install
 
-You need **Docker Engine** and **Docker Compose v2**, and a machine your phones can reach.
+You need a Linux machine your phones can reach — a Raspberry Pi is ideal. The
+installer sets up the rest, Docker included if it isn't there (asking first).
 
-### Easiest — one command
+### Easiest — one line
 
 ```bash
-git clone https://github.com/tombruton87/TwoCans.git && cd TwoCans
+curl -fsSL https://raw.githubusercontent.com/tombruton87/TwoCans/main/get.sh | bash
+```
+
+It asks where to put twocans (`~/twocans` unless you say), installs git if it's
+missing, fetches twocans and runs its installer. Run it again later and it updates
+instead. [Read it first](get.sh) if you like — it's short. Or do the same by hand:
+
+```bash
+git clone https://github.com/tombruton87/TwoCans.git twocans && cd twocans
 ./install.sh
 ```
 
 `install.sh` walks you through it:
 
-- **checks the software** — Docker, Compose, and the few tools it uses — plus memory
-  and disk, and on a Raspberry Pi builds the images locally (the published ones are
-  Intel/AMD only);
-- **asks a few questions** — this machine's address, timezone, country code, and
-  which speech-to-text model — suggesting an answer for each (Enter takes it);
+- **checks the software** — Docker (offering to install it with Docker's own script,
+  or to start it), Compose, and the few tools it uses — plus memory and disk, and on a
+  Raspberry Pi builds the images locally (the published ones are Intel/AMD only);
+- **asks a few questions** — this machine's address, a name for it on your network,
+  timezone, country code, and which speech-to-text model — suggesting an answer for
+  each (Enter takes it);
 - **checks the ports** — web, HTTPS, the phones' SIP port, the phone line's SIP port
   and the call audio range. If something else holds the web or HTTPS port it asks
   whether to use another, and suggests a free one; the SIP ports and call audio
@@ -38,11 +48,14 @@ git clone https://github.com/tombruton87/TwoCans.git && cd TwoCans
   checks each port against them, and offers to add only what's missing;
 - **checks this machine** — that its address won't change (one handed out by your
   router can), that Docker starts on boot, and that the clock is kept in time,
-  offering to fix the last two;
+  offering to fix the last two — and makes it reachable by name, as
+  `http://twocans.local:8083`, through Avahi;
 - writes `.env` with fresh passwords, pulls the images, starts everything, installs
   Asterisk's spoken prompts, and sets up the database.
 
-Then open the URL it prints and complete first-run setup.
+Then open the address it prints and create your account. A short **Getting
+started** checklist follows — add a phone, add people, connect a line (or skip it),
+make a test call — which you can leave for later; it stays in the menu.
 
 ```bash
 ./install.sh --check        # check everything, change nothing

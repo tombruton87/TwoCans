@@ -53,6 +53,8 @@ final class Permissions
         'device_limits' => 'devices',
         'device_remove' => 'devices',
         'device_pick_model' => 'devices',
+        // The Getting started guide walks through adding phones.
+        'onboarding' => 'devices',
         'device_wizard_step' => 'devices',
         'device_finish' => 'devices',
         'device_test_call' => 'devices',

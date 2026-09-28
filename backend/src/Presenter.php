@@ -15,7 +15,7 @@ final class Presenter
         'custom' => ['label' => 'Custom hours', 'sub' => 'You set the window', 'mod' => 'sky'],
     ];
 
-    public const SCREENS = ['dashboard', 'phones', 'contacts', 'calllog', 'voicemail', 'jokes', 'guardians', 'trunk', 'dialplan', 'system', 'notifications', 'greetings', 'announcements', 'homeassistant'];
+    public const SCREENS = ['dashboard', 'phones', 'contacts', 'calllog', 'voicemail', 'jokes', 'guardians', 'trunk', 'dialplan', 'system', 'notifications', 'greetings', 'announcements', 'homeassistant', 'start'];
 
     /** Header title + subtitle per screen. */
     public const TITLES = [
@@ -35,6 +35,7 @@ final class Presenter
         'greetings' => ['Greetings', 'Everything the line says out loud, and who hears it.'],
         'announcements' => ['Announcements', 'Buttons that page the phones with a message.'],
         'homeassistant' => ['Home Assistant', 'Your line, its phones and its calls, in Home Assistant.'],
+        'start' => ['Getting started', 'A few steps to a line the family can use.'],
     ];
 
     /** Symbols for the ISO 4217 codes a provider is likely to report. */
