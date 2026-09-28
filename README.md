@@ -35,8 +35,9 @@ git clone https://github.com/tombruton87/TwoCans.git twocans && cd twocans
 `install.sh` walks you through it:
 
 - **checks the software** — Docker (offering to install it with Docker's own script,
-  or to start it), Compose, and the few tools it uses — plus memory and disk, and on a
-  Raspberry Pi builds the images locally (the published ones are Intel/AMD only);
+  or to start it), Compose, and the few tools it uses — plus memory and disk. The
+  published images are built for Intel/AMD and for ARM, so a Raspberry Pi downloads
+  them like anything else;
 - **asks a few questions** — this machine's address, a name for it on your network,
   timezone, country code, and which speech-to-text model — suggesting an answer for
   each (Enter takes it);

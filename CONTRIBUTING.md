@@ -35,13 +35,29 @@ docker compose exec web php /var/www/html/bin/test.php
 - Run `php -l` on changed PHP files, and add a test under `backend/tests/` where
   it makes sense.
 
+## Checks
+
+Every push and pull request runs `.github/workflows/checks.yml`: the shell
+scripts parse, and the whole test suite runs inside the web image against a
+fresh MariaDB with every migration applied.
+
 ## Making a release
 
 1. Set the version in `backend/VERSION` (it's baked into the web image, and
    `./twocans version` and `./twocans update` compare it with GitHub's latest).
 2. Move the changelog's **Unreleased** entries under a new version heading.
-3. Commit, tag `vX.Y.Z`, push both, and publish the GitHub release.
-4. Build the web image from the tag and push it as `X.Y.Z` and `latest`.
+3. Commit, tag `vX.Y.Z`, and push both.
+4. Pushing the tag runs `.github/workflows/release.yml`: it builds the web and
+   speech-to-text images natively for Intel/AMD and ARM, publishes each pair
+   under one name as `X.Y.Z` and `latest` (not for a pre-release like
+   `v1.0.0-rc1`), then pulls them on both chip types and checks they start. It
+   refuses a tag that doesn't match `backend/VERSION`.
+5. Publish the GitHub release, with the changelog section as its notes.
+
+To rebuild the images for a tag that already exists, run the workflow by hand
+(Actions → Release images → Run workflow). It needs two repository secrets:
+`DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` (a Docker Hub access token with read
+and write).
 
 ## Opening a PR
 

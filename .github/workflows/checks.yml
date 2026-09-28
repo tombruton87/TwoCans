@@ -1,0 +1,63 @@
+# Checks on every push and pull request: the scripts parse, and the test suite
+# passes inside the web image, against a real MariaDB with every migration run.
+name: Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  scripts:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: The shell scripts parse
+        run: for f in install.sh twocans get.sh scripts/ui.sh; do bash -n "$f" && echo "ok $f"; done
+      - name: The ones you run are executable
+        run: for f in install.sh twocans get.sh; do test -x "$f" && echo "ok $f"; done
+
+  tests:
+    runs-on: ubuntu-24.04
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_DATABASE: twocans
+          MARIADB_USER: twocans
+          MARIADB_PASSWORD: ci-password
+          MARIADB_ROOT_PASSWORD: ci-root-password
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/web/Dockerfile
+          load: true
+          tags: twocans-web:ci
+          cache-from: type=gha,scope=web-amd64
+          build-args: |
+            UID=1000
+            GID=1000
+
+      - name: Migrations, then the test suite
+        run: |
+          docker run --rm --network "${{ job.services.mariadb.network }}" \
+            -e DB_HOST=mariadb -e DB_NAME=twocans -e DB_USER=twocans -e DB_PASSWORD=ci-password \
+            -e APP_KEY=0000000000000000000000000000000000000000000000000000000000000000 \
+            -e APP_URL=http://192.0.2.10:8083 -e SIP_DOMAIN=192.0.2.10 -e TZ=Europe/London \
+            -v "$PWD/docker/asterisk/etc:/etc/asterisk:ro" \
+            --entrypoint sh twocans-web:ci -c '
+              set -e
+              php /var/www/html/bin/migrate.php | tail -1
+              php /var/www/html/bin/test.php'

@@ -152,15 +152,14 @@ if [[ "$(uname -s)" != Linux ]]; then
   confirm "Carry on anyway?" n || exit 1
 fi
 
-# The published images are built for Intel/AMD. On ARM (a Raspberry Pi) they
-# are built here instead, from the same Dockerfiles — slower the first time.
+# The published images come built for Intel/AMD and for ARM (a Raspberry Pi),
+# and Docker pulls the one that fits. Only if a release lacks an ARM build are
+# they built here, from the same Dockerfiles — checked once Docker is there.
 BUILD_LOCALLY=false
+ARM=false
 case "$(uname -m)" in
   x86_64|amd64) ok "$(uname -m) — using the published images" ;;
-  aarch64|arm64)
-    BUILD_LOCALLY=true
-    warn "$(uname -m) — the published images are Intel/AMD only, so they'll be built here"
-    note "The first build takes a while (15–30 minutes on a Raspberry Pi)." ;;
+  aarch64|arm64) ARM=true; ok "$(uname -m) (ARM)" ;;
   *) die "$(uname -m) isn't supported — twocans runs on 64-bit Intel/AMD or ARM." ;;
 esac
 
@@ -246,6 +245,19 @@ if ! docker info >/dev/null 2>&1; then
   fi
 fi
 ok "docker is running and usable"
+
+# On ARM: are there published ARM builds of twocans' own images? Older
+# releases were Intel/AMD only; then (or offline) they're built here instead.
+if $ARM; then
+  has_arm() { docker manifest inspect "$1" 2>/dev/null | grep -q '"architecture": *"arm64"'; }
+  if has_arm hamletdigital/twocans-web:latest && has_arm hamletdigital/twocans-whisper:latest; then
+    ok "the published images include ARM builds"
+  else
+    BUILD_LOCALLY=true
+    warn "no published ARM build to use, so the images will be built here"
+    note "The first build takes a while (15–30 minutes on a Raspberry Pi)."
+  fi
+fi
 
 COMPOSE=(docker compose)
 $BUILD_LOCALLY && COMPOSE=(docker compose -f compose.yaml -f compose.build.yml)

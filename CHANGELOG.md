@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Images for ARM (a Raspberry Pi)** as well as Intel/AMD: twocans' own web and
+  speech-to-text images are built natively for both and published under one
+  name, so Docker pulls the one that fits. A Pi no longer spends 15–30 minutes
+  building them; the installer checks for an ARM build and only builds locally
+  when a release lacks one.
+- **Releases build themselves**: pushing a version tag runs a GitHub Actions
+  workflow that builds, publishes and checks the images on both chip types (and
+  refuses a tag that doesn't match `backend/VERSION`). It can also be run by
+  hand for an existing tag.
+- **Checks on every push and pull request**: the scripts parse, and the whole
+  test suite runs in the web image against a fresh MariaDB.
+
 ## [0.1.3] - 2026-09-28
 
 ### Added

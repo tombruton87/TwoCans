@@ -1,0 +1,174 @@
+# Build and publish twocans' own images for Intel/AMD and ARM (a Raspberry Pi).
+#
+# Each image is built natively on a runner of its own chip type — no emulation,
+# which would take an hour for speech-to-text — then the two are joined under
+# one name, so Docker on any machine pulls the build that fits it.
+#
+#   push a tag vX.Y.Z   → hamletdigital/twocans-web and -whisper as X.Y.Z (and
+#                         latest, unless it's a pre-release like v1.0.0-rc1)
+#   Run workflow        → the same for an existing tag, e.g. to add ARM builds
+#                         to a release made before this workflow existed
+#
+# Needs two repository secrets: DOCKERHUB_USERNAME and DOCKERHUB_TOKEN (a
+# Docker Hub access token with read & write).
+name: Release images
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Version tag to build, e.g. v0.1.3'
+        required: true
+      latest:
+        description: 'Also tag it as latest'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+env:
+  NAMESPACE: docker.io/hamletdigital
+
+jobs:
+  version:
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.v.outputs.tag }}
+      version: ${{ steps.v.outputs.version }}
+      latest: ${{ steps.v.outputs.latest }}
+    steps:
+      - id: v
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_LATEST: ${{ inputs.latest }}
+        run: |
+          tag="${INPUT_TAG:-$GITHUB_REF_NAME}"
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "::error::'$tag' isn't a version tag like v1.2.3"; exit 1; }
+          latest=true
+          [[ "$tag" == *-* ]] && latest=false
+          [[ "${INPUT_LATEST:-true}" == false ]] && latest=false
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [web, whisper]
+        arch: [amd64, arm64]
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.tag }}
+
+      # The app reports this version; an image tagged otherwise would lie.
+      - name: The tag matches backend/VERSION
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          file="$(tr -d ' \n' < backend/VERSION)"
+          [[ "$file" == "$VERSION" ]] || { echo "::error::backend/VERSION says $file, the tag says $VERSION"; exit 1; }
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.image == 'web' && '.' || 'docker/whisper' }}
+          file: ${{ matrix.image == 'web' && 'docker/web/Dockerfile' || 'docker/whisper/Dockerfile' }}
+          platforms: linux/${{ matrix.arch }}
+          build-args: |
+            UID=1000
+            GID=1000
+          labels: |
+            org.opencontainers.image.version=${{ needs.version.outputs.version }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          outputs: type=image,name=${{ env.NAMESPACE }}/twocans-${{ matrix.image }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
+          cache-to: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }},mode=max
+
+      - name: Keep the digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: mkdir -p digests && touch "digests/${DIGEST#sha256:}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.image }}-${{ matrix.arch }}
+          path: digests/*
+          retention-days: 1
+
+  publish:
+    needs: [version, build]
+    strategy:
+      matrix:
+        image: [web, whisper]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: digest-${{ matrix.image }}-*
+          path: digests
+          merge-multiple: true
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: One name for both chip types
+        env:
+          REPO: ${{ env.NAMESPACE }}/twocans-${{ matrix.image }}
+          VERSION: ${{ needs.version.outputs.version }}
+          LATEST: ${{ needs.version.outputs.latest }}
+        working-directory: digests
+        run: |
+          tags=(-t "$REPO:$VERSION")
+          [[ "$LATEST" == true ]] && tags+=(-t "$REPO:latest")
+          docker buildx imagetools create "${tags[@]}" $(printf "$REPO@sha256:%s " *)
+          docker buildx imagetools inspect "$REPO:$VERSION"
+
+  # Pull what was published on each chip type and check it starts.
+  check:
+    needs: [version, publish]
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    steps:
+      - name: The web image
+        env:
+          IMAGE: ${{ env.NAMESPACE }}/twocans-web:${{ needs.version.outputs.version }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          docker pull -q "$IMAGE"
+          docker run --rm --entrypoint sh "$IMAGE" -c '
+            set -e
+            echo "arch: $(uname -m), version: $(cat /var/www/html/VERSION)"
+            [ "$(cat /var/www/html/VERSION)" = "'"$VERSION"'" ]
+            id twocans
+            php-fpm -t
+            which ffmpeg ffprobe
+            for f in $(find /var/www/html -name "*.php"); do php -l "$f" >/dev/null; done
+            echo "all PHP parses"'
+      - name: The speech-to-text image
+        env:
+          IMAGE: ${{ env.NAMESPACE }}/twocans-whisper:${{ needs.version.outputs.version }}
+        run: |
+          docker pull -q "$IMAGE"
+          docker run --rm "$IMAGE" python -c "import faster_whisper, ctranslate2, platform; print(platform.machine(), 'faster-whisper', faster_whisper.__version__, 'ctranslate2', ctranslate2.__version__)"
