@@ -7,6 +7,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-28
+
+### Added
+
+- **A guided installer.** `./install.sh` checks the software (Docker, Compose,
+  the tools it uses, memory and disk), asks a few questions with a suggested
+  answer for each, checks every port twocans publishes — offering another port
+  for the web interface or HTTPS when something else holds it, and explaining a
+  clash on the SIP ports or call audio range, which can't move — and reads the firewall's rules (ufw or
+  firewalld, with sudo, asking first) to check each port against them —
+  allowed, allowed only from some addresses, or missing — offering to add only
+  what's missing. It says when ufw is installed but switched off. On ARM (a Raspberry Pi) it builds the
+  images locally. It is also the updater — `git pull && ./install.sh`, or
+  `make update` — keeping `.env`, asking before cutting off a call in progress,
+  and restarting Asterisk only when its transports or passwords changed.
+  It also checks this machine: that its address won't change (warning when the
+  router hands it out, with the hardware address to reserve it for), that Docker
+  starts on boot, and that the clock is kept in time — offering to fix the last
+  two. `--check`, `--yes`, `--reconfigure`, `--no-start`, `--write-secrets`, and
+  `--uninstall`, which keeps your data unless you type `delete`, and only ever
+  removes data — never the repo's own files.
+
+- **Reset the Owner account from the command line**: `./install.sh
+  --reset-owner` (or `make reset-owner`). It shows the Owner and offers a new
+  sign-in email, a new password (clearing any lockout), removing its passkeys,
+  and signing out every browser already signed in — confirming before it
+  changes anything. With no Owner it makes one, from an existing grown-up or
+  new. Signing out everywhere is new too: sessions begun before it are refused
+  (migration 046). Standard installs get it with the next image.
+
+- **`./twocans`, one command for looking after it**, working the same on a
+  standard install and a development setup: `status` (containers, system
+  checks, phones, the phone line and credit, today, backups, disk), `logs`,
+  `backup` / `backups` / `restore`, `export` (the call log, voicemails and
+  contacts as spreadsheets plus the recordings, in one zip), `version` and
+  `update` (comparing with GitHub's latest; stopping rather than overwriting
+  files changed by hand), `report` (a support report with passwords, names,
+  numbers, emails, the domain and public IPs removed), plus `reset-owner`,
+  `check` and `uninstall`. The installer and it share one look
+  (`scripts/ui.sh`).
+- The app knows its version: `backend/VERSION`, baked into the image.
+
+### Changed
+
+- **Asterisk's control passwords are no longer kept in tracked files.**
+  `ari.conf` and `manager.conf` include them from `docker/asterisk/etc/secrets/`,
+  which `install.sh` writes from `.env` and git ignores — so an update never
+  conflicts with them, and they can't be committed. **Upgrading:** if `git pull`
+  refuses because of local changes to those two files, run
+  `git checkout -- docker/asterisk/etc/ari.conf docker/asterisk/etc/manager.conf`
+  and pull again; then run `./install.sh` (or `./install.sh --write-secrets`)
+  **before Asterisk next restarts**.
+
+### Fixed
+
+- Backups were readable by everyone on the machine; they hold the whole
+  database, so they're now readable only by their owner (as exports and
+  reports are).
+- **Asterisk's spoken prompts were lost whenever the stack was taken down**, and
+  group calls then admitted nobody: the image keeps them on an unnamed volume of
+  its own. They now have a named volume, `asterisk-sounds`. Run `./install.sh`
+  once after updating to fetch them into it.
+- The README's copy of the example compose file was missing the phone line's
+  SIP port.
+
 ## [0.1.1] - 2026-09-28
 
 ### Fixed
@@ -239,6 +304,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **Numbers the kids tried** log on the call log, one card per number with the
   same two buttons. Both leave out anyone who has since been added as a contact.
 
-[Unreleased]: https://github.com/tombruton87/TwoCans/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/tombruton87/TwoCans/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/tombruton87/TwoCans/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/tombruton87/TwoCans/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/tombruton87/TwoCans/releases/tag/v0.1.0
