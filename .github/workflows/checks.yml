@@ -61,3 +61,38 @@ jobs:
               set -e
               php /var/www/html/bin/migrate.php | tail -1
               php /var/www/html/bin/test.php'
+
+  # Both of twocans' own images build and start on ARM (a Raspberry Pi), built
+  # natively — so a change that breaks them is caught here, not at release.
+  arm:
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [web, whisper]
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build for ARM
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ matrix.image == 'web' && '.' || 'docker/whisper' }}
+          file: ${{ matrix.image == 'web' && 'docker/web/Dockerfile' || 'docker/whisper/Dockerfile' }}
+          platforms: linux/arm64
+          load: true
+          tags: twocans-${{ matrix.image }}:arm
+          build-args: |
+            UID=1000
+            GID=1000
+          cache-from: type=gha,scope=${{ matrix.image }}-arm64
+          cache-to: type=gha,scope=${{ matrix.image }}-arm64,mode=max
+
+      - name: It starts
+        run: |
+          if [ "${{ matrix.image }}" = web ]; then
+            docker run --rm --entrypoint sh twocans-web:arm -c 'set -e; uname -m; id twocans; php-fpm -t; which ffmpeg ffprobe; for f in $(find /var/www/html -name "*.php"); do php -l "$f" >/dev/null; done; echo "all PHP parses"'
+          else
+            docker run --rm twocans-whisper:arm python -c "import faster_whisper, ctranslate2, platform; print(platform.machine(), 'faster-whisper', faster_whisper.__version__, 'ctranslate2', ctranslate2.__version__)"
+          fi
