@@ -117,7 +117,7 @@ switch ($download) {
     case 'recording':
         $repo = new CallRepository();
         $row = $repo->find(isset($_GET['id']) ? (int) $_GET['id'] : null);
-        $file = $row === null ? null : $repo->recordingFile((string) $row['uniqueid']);
+        $file = $row === null ? null : $repo->playableFile($row);
 
         if ($file === null) {
             http_response_code(404);

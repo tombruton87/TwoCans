@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Group calls were never transcribed.** Their recording was set to be named
+  after the call, but the conference's own settings profile overrode it, so
+  Asterisk used its default name and the call log never found the file. The
+  call now joins with a profile of its own built on the house one, so the
+  name holds. Group calls recorded under the old name are matched up.
+- **Group calls from a phone in adult mode were recorded**, for the same
+  reason. They no longer are.
+- The call log showed **Transcribing…** for ever on calls that were never
+  recorded: adult mode, announcements, or a recording that never appeared.
+  Fifteen minutes after such a call ends it now says nothing was recorded.
+
 ## [0.1.0] - 2026-09-28
 
 ### Added

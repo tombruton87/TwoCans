@@ -979,10 +979,22 @@ final class PjsipConfig
         // Record the conference as one file, named the way every other
         // recording is, so the call log picks it up without special casing.
         // Not when the phone starting it is in adult mode.
+        //
+        // These go on a profile of this call's own, built on twocans_bridge,
+        // and ConfBridge below is given no bridge profile so that it uses it:
+        // named there, the profile wins and these are ignored — which once
+        // left every group call recorded under Asterisk's own file name,
+        // never transcribed, and recorded in adult mode too (record_conference
+        // is on in twocans_bridge). record_file_timestamp stops Asterisk
+        // adding the time to the name we give.
+        $out .= " same => n,Set(CONFBRIDGE(bridge,template)=twocans_bridge)\n";
         $out .= " same => n,GotoIf(\$[\"\${TC_ADULT}\" = \"1\"]?norec)\n";
         $out .= " same => n,Set(CONFBRIDGE(bridge,record_file)="
               . self::RECORDINGS_DIR . "/\${UNIQUEID}." . self::RECORDING_FORMAT . ")\n";
-        $out .= " same => n(norec),NoOp(members next)\n";
+        $out .= " same => n,Set(CONFBRIDGE(bridge,record_file_timestamp)=no)\n";
+        $out .= " same => n,Goto(members)\n";
+        $out .= " same => n(norec),Set(CONFBRIDGE(bridge,record_conference)=no)\n";
+        $out .= " same => n(members),NoOp(members next)\n";
 
         foreach ($members as $member) {
             $memberName = str_replace(["\n", "\r", ')', ','], '', (string) $member['name']);
@@ -1003,7 +1015,8 @@ final class PjsipConfig
 
         // A conference has no Dial to take L(), so the allowance is a timeout.
         $out .= " same => n,ExecIf(\$[\"\${TC_TIMEOUT}\" != \"\"]?Set(TIMEOUT(absolute)=\${TC_TIMEOUT}))\n";
-        $out .= " same => n,ConfBridge({$room},twocans_bridge,twocans_user)\n";
+        // No bridge profile named: this call's own, set above, is the one used.
+        $out .= " same => n,ConfBridge({$room},,twocans_user)\n";
         $out .= " same => n,Hangup()\n";
         $out .= self::renderSpentBranch($greetings->prompt('limit_reached'));
 

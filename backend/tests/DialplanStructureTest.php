@@ -194,4 +194,24 @@ return [
             assertTrue($sets !== [], "caller {$exten} doesn't set CALLER_ANNOUNCE");
         }
     }),
+    test('a group call records under its own name, and never in adult mode', function () use ($load) {
+        [$plan] = $load();
+        $checked = 0;
+        foreach ($plan['contexts'] as $context => $extens) {
+            foreach ($extens as $exten => $block) {
+                $text = implode("\n", $block['lines']);
+                if (!str_contains($text, 'CONFBRIDGE(bridge,record_file)')) {
+                    continue;
+                }
+                $checked++;
+                // Named on ConfBridge, the profile wins and all of this is ignored.
+                assertContains('CONFBRIDGE(bridge,template)=twocans_bridge', $text, "[{$context}] {$exten}");
+                assertContains('CONFBRIDGE(bridge,record_file_timestamp)=no', $text, "[{$context}] {$exten}");
+                assertContains(',,twocans_user)', $text, "[{$context}] {$exten} must join with no bridge profile named");
+                assertContains('TC_ADULT', $text, "[{$context}] {$exten}");
+                assertContains('CONFBRIDGE(bridge,record_conference)=no', $text, "[{$context}] {$exten} records in adult mode");
+            }
+        }
+        assertTrue($checked > 0 || !str_contains(json_encode(array_keys($plan['contexts'])), 'twocans-conf'), 'expected the group calls to be checked');
+    }),
 ];

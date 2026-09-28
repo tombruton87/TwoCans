@@ -73,14 +73,17 @@ final class CallRepository
     {
         $pdo = Database::pdo();
         $rows = $pdo->query(
-            'SELECT id, uniqueid FROM calls WHERE recording_path IS NULL AND uniqueid IS NOT NULL'
+            'SELECT c.id, c.uniqueid, c.dialled, d.adult_mode
+               FROM calls c LEFT JOIN devices d ON d.id = c.device_id
+              WHERE c.recording_path IS NULL AND c.uniqueid IS NOT NULL'
         )->fetchAll();
 
         $update = $pdo->prepare('UPDATE calls SET recording_path = ? WHERE id = ?');
         $linked = 0;
 
         foreach ($rows as $row) {
-            $file = $this->recordingFile((string) $row['uniqueid']);
+            $file = $this->recordingFile((string) $row['uniqueid'])
+                ?? (empty($row['adult_mode']) ? $this->groupRecordingFile((string) $row['uniqueid'], (string) $row['dialled']) : null);
             if ($file === null) {
                 continue;
             }
@@ -88,7 +91,60 @@ final class CallRepository
             $linked++;
         }
 
+        // Anything still without a recording well after it ended never had
+        // one — not answered, adult mode, an announcement — so there is
+        // nothing to wait for. Left "pending", the call log would say it was
+        // being transcribed for ever.
+        $pdo->exec(
+            "UPDATE calls SET transcript_status = 'skipped', transcript_error = 'No recording'
+              WHERE recording_path IS NULL AND transcript_status = 'pending'
+                AND started_at + INTERVAL COALESCE(duration_secs, 0) SECOND < NOW() - INTERVAL " . self::NO_RECORDING_AFTER . ' MINUTE'
+        );
+
         return $linked;
+    }
+
+    /**
+     * The recording to play for a call row: the one linked to it — which for
+     * an older group call has Asterisk's own name — as long as it sits in the
+     * recordings folder, else the one named after the call.
+     */
+    public function playableFile(array $row): ?string
+    {
+        $linked = (string) ($row['recording_path'] ?? '');
+        if ($linked !== '' && dirname($linked) === $this->recordingsPath()
+            && preg_match('/^[0-9a-z._-]+\.' . PjsipConfig::RECORDING_FORMAT . '$/i', basename($linked))
+            && is_readable($linked) && filesize($linked) > 0) {
+            return $linked;
+        }
+
+        return $this->recordingFile((string) ($row['uniqueid'] ?? ''));
+    }
+
+    /** How long after a call ends its recording may still turn up. */
+    private const NO_RECORDING_AFTER = 15;
+
+    /**
+     * A group call recorded before its recordings were named after the call:
+     * Asterisk's own name, confbridge-<room>-<epoch>.wav, from when the room
+     * opened — within a few seconds of the call starting. Only ever a file
+     * for this call's own group.
+     */
+    public function groupRecordingFile(string $uniqueid, string $dialled): ?string
+    {
+        if (!preg_match('/^(\d+)\.\d+$/', $uniqueid, $m) || !preg_match('/^\d{1,6}$/', $dialled)) {
+            return null;
+        }
+        $started = (int) $m[1];
+        $prefix = $this->recordingsPath() . '/confbridge-' . PjsipConfig::CONF_ROOM_PREFIX . $dialled . '-';
+        foreach (range(0, 30) as $late) {
+            $path = $prefix . ($started + $late) . '.' . PjsipConfig::RECORDING_FORMAT;
+            if (is_readable($path) && filesize($path) > 0) {
+                return $path;
+            }
+        }
+
+        return null;
     }
 
     /**
