@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-09-28
+
+### Added
+
+- **Install in one line**: `curl -fsSL …/get.sh | bash` asks where to put
+  twocans, installs git if it's missing (asking first), clones it and runs the
+  installer; run again, it updates instead.
+- **The installer offers to install Docker** when it's missing — with Docker's
+  own script, asking first — adds you to the docker group and carries on in the
+  same session. It also offers to start Docker when it's installed but stopped.
+- **`http://twocans.local`**: the installer asks for a name on the network and
+  publishes it through Avahi (one line in `/etc/avahi/hosts`, asking first; it
+  offers to install Avahi where it's missing), then checks it answers. The name
+  is in the final summary and `./twocans status`; uninstalling removes it.
+- **Getting started**, in the web app: after the Owner is created, a checklist
+  — add a phone, add the people they can call, connect a phone line (or skip
+  it), make a test call — each ticked from what's really there. "Do it later"
+  moves it to the menu, where it always is (with how far along it is); until
+  then the dashboard carries a reminder. Households already running are marked
+  finished (migration 047).
+- **A record of every install**: the installer keeps what it showed — without
+  the colours — in `storage/reports/install-<when>.log`, readable only by you,
+  and `./twocans report` includes the latest.
+- **Where Face ID needs HTTPS, it says so**: signing in with a passkey and
+  adding twocans to a phone's home screen only work over HTTPS, so the
+  installer's summary and Getting started point to where the address and
+  certificate are set up.
+
+### Fixed
+
+- **The one-liner, and `./twocans update`, upgrade installs from 0.1.1 and
+  earlier.** Those have no `./twocans`, and their Asterisk configs held
+  passwords the old way, which blocked `git pull`; the configs are put back
+  first (the installer now keeps the passwords elsewhere), then it updates.
+
+- Running the installer as root set the app's user to root, which it can't run
+  as: the web app wouldn't start once its image was built locally (as on a
+  Raspberry Pi). The installer now uses the person behind sudo, or 1000, and
+  repairs an `.env` that has 0; the image falls back to 1000 as well.
+
 ## [0.1.2] - 2026-09-28
 
 ### Added
@@ -304,7 +344,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **Numbers the kids tried** log on the call log, one card per number with the
   same two buttons. Both leave out anyone who has since been added as a contact.
 
-[Unreleased]: https://github.com/tombruton87/TwoCans/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/tombruton87/TwoCans/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/tombruton87/TwoCans/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/tombruton87/TwoCans/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/tombruton87/TwoCans/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/tombruton87/TwoCans/releases/tag/v0.1.0
