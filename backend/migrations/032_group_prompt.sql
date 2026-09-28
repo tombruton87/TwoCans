@@ -3,7 +3,7 @@
 -- Every answered group leg has to press 1 before it joins, so a mobile's
 -- voicemail can't talk into the conference. The prompt asking for that is a
 -- recording: one for the whole house (in settings), and optionally one per
--- group here — "Maeva is calling the grannies, press 1 to join" — which wins
+-- group here — "Sam is calling the grannies, press 1 to join" — which wins
 -- when set. With neither, Asterisk's stock "press 1 to accept" plays.
 
 ALTER TABLE contacts

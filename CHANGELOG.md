@@ -102,8 +102,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its day can't call out and doesn't ring. Enforced by Asterisk, so they hold
   with the app down. SOS and "always put through" contacts and emergency numbers
   are never limited. "Out of phone time" is a new recording on Greetings.
-- **Who a group call reached**: the call log and dashboard say "Anna joined ·
-  Tom didn't answer" for group calls made from now on. Migration 036.
+- **Who a group call reached**: the call log and dashboard say "Nana joined ·
+  Grandad didn't answer" for group calls made from now on. Migration 036.
 - **More notifications**: an email the minute a phone dials an emergency number,
   one when somebody not on the list leaves a message, and an optional weekly
   summary on Sunday evening. The notifier now brings the call log up to date

@@ -68,8 +68,8 @@ return [
         assertContains('<P401>1</P401>', $xml);
     }),
     test('names are escaped for XML', function () use ($phone) {
-        $xml = (new GrandstreamProvisioning())->ataXml('ht801', [1 => $phone('Tom & Jo\'s', 'tj-1')]);
-        assertContains('<P3>Tom &amp; Jo&apos;s</P3>', $xml);
+        $xml = (new GrandstreamProvisioning())->ataXml('ht801', [1 => $phone('Sam & Jo\'s', 'tj-1')]);
+        assertContains('<P3>Sam &amp; Jo&apos;s</P3>', $xml);
         assertTrue(simplexml_load_string($xml) !== false, 'well-formed XML');
     }),
     test('keyCount matches the hotkey map', function () {

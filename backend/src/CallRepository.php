@@ -325,7 +325,7 @@ final class CallRepository
     }
 
     /**
-     * "Anna joined · Tom didn't answer" — who a group call reached, in one line.
+     * "Nana joined · Grandad didn't answer" — who a group call reached, in one line.
      *
      * @param array<int,array{name:string,status:string,seconds:int}> $people
      */

@@ -8,7 +8,7 @@ declare(strict_types=1);
  * mobile that isn't picked up is answered by its voicemail and the network
  * reports that as a real answer — see PjsipConfig::renderConfContext(). The
  * household can record that question in its own words, once for the house and
- * optionally per group: "Maeva is calling the grannies — press 1 to join,
+ * optionally per group: "Sam is calling the grannies — press 1 to join,
  * or 2 if you can't."
  *
  * Kept in a folder of its own inside the refusals volume, for the same reasons
