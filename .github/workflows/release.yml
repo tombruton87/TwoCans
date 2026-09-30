@@ -39,11 +39,13 @@ jobs:
       tag: ${{ steps.v.outputs.tag }}
       version: ${{ steps.v.outputs.version }}
       latest: ${{ steps.v.outputs.latest }}
+      publish: ${{ steps.v.outputs.publish }}
     steps:
       - id: v
         env:
           INPUT_TAG: ${{ inputs.tag }}
           INPUT_LATEST: ${{ inputs.latest }}
+          HAS_TOKEN: ${{ secrets.DOCKERHUB_TOKEN != '' && secrets.DOCKERHUB_USERNAME != '' }}
         run: |
           tag="${INPUT_TAG:-$GITHUB_REF_NAME}"
           [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "::error::'$tag' isn't a version tag like v1.2.3"; exit 1; }
@@ -53,9 +55,16 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
           echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          # Without Docker Hub's login there's nowhere to publish to: say so and
+          # stop, rather than fail — the checks already build both chip types.
+          echo "publish=$HAS_TOKEN" >> "$GITHUB_OUTPUT"
+          if [[ "$HAS_TOKEN" != true ]]; then
+            echo "::notice::DOCKERHUB_USERNAME and DOCKERHUB_TOKEN aren't both set, so no images are published. Add them, then run this workflow for $tag."
+          fi
 
   build:
     needs: version
+    if: needs.version.outputs.publish == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -112,6 +121,7 @@ jobs:
 
   publish:
     needs: [version, build]
+    if: needs.version.outputs.publish == 'true'
     strategy:
       matrix:
         image: [web, whisper]
@@ -145,6 +155,7 @@ jobs:
   # Pull what was published on each chip type and check it starts.
   check:
     needs: [version, publish]
+    if: needs.version.outputs.publish == 'true'
     strategy:
       fail-fast: false
       matrix:
