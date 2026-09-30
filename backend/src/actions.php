@@ -161,13 +161,13 @@ switch ($action) {
         [$rules, $problem] = Schedule::fromInput($_POST['schedule'] ?? []);
         if ($problem !== null) {
             flash($problem);
-            redirect(url(['screen' => 'phones', 'device' => $id]));
+            redirect(back());
         }
         $devices->setHours((int) $id, $rules);
         // A phone's hours decide whether it rings, in the generated dialplan.
         (new PjsipConfig($devices))->apply();
         flash('Hours saved — ' . Schedule::describe($rules));
-        redirect(url(['screen' => 'phones', 'device' => $id]));
+        redirect(back());
 
     case 'device_adult':
         $phone = $devices->find((int) $id);
@@ -179,14 +179,14 @@ switch ($action) {
         // what it does; a stray or crafted post can't do it by itself.
         if ($on && ($_POST['confirm'] ?? '') !== 'remove-all-restrictions') {
             flash('Adult mode was not turned on.');
-            redirect(url(['screen' => 'phones', 'device' => $id]));
+            redirect(back());
         }
         $devices->setAdult((int) $id, $on);
         (new PjsipConfig($devices))->apply();
         flash($on
             ? (string) $phone['name'] . ' is in adult mode — no restrictions apply to it'
             : (string) $phone['name'] . ' is back to normal — its rules apply again');
-        redirect(url(['screen' => 'phones', 'device' => $id]));
+        redirect(back());
 
     case 'device_limits':
         if ($devices->find((int) $id) === null) {
@@ -202,7 +202,7 @@ switch ($action) {
         // Limits are enforced by Asterisk, from values set on the phone's endpoint.
         (new PjsipConfig($devices))->apply();
         flash('Call limits saved');
-        redirect(url(['screen' => 'phones', 'device' => $id]));
+        redirect(back());
 
     // ----------------------------------------------------------- announcements
     case 'announce_send':
@@ -241,9 +241,20 @@ switch ($action) {
             flash($converted['error']);
             redirect(url(['screen' => 'announcements']) . '#announce-' . (int) $id);
         }
+        // Saved either way, but said: the same recording as another
+        // announcement is almost always the wrong file picked.
+        $others = [];
+        foreach ($announcements->all() as $other) {
+            if ($other['id'] !== (int) $id && $other['audio'] !== '') {
+                $others[$other['label'] !== '' ? $other['label'] : 'another announcement'] = $other['audio'];
+            }
+        }
+        $twin = $store->sameAs($converted['sha256'], $others);
         $store->delete($current['audio']);
         $announcements->setAudio((int) $id, (string) $converted['file'], $converted['seconds']);
-        flash('Message saved ✓');
+        flash($twin === null
+            ? 'Message saved ✓'
+            : 'Saved — but it\'s the same recording as “' . $twin . '”. Did you pick the right file?');
         redirect(url(['screen' => 'announcements']) . '#announce-' . (int) $id);
 
     case 'announce_delete':
@@ -337,6 +348,34 @@ switch ($action) {
         // written in and reloaded before a caller can hear it.
         (new PjsipConfig($devices))->apply();
         flash('Message saved ✓ — callers hear it whenever the line is quiet');
+        break;
+
+    case 'hold_music_add':
+        $store = new HoldMusicStore();
+        if (!$store->isAvailable()) {
+            flash("Audio conversion isn't available — the web container needs rebuilding.");
+            break;
+        }
+        $upload = $_FILES['track'] ?? [];
+        $converted = $store->store($upload);
+        if ($converted['error'] !== null) {
+            flash($converted['error']);
+            break;
+        }
+        $music = new HoldMusic();
+        $first = !$music->hasOwn();
+        $music->add((string) $converted['file'], HoldMusic::nameFrom((string) ($upload['name'] ?? '')), $converted['seconds']);
+        // The phones ask for the household's music from now on, and Asterisk
+        // has to know the class is there.
+        (new PjsipConfig($devices))->apply();
+        flash($first ? 'Added ✓ — callers on hold hear your music now, not the built-in tunes' : 'Added ✓');
+        break;
+
+    case 'hold_music_remove':
+        $music = new HoldMusic();
+        $music->remove((int) $id);
+        (new PjsipConfig($devices))->apply();
+        flash($music->hasOwn() ? 'Removed' : 'Removed — callers on hold hear the built-in tunes again');
         break;
 
     case 'quiet_message_remove':
@@ -497,13 +536,23 @@ switch ($action) {
         // One message per phone, so the one this replaces is removed: the
         // dialplan is about to name the new file, and nothing would ever name
         // the old one again.
+        $others = [];
+        foreach ($devices->all() as $other) {
+            if ((int) $other['id'] !== (int) $id && (string) ($other['refusal_audio'] ?? '') !== '') {
+                $others[(string) $other['name']] = (string) $other['refusal_audio'];
+            }
+        }
+        $twin = $store->sameAs($converted['sha256'], $others);
         $store->delete((string) ($row['refusal_audio'] ?? ''));
         $devices->setRefusalAudio((int) $id, (string) $converted['file'], $converted['seconds']);
 
         // The dialplan plays the recording by name, so it has to be written in
         // before a caller can hear it.
         (new PjsipConfig($devices))->apply();
-        flash('Message saved ✓ — the transcript will appear shortly');
+        // The same message on two phones can be meant, so it's only mentioned.
+        flash($twin === null
+            ? 'Message saved ✓ — the transcript will appear shortly'
+            : 'Saved — it\'s the same recording as ' . $twin . '\'s. Fine if that\'s what you meant; otherwise pick another file.');
         break;
 
     case 'device_refusal_remove':
@@ -556,17 +605,62 @@ switch ($action) {
         redirect(url(['screen' => 'phones', 'device' => $other['id']]));
 
     case 'hotkey_set':
+        $phone = $devices->find((int) $id);
+        if ($phone === null) {
+            break;
+        }
+        $keyCount = DeviceRepository::keys((string) $phone['type']);
         $hotkeys = [];
         foreach ((array) ($_POST['hotkey'] ?? []) as $index => $number) {
             $number = trim((string) $number);
-            if ($number !== '') {
+            if ($number !== '' && (int) $index >= 1 && (int) $index <= $keyCount) {
                 $hotkeys[(int) $index] = $number;
             }
         }
         // save() only keeps numbers a child may actually dial (the allowlist or
         // a service number), so a tampered form cannot provision a blocked key.
         (new DeviceHotkeyRepository())->save((int) $id, $hotkeys);
-        flash('Hotkeys saved');
+        // Straight to the phone, which fetches them and puts them on its keys.
+        $sent = GrandstreamProvisioning::notify(DeviceRepository::toView($phone));
+        flash($sent['ok']
+            ? 'Hotkeys saved and sent to ' . $phone['name'] . ' ✓'
+            : 'Hotkeys saved — ' . $sent['error']);
+        break;
+
+    case 'hotkey_offer':
+        // From the offer after adding someone: onto that phone's first free key.
+        unset($_SESSION['keyOffer']);
+        $phone = $devices->find((int) ($_POST['device'] ?? 0));
+        $who = $contacts->find((int) $id);
+        if ($phone === null || $who === null) {
+            break;
+        }
+        $key = (new DeviceHotkeyRepository())->addToFreeKey(
+            (int) $phone['id'], DeviceRepository::keys((string) $phone['type']), DeviceHotkeyRepository::targetOf($who)
+        );
+        if ($key === null) {
+            flash($phone['name'] . ' has no free key now.');
+            break;
+        }
+        $sent = GrandstreamProvisioning::notify(DeviceRepository::toView($phone));
+        flash($who['name'] . ' is on key ' . $key . ' of ' . $phone['name'] . ($sent['ok'] ? ' ✓' : ' — ' . $sent['error']));
+        break;
+
+    case 'hotkey_offer_dismiss':
+        unset($_SESSION['keyOffer']);
+        break;
+
+    case 'device_resync':
+    case 'device_reboot':
+        $phone = $devices->find((int) $id);
+        if ($phone === null) {
+            break;
+        }
+        $reboot = $action === 'device_reboot';
+        $sent = GrandstreamProvisioning::notify(DeviceRepository::toView($phone), $reboot);
+        flash($sent['ok']
+            ? ($reboot ? $phone['name'] . ' is restarting — back in a minute or so' : 'Sent — ' . $phone['name'] . ' is fetching its settings')
+            : (string) $sent['error']);
         break;
 
     // ------------------------------------------------------------ joke line
@@ -678,6 +772,11 @@ switch ($action) {
         // Name is the caller ID and the hours gate inbound ringing, so both
         // change the dialplan.
         (new PjsipConfig($devices))->apply();
+        // A Grandstream shows its name too: send it along.
+        $renamed = $devices->find((int) $id);
+        if ($renamed !== null && isset($_POST['name'])) {
+            GrandstreamProvisioning::notify(DeviceRepository::toView($renamed));
+        }
         flash('Saved ✓');
         break;
 
@@ -744,10 +843,51 @@ switch ($action) {
             flash('All set 🎉');
             redirect(url(['screen' => 'dashboard']));
         }
+        if ($do === 'hide') {
+            $onboarding->setState('done');
+            flash('Getting started is hidden — System brings it back');
+            redirect(url(['screen' => 'dashboard']));
+        }
+        if ($do === 'show') {
+            // Back in the menu, as if put off; open it now.
+            $onboarding->setState('later');
+            redirect(url(['screen' => 'start']));
+        }
         if ($do === 'skip-line' || $do === 'unskip-line') {
             $onboarding->skip('line', $do === 'skip-line');
         }
         redirect(url(['screen' => 'start']));
+
+    case 'device_scan':
+        // The pager looks, on the host's own network; the wizard shows what it finds.
+        if (!Pager::alive()) {
+            flash("Looking needs the pager, which isn't running — ./twocans status shows why.");
+            redirect(url(['screen' => 'phones', 'wizard' => 1]));
+        }
+        Pager::queueScan((string) (getenv('SIP_DOMAIN') ?: ''));
+        redirect(url(['screen' => 'phones', 'wizard' => 1, 'scan' => time()]));
+
+    case 'device_pick_found':
+        // One twocans spotted: its model and MAC are known, so on to naming it.
+        $mac = GrandstreamProvisioning::normalizeMac((string) ($_POST['mac'] ?? ''));
+        $type = (string) ($_POST['type'] ?? '');
+        if ($mac === '' || !isset(DeviceRepository::TYPES[$type])) {
+            redirect(url(['screen' => 'phones', 'wizard' => 1]));
+        }
+        $store->setDeviceDraft(['type' => $type, 'mac' => $mac]);
+        redirect(url(['screen' => 'phones', 'wizard' => 2]));
+
+    case 'device_pick_family':
+        $family = (string) ($_POST['family'] ?? '');
+        if (!isset(DeviceRepository::FAMILIES[$family])) {
+            redirect(url(['screen' => 'phones', 'wizard' => 1]));
+        }
+        // An app is only ever Linphone: straight on to naming it.
+        if ($family === 'app') {
+            $store->setDeviceDraft(['type' => 'linphone', 'mac' => '']);
+            redirect(url(['screen' => 'phones', 'wizard' => 2]));
+        }
+        redirect(url(['screen' => 'phones', 'wizard' => 1, 'family' => $family]));
 
     case 'device_pick_model':
         $type = (string) ($_POST['type'] ?? '');
@@ -755,7 +895,7 @@ switch ($action) {
             flash('That one is not ready yet');
             redirect(url(['screen' => 'phones', 'wizard' => 1]));
         }
-        $store->setDeviceDraft(['type' => $type]);
+        $store->setDeviceDraft(['type' => $type, 'mac' => '']);
         redirect(url(['screen' => 'phones', 'wizard' => 2]));
 
     case 'device_wizard_step':
@@ -765,17 +905,17 @@ switch ($action) {
     case 'device_finish':
         $draft = $store->deviceDraft();
         $type = (string) ($draft['type'] ?? 'linphone');
-        // The GHP621 is UDP-only; the transport picker is hidden for it.
         // Grandstream hardware is provisioned over UDP; the picker is hidden for it.
-        $provisioned = in_array($type, ['ghp621', 'ht801', 'ht802'], true);
+        $provisioned = in_array(DeviceRepository::TYPES[$type]['family'] ?? '', ['desk', 'adapter'], true);
         $transport = $provisioned ? 'udp' : (string) ($_POST['transport'] ?? 'udp');
         $mac = GrandstreamProvisioning::normalizeMac((string) ($_POST['mac'] ?? ''));
 
-        // An adapter has no screen to type an account into: without its MAC
-        // there is no way to hand it one, so ask before creating anything.
-        if ($type === 'ht801' || $type === 'ht802') {
+        // Grandstream hardware is handed its account by its MAC: without it
+        // there is no way to, so ask before creating anything.
+        if ($provisioned) {
             if ($mac === '') {
-                flash('That MAC address does not look right — it is on the label under the adapter.');
+                flash('That MAC address does not look right — it is on the label under the '
+                    . (DeviceRepository::isDesk($type) ? 'phone.' : 'adapter.'));
                 redirect(url(['screen' => 'phones', 'wizard' => 2]));
             }
             if ($devices->findByMac($mac) !== []) {
@@ -865,6 +1005,16 @@ switch ($action) {
 
         // The allowlist IS the dialplan, so saving a person rewrites it.
         (new PjsipConfig($devices))->apply();
+        // A desk phone with them on a key shows their name on it.
+        $saved = $contacts->find((int) $id);
+        if ($saved !== null) {
+            $hotkeys = new DeviceHotkeyRepository();
+            $hotkeys->resyncPhonesWith(DeviceHotkeyRepository::targetOf($saved));
+            // Not on any key yet, and a desk phone has one free: offer it.
+            if (Auth::can('devices') && $hotkeys->offersFor(DeviceHotkeyRepository::targetOf($saved)) !== []) {
+                $_SESSION['keyOffer'] = (int) $id;
+            }
+        }
         flash('Saved ✓');
         redirect(url(['screen' => 'contacts']));
 

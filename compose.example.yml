@@ -144,6 +144,27 @@ services:
       - ./storage:/var/lib/twocans:ro
     networks: [twocans]
 
+  # ---------------------------------------------------------------------------
+  # Pager — plays announcements on Grandstream desk phones the way they page
+  # natively: straight through the speaker, with no call to answer. It sends
+  # multicast, which can't leave Docker's own network, so it is on the host's.
+  # It opens no ports and only sends, to 239.255.84.84 on the house network.
+  # Runs one script from the twocans-web image, like the transcriber.
+  # ---------------------------------------------------------------------------
+  pager:
+    image: docker.io/hamletdigital/twocans-web:latest
+    container_name: twocans-pager
+    restart: unless-stopped
+    network_mode: host
+    user: twocans
+    entrypoint: ["php"]
+    command: ["/var/www/html/bin/pager.php"]
+    environment:
+      TZ: Europe/London
+    volumes:
+      - ./storage/pager:/var/lib/twocans/pager
+      - ./storage/refusals:/var/lib/twocans/refusals:ro
+
   whisper:
     image: docker.io/hamletdigital/twocans-whisper:latest
     container_name: twocans-whisper

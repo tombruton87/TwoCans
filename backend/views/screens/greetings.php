@@ -141,4 +141,53 @@ $slot = static function (string $key) use ($greetings, $canEdit): void {
     <?php endforeach; ?>
   </section>
 
+  <?php $holdMusic = new HoldMusic(); $tracks = $holdMusic->all(); ?>
+  <section class="tc-card" id="hold-music" data-tc-ajax-region>
+    <div class="tc-greetings__head">
+      <h2 class="tc-card__title">Someone put on hold</h2>
+      <div class="tc-card__hint">
+        What they hear while a phone has them on hold.
+        <?= $tracks === []
+            ? 'Right now, the built-in tunes. Add songs of your own and they play instead, one after another.'
+            : 'Your own music, one track after another. Remove them all and the built-in tunes come back.' ?>
+      </div>
+    </div>
+
+    <?php foreach ($tracks as $t): ?>
+      <div class="tc-vm-row tc-vm-row--bare">
+        <audio data-audio preload="none" src="<?= e(url(['download' => 'hold_music', 'id' => $t['id'], 'v' => substr($t['file'], 0, 8)])) ?>"></audio>
+        <button class="tc-vm-play" type="button" data-play aria-label="Play <?= e($t['name']) ?>">▶</button>
+        <div class="tc-grow">
+          <div class="tc-vm-row__name"><?= e($t['name']) ?></div>
+          <div class="tc-call-row__meta"><?= e(fmt_duration($t['seconds'])) ?></div>
+        </div>
+        <?php if ($canEdit): ?>
+          <form method="post" action="/" class="tc-inline-form" data-tc-ajax>
+            <?= form_fields() ?>
+            <input type="hidden" name="action" value="hold_music_remove">
+            <input type="hidden" name="id" value="<?= (int) $t['id'] ?>">
+            <button class="tc-link" type="submit">remove</button>
+          </form>
+        <?php endif; ?>
+      </div>
+    <?php endforeach; ?>
+
+    <?php if ($canEdit): ?>
+      <form method="post" action="/" enctype="multipart/form-data" class="tc-row tc-row--wrap" data-tc-ajax>
+        <?= form_fields() ?>
+        <input type="hidden" name="action" value="hold_music_add">
+        <label class="tc-btn tc-btn--ghost tc-audio-file">
+          <span data-tc-filename><?= $tracks === [] ? 'Add a song' : 'Add another' ?></span>
+          <input type="file" name="track" accept="audio/*,.mp3,.m4a,.wav,.ogg,.opus,.flac,.aac"
+                 data-tc-audiofile data-tc-autosave required>
+        </label>
+        <noscript><button class="tc-btn tc-btn--teal" type="submit">Add it</button></noscript>
+      </form>
+      <p class="tc-card__hint tc-card__after">
+        Up to 10 minutes each. It plays down a phone line, so it'll sound like a
+        radio in the next room — anything with a clear tune works best.
+      </p>
+    <?php endif; ?>
+  </section>
+
 </div>

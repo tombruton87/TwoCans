@@ -122,6 +122,27 @@ services:
       - twocans
 
   # ---------------------------------------------------------------------------
+  # Pager — announcements to Grandstream desk phones by multicast, on the
+  # host's network because multicast can't leave Docker's. See bin/pager.php.
+  # ---------------------------------------------------------------------------
+  pager:
+    build:
+      context: ./docker/php
+      dockerfile: Dockerfile
+      args:
+        UID: 1000
+        GID: 1000
+    container_name: twocans-pager
+    restart: unless-stopped
+    network_mode: host
+    entrypoint: ["php"]
+    command: ["/var/www/html/bin/pager.php"]
+    volumes:
+      - ./backend:/var/www/html:ro
+      - ./storage/pager:/var/lib/twocans/pager
+      - ./storage/refusals:/var/lib/twocans/refusals:ro
+
+  # ---------------------------------------------------------------------------
   # nginx — serves the web UI and REST API
   # Simple reverse proxy to PHP-FPM
   # ---------------------------------------------------------------------------

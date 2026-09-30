@@ -65,4 +65,12 @@ return [
             assertTrue($test['done']);
         });
     }),
+    test('it leaves the menu once hidden or finished, and comes back when shown again', function () use ($fresh) {
+        $fresh(function (Onboarding $o) {
+            $o->setState('done');
+            assertFalse($o->visible(), 'hidden');
+            $o->setState('later');
+            assertSame(!$o->complete(), $o->visible(), 'shown again, unless every step is done');
+        });
+    }),
 ];

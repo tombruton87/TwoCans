@@ -108,6 +108,8 @@ final class PjsipConfig
             'pjsip-transports.conf' => $this->renderTransports($trunk),
             'pjsip-devices.conf' => $this->renderEndpoints($rows),
             'dialplan-devices.conf' => $this->renderDialplan($rows),
+            // The household's own hold music, if any — see HoldMusic.
+            'musiconhold-custom.conf' => (new HoldMusic())->render(),
         ];
         // The SIP trunk is optional: only written once a line is connected.
         if ($trunk['connected'] && $trunk['sipHost'] !== '') {
@@ -141,6 +143,8 @@ final class PjsipConfig
             $reloaded = $ami->reloadPjsip() && $ami->reloadDialplan();
             // Mailboxes live in voicemail.conf, which is its own module.
             $ami->send('Reload', ['Module' => 'app_voicemail']);
+            // Hold music is its own module too.
+            $ami->send('Command', ['Command' => 'moh reload']);
             $ami->disconnect();
 
             return ['written' => $written, 'reloaded' => $reloaded, 'error' => null];
@@ -250,6 +254,7 @@ final class PjsipConfig
     {
         $out = $this->header('PJSIP endpoints');
 
+        $hasOwnMusic = (new HoldMusic())->hasOwn();
         foreach ($rows as $row) {
             $d = DeviceRepository::toView($row);
             if ($d['sipUsername'] === '' || !$d['available']) {
@@ -284,6 +289,18 @@ final class PjsipConfig
                 if (!$d['allowOut']) {
                     $outVar .= "\nset_var = TC_NOOUT=1";
                 }
+            }
+
+            // A Grandstream challenges the NOTIFY that tells it to fetch its
+            // settings or restart (see Ami::resync) with its own account, so
+            // answer with the same one. An app is never sent one.
+            // Someone this phone puts on hold hears the household's own music,
+            // once there is some — see HoldMusic.
+            if ($hasOwnMusic) {
+                $outVar .= "\nmoh_suggest = " . HoldMusic::CLASS_NAME;
+            }
+            if ($d['family'] !== 'app') {
+                $outVar .= "\n; Answers the phone's challenge when told to fetch its settings.\noutbound_auth = {$name}-auth";
             }
 
             $out .= <<<CONF
@@ -743,13 +760,16 @@ final class PjsipConfig
             self::VOICEMAIL_NUMBER => ['label' => 'Your messages', 'sub' => 'Listen to voicemail left on this phone'],
             self::jokeNumber() => ['label' => 'The joke line', 'sub' => 'Rings up a joke, picked at random from the ones you have added'],
             '600' => ['label' => 'Echo test', 'sub' => 'Hear your own voice back — checks the microphone and speaker'],
-            '601' => ['label' => 'Test message', 'sub' => 'Plays the recorded greeting, like a real incoming call'],
+            '601' => ['label' => 'Test message', 'sub' => 'Plays a welcome message, like a real incoming call — your own greeting if you record one'],
             '500' => ['label' => 'Record the greeting', 'sub' => 'Speak after the beep, then hang up'],
         ];
     }
 
     /** The ones that never move — everything except the joke line. */
     public const FIXED_SERVICE_NUMBERS = ['700', '600', '601', '500'];
+
+    /** twocans' built-in sounds, committed in storage/defaults — as Asterisk sees them. */
+    public const DEFAULTS_DIR = '/var/lib/twocans/defaults';
 
 
     /**
@@ -1863,6 +1883,10 @@ final class PjsipConfig
         // Playback does not jump on failure, it just sets PLAYBACKSTATUS and
         // carries on — so without this check a missing or empty greeting means
         // the call answers and hangs up in silence, looking like a dead line.
+        $out .= " same => n,GotoIf(\$[\"\${PLAYBACKSTATUS}\" = \"SUCCESS\"]?bye)\n";
+        // No greeting of the household's own: twocans' built-in welcome (see
+        // storage/defaults), then Asterisk's stock one if even that is missing.
+        $out .= " same => n,Playback(" . self::DEFAULTS_DIR . "/test-call)\n";
         $out .= " same => n,GotoIf(\$[\"\${PLAYBACKSTATUS}\" = \"SUCCESS\"]?bye)\n";
         $out .= " same => n,Playback(demo-congrats)\n";
         $out .= " same => n(bye),Wait(1)\n";

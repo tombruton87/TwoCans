@@ -55,6 +55,22 @@ $callsToday = (new CallRepository($devices))->countToday('done');
         <?php else: ?>
           <div class="tc-device-card__rule"><?= e($d['ruleSummary']) ?></div>
         <?php endif; ?>
+        <?php if ($d['desk']): ?>
+          <?php /* Its hotkeys at a glance: who each rings, in the phone's order. */ ?>
+          <div class="tc-device-card__keys" aria-label="Hotkeys">
+            <?php foreach (Faceplate::keys((new DeviceHotkeyRepository())->forDevice((int) $d['id']), $d['keys']) as $i => $k): ?>
+              <?php if ($k['number'] === ''): ?>
+                <span class="tc-keydot tc-keydot--empty" title="Key <?= (int) $i ?>: not set"><?= (int) $i ?></span>
+              <?php else: ?>
+                <span class="tc-keydot" style="background:<?= e($k['color']) ?>" title="Key <?= (int) $i ?>: <?= e($k['name']) ?>">
+                  <?php if ($k['photo'] !== ''): ?><img src="<?= e(url(['photo' => $k['photo']])) ?>" alt="" loading="lazy">
+                  <?php elseif ($k['icon'] !== ''): ?><i class="<?= e($k['icon']) ?>" aria-hidden="true"></i>
+                  <?php else: ?><?= e($k['initial']) ?><?php endif; ?>
+                </span>
+              <?php endif; ?>
+            <?php endforeach; ?>
+          </div>
+        <?php endif; ?>
       </div>
       <div class="tc-divider"></div>
       <div class="tc-device-card__foot">

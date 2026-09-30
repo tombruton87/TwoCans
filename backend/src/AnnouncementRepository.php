@@ -7,7 +7,8 @@ declare(strict_types=1);
  * Pressing one asks Asterisk to call each chosen phone (see PjsipConfig's
  * twocans-page context) and play the recording once it is picked up — by a
  * child, or by the phone itself when the announcement asks for auto-answer
- * and the phone supports it. The same press can come from the dashboard or
+ * and the phone supports it. A Grandstream desk phone at home is paged the way
+ * it pages natively instead, by multicast with no call at all — see Pager. The same press can come from the dashboard or
  * from the announcement's trigger URL, so a home-automation system can say
  * "dinner's ready" too.
  */
@@ -15,6 +16,9 @@ final class AnnouncementRepository
 {
     /** Caller number the phones see; the call log uses it to tell pages apart. */
     public const CALLER_NUMBER = 'announce';
+
+    /** @var array<int,bool> phone id => it hears multicast pages; filled by targets() */
+    private array $multicast = [];
 
     /** A second press this soon is a double click or a retrying webhook. */
     private const MIN_GAP_SECONDS = 10;
@@ -158,11 +162,36 @@ final class AnnouncementRepository
         $data = 'silence/1&' . $path . ($repeat ? '&silence/2&' . $path : '');
         $name = str_replace(['"', '<', '>'], '', $label);
 
+        // Desk phones that can hear a multicast page get one: the message just
+        // plays, with no call to answer. Only when it's meant to play by itself,
+        // and only while the pager is running; everyone else gets a call.
+        $sent = 0;
+        $calls = $targets;
+        if ($mode === 'auto' && Pager::alive()) {
+            $ports = [];
+            $calls = [];
+            foreach ($targets as $deviceId) {
+                if ($this->multicast[$deviceId] ?? false) {
+                    $ports[] = Pager::port($deviceId);
+                } else {
+                    $calls[] = $deviceId;
+                }
+            }
+            $wav = $path . '.wav';
+            if ($ports !== [] && Pager::queue($ports, $repeat ? [$wav, $wav] : [$wav])) {
+                $sent += count($ports);
+            } else {
+                $calls = $targets;
+            }
+        }
+        if ($calls === []) {
+            return ['ok' => true, 'phones' => $sent, 'error' => null];
+        }
+
         try {
             $ami = new Ami();
             $ami->connect();
-            $sent = 0;
-            foreach ($targets as $deviceId) {
+            foreach ($calls as $deviceId) {
                 $reply = $ami->send('Originate', [
                     'Channel' => 'Local/' . ($mode === 'auto' ? 'a' : 'r') . $deviceId . '@' . PjsipConfig::PAGE_CONTEXT . '/n',
                     'Application' => 'Playback',
@@ -177,6 +206,9 @@ final class AnnouncementRepository
             }
             $ami->disconnect();
         } catch (Throwable $e) {
+            if ($sent > 0) {
+                return ['ok' => true, 'phones' => $sent, 'error' => null];
+            }
             return ['ok' => false, 'phones' => 0, 'error' => 'Could not reach the phone system: ' . $e->getMessage()];
         }
 
@@ -198,6 +230,7 @@ final class AnnouncementRepository
                 continue;
             }
             $ids[] = (int) $d['id'];
+            $this->multicast[(int) $d['id']] = $d['desk'] && $d['pagingMulticast'];
         }
 
         return $ids;

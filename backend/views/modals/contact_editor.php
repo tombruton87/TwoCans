@@ -36,7 +36,7 @@ if (empty($c['isGroup'])) {
 }
 ?>
 <div class="tc-modal tc-modal--sheet" data-tc-modal="<?= e($closeUrl) ?>" data-tc-close="<?= e($closeUrl) ?>" role="dialog" aria-modal="true" aria-label="<?= !empty($c['isGroup']) ? 'Edit group' : 'Edit person' ?>">
-  <div class="tc-modal__panel tc-modal__panel--sheet">
+  <div class="tc-modal__panel tc-modal__panel--sheet" id="contact-sheet" data-tc-ajax-region>
 
     <div class="tc-modal__head tc-modal__head--sticky">
       <div class="tc-modal__title"><?= !empty($c['isGroup']) ? 'Edit group' : 'Edit person' ?></div>
@@ -51,14 +51,14 @@ if (empty($c['isGroup'])) {
 
     <?php /* Flips person/group and nothing else. Outside the main form because
              HTML has no nested forms; the switch reaches it by `form` id. */ ?>
-    <form id="contact-group-form" method="post" action="/" hidden>
+    <form id="contact-group-form" method="post" action="/" hidden data-tc-ajax>
       <?= form_fields() ?>
       <input type="hidden" name="action" value="contact_group_toggle">
       <input type="hidden" name="id" value="<?= e($c['id']) ?>">
     </form>
 
     <?php /* enctype: this form now carries a file. */ ?>
-    <form class="tc-modal__body tc-modal__body--sheet" method="post" action="/" enctype="multipart/form-data">
+    <form class="tc-modal__body tc-modal__body--sheet" method="post" action="/" enctype="multipart/form-data" data-tc-ajax>
       <?= form_fields() ?>
       <input type="hidden" name="action" value="contact_save">
       <input type="hidden" name="id" value="<?= e($c['id']) ?>">
@@ -337,12 +337,12 @@ if (empty($c['isGroup'])) {
     </form>
 
     <?php if (!empty($c['isGroup'])): ?>
-      <form id="contact-group-prompt-form" method="post" action="/" enctype="multipart/form-data" hidden>
+      <form id="contact-group-prompt-form" method="post" action="/" enctype="multipart/form-data" hidden data-tc-ajax>
         <?= form_fields() ?>
         <input type="hidden" name="action" value="contact_group_prompt">
         <input type="hidden" name="id" value="<?= e((string) $c['id']) ?>">
       </form>
-      <form id="contact-group-prompt-remove" method="post" action="/" hidden>
+      <form id="contact-group-prompt-remove" method="post" action="/" hidden data-tc-ajax>
         <?= form_fields() ?>
         <input type="hidden" name="action" value="contact_group_prompt_remove">
         <input type="hidden" name="id" value="<?= e((string) $c['id']) ?>">
@@ -350,27 +350,27 @@ if (empty($c['isGroup'])) {
     <?php endif; ?>
 
     <?php if (empty($c['isGroup'])): ?>
-      <form id="contact-announce-form" method="post" action="/" enctype="multipart/form-data" hidden>
+      <form id="contact-announce-form" method="post" action="/" enctype="multipart/form-data" hidden data-tc-ajax>
         <?= form_fields() ?>
         <input type="hidden" name="action" value="contact_announce">
         <input type="hidden" name="id" value="<?= e((string) $c['id']) ?>">
       </form>
-      <form id="contact-announce-voice" method="post" action="/" hidden>
+      <form id="contact-announce-voice" method="post" action="/" hidden data-tc-ajax>
         <?= form_fields() ?>
         <input type="hidden" name="action" value="contact_announce_voice">
         <input type="hidden" name="id" value="<?= e((string) $c['id']) ?>">
       </form>
-      <form id="contact-link-create" method="post" action="/" hidden>
+      <form id="contact-link-create" method="post" action="/" hidden data-tc-ajax>
         <?= form_fields() ?>
         <input type="hidden" name="action" value="contact_link_create">
         <input type="hidden" name="id" value="<?= e((string) $c['id']) ?>">
       </form>
-      <form id="contact-link-stop" method="post" action="/" hidden>
+      <form id="contact-link-stop" method="post" action="/" hidden data-tc-ajax>
         <?= form_fields() ?>
         <input type="hidden" name="action" value="contact_link_stop">
         <input type="hidden" name="id" value="<?= e((string) $c['id']) ?>">
       </form>
-      <form id="contact-announce-remove" method="post" action="/" hidden>
+      <form id="contact-announce-remove" method="post" action="/" hidden data-tc-ajax>
         <?= form_fields() ?>
         <input type="hidden" name="action" value="contact_announce_remove">
         <input type="hidden" name="id" value="<?= e((string) $c['id']) ?>">
@@ -378,7 +378,7 @@ if (empty($c['isGroup'])) {
     <?php endif; ?>
 
     <?php /* Separate form so "Remove photo" doesn't submit the whole editor. */ ?>
-    <form id="contact-photo-remove" method="post" action="/" hidden>
+    <form id="contact-photo-remove" method="post" action="/" hidden data-tc-ajax>
       <?= form_fields() ?>
       <input type="hidden" name="action" value="contact_photo_remove">
       <input type="hidden" name="id" value="<?= e((string) $c['id']) ?>">

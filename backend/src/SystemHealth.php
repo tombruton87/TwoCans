@@ -30,6 +30,7 @@ final class SystemHealth
             self::amiChecks(),
             self::databaseChecks(),
             self::whisperChecks(),
+            self::pagerChecks(),
             self::diskChecks(),
             self::configChecks(),
         );
@@ -162,6 +163,32 @@ final class SystemHealth
             'label' => 'Whisper ready',
             'ok' => $status === 200 && $ready,
             'detail' => is_array($json) ? 'model ' . (string) ($json['model'] ?? '?') : 'no reply',
+        ]];
+    }
+
+    /**
+     * The pager, which pages Grandstream desk phones without a call. Without
+     * it they're paged with a call instead, so it only counts as a problem
+     * when there's a desk phone to page.
+     *
+     * @return array<int,array{label:string,ok:bool,detail:string}>
+     */
+    private static function pagerChecks(): array
+    {
+        if (Pager::alive()) {
+            return [['label' => 'Pager', 'ok' => true, 'detail' => 'running']];
+        }
+        try {
+            $desk = implode(',', array_map(static fn(string $t): string => "'" . $t . "'", array_keys(DeviceRepository::typesIn('desk'))));
+            $deskPhones = (int) Database::pdo()->query("SELECT COUNT(*) FROM devices WHERE type IN ($desk)")->fetchColumn();
+        } catch (Throwable) {
+            $deskPhones = 0;
+        }
+
+        return [[
+            'label' => 'Pager',
+            'ok' => $deskPhones === 0,
+            'detail' => $deskPhones === 0 ? 'not running (only desk phones need it)' : 'not running: desk phones are paged with a call instead',
         ]];
     }
 

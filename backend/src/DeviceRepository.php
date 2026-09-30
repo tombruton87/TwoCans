@@ -31,11 +31,51 @@ final class DeviceRepository
         // autoAnswer: whether the phone picks an announcement up by itself
         // when asked (Call-Info/Alert-Info). Linphone has no such option — only
         // one that answers every call, which a child's phone must not do.
-        'linphone' => ['label' => 'Linphone', 'sub' => 'Phone or tablet app', 'available' => true, 'autoAnswer' => false],
-        'ht801' => ['label' => 'HT801', 'sub' => 'Grandstream adapter · plug in a corded phone', 'available' => true, 'autoAnswer' => false],
-        'ht802' => ['label' => 'HT802', 'sub' => 'Grandstream adapter · two corded phones', 'available' => true, 'autoAnswer' => false],
-        'ghp621' => ['label' => 'GHP621', 'sub' => 'Grandstream hotel phone', 'available' => true, 'autoAnswer' => true],
+        //
+        // family: how it's added and set up — an app (a QR code), an adapter
+        // for a corded phone, or a desk phone. keys: its hotkeys. body: the
+        // colour of the phone, which its faceplate preview follows. faceplate:
+        // what can be printed for it — see Faceplate.
+        'linphone' => ['label' => 'Linphone', 'sub' => 'Phone or tablet app', 'available' => true, 'autoAnswer' => false,
+            'family' => 'app', 'keys' => 0, 'body' => null, 'faceplate' => null],
+        'ht801' => ['label' => 'HT801', 'sub' => 'Grandstream adapter · plug in a corded phone', 'available' => true, 'autoAnswer' => false,
+            'family' => 'adapter', 'keys' => 0, 'body' => null, 'faceplate' => null],
+        'ht802' => ['label' => 'HT802', 'sub' => 'Grandstream adapter · two corded phones', 'available' => true, 'autoAnswer' => false,
+            'family' => 'adapter', 'keys' => 0, 'body' => null, 'faceplate' => null],
+        'ghp610' => ['label' => 'GHP610', 'sub' => 'Grandstream hotel phone · white · 3 hotkeys', 'available' => true, 'autoAnswer' => true,
+            'family' => 'desk', 'keys' => 3, 'body' => 'white', 'faceplate' => 'strip'],
+        'ghp611' => ['label' => 'GHP611', 'sub' => 'Grandstream hotel phone · black · 3 hotkeys', 'available' => true, 'autoAnswer' => true,
+            'family' => 'desk', 'keys' => 3, 'body' => 'black', 'faceplate' => 'strip'],
+        'ghp620' => ['label' => 'GHP620', 'sub' => 'Grandstream hotel phone · white · 6 hotkeys', 'available' => true, 'autoAnswer' => true,
+            'family' => 'desk', 'keys' => 6, 'body' => 'white', 'faceplate' => 'card'],
+        'ghp621' => ['label' => 'GHP621', 'sub' => 'Grandstream hotel phone · black · 6 hotkeys', 'available' => true, 'autoAnswer' => true,
+            'family' => 'desk', 'keys' => 6, 'body' => 'black', 'faceplate' => 'card'],
     ];
+
+    /** The kinds of phone, in the order they're offered, with what each is for. */
+    public const FAMILIES = [
+        'app' => ['label' => 'An app on a phone or tablet', 'sub' => 'Linphone — free, on any phone or tablet you already have', 'icon' => 'fa-mobile-screen'],
+        'desk' => ['label' => 'A Grandstream desk phone', 'sub' => 'GHP610, 611, 620 or 621 — hotkeys, a printable faceplate, pages through the speaker', 'icon' => 'fa-phone-flip'],
+        'adapter' => ['label' => 'An adapter for a corded phone', 'sub' => 'HT801 or HT802 — plug in any ordinary phone', 'icon' => 'fa-plug'],
+    ];
+
+    /** Whether this type is one of the Grandstream desk phones. */
+    public static function isDesk(string $type): bool
+    {
+        return (self::TYPES[$type]['family'] ?? '') === 'desk';
+    }
+
+    /** How many hotkeys this type has: 0 for anything without. */
+    public static function keys(string $type): int
+    {
+        return (int) (self::TYPES[$type]['keys'] ?? 0);
+    }
+
+    /** The types in one family, in order. */
+    public static function typesIn(string $family): array
+    {
+        return array_filter(self::TYPES, static fn(array $t): bool => $t['family'] === $family);
+    }
 
     public const TRANSPORTS = [
         'udp' => ['label' => 'UDP', 'sub' => 'Simplest — start here', 'available' => true],
@@ -112,6 +152,19 @@ final class DeviceRepository
     }
 
     /** Which socket of its adapter this phone is (HT802 only has a 2). */
+    /** It has just fetched its settings file. */
+    public function touchSettingsFetched(int $id): void
+    {
+        // PHP's clock, as humanTime() reads it with, not the database's.
+        Database::pdo()->prepare('UPDATE devices SET settings_fetched_at = ? WHERE id = ?')->execute([date('Y-m-d H:i:s'), $id]);
+    }
+
+    /** Whether a desk phone can hear multicast pages — see Pager. */
+    public function setPagingMulticast(int $id, bool $on): void
+    {
+        Database::pdo()->prepare('UPDATE devices SET paging_multicast = ? WHERE id = ?')->execute([$on ? 1 : 0, $id]);
+    }
+
     public function setPort(int $id, int $port): void
     {
         Database::pdo()->prepare('UPDATE devices SET port = ? WHERE id = ?')
@@ -356,6 +409,11 @@ final class DeviceRepository
             'mac' => (string) ($row['mac'] ?? ''),
             'port' => (int) ($row['port'] ?? 1),
             'ata' => in_array($type, ['ht801', 'ht802'], true),
+            'family' => self::TYPES[$type]['family'] ?? 'app',
+            'desk' => self::isDesk($type),
+            'keys' => self::keys($type),
+            'body' => self::TYPES[$type]['body'] ?? null,
+            'faceplate' => self::TYPES[$type]['faceplate'] ?? null,
             'extension' => (string) ($row['extension'] ?? ''),
             'photo' => (string) ($row['photo_path'] ?? ''),
             'sipUsername' => (string) ($row['sip_username'] ?? ''),
@@ -363,6 +421,11 @@ final class DeviceRepository
             'online' => (bool) $row['online'],
             'registered' => (bool) $row['registered'],
             'available' => self::TYPES[$type]['available'] ?? false,
+            // Fetched its settings from home, so it hears multicast pages — see Pager.
+            'pagingMulticast' => (bool) ($row['paging_multicast'] ?? false),
+            'settingsFetched' => ($row['settings_fetched_at'] ?? null) === null
+                ? null
+                : self::humanTime((string) $row['settings_fetched_at']),
             'autoAnswer' => self::TYPES[$type]['autoAnswer'] ?? false,
             'lastSeen' => $row['last_seen_at'] === null
                 ? 'never'

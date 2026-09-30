@@ -40,8 +40,22 @@ function initial(?string $name): string
 /** Redirect after POST so a refresh never replays an action. */
 function redirect(string $to): never
 {
+    // A form sent by the page's script (data-tc-ajax) stays where it is: it
+    // gets the message it would have shown, and where to fetch the fresh part
+    // of the page from.
+    if (is_ajax()) {
+        header('Content-Type: application/json');
+        header('Cache-Control: no-store');
+        exit(json_encode(['ok' => true, 'toast' => take_flash(), 'location' => $to]));
+    }
     header('Location: ' . $to, true, 303);
     exit;
+}
+
+/** Whether this request came from a form the page's script sent itself. */
+function is_ajax(): bool
+{
+    return ($_SERVER['HTTP_X_TWOCANS_AJAX'] ?? '') === '1';
 }
 
 /** Where to send the user back to after an action. */

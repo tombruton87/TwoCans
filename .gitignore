@@ -13,6 +13,8 @@ storage/jokes/*
 # A parent's recorded "nobody can take your call" message. Their voice, and
 # only ever meant to exist on their own box.
 storage/refusals/*
+# Pages waiting for the pager, and its heartbeat — see backend/src/Pager.php.
+storage/pager/*
 
 # Backups are the same recordings and photos, plus the database — never commit.
 storage/backups/*

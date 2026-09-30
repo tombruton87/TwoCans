@@ -221,6 +221,16 @@ switch ($download) {
 
         $play($file, 'caller-name.wav');
 
+    case 'hold_music':
+        // One of the household's hold tracks, by its row.
+        $track = (new HoldMusic())->find(isset($_GET['id']) ? (int) $_GET['id'] : 0);
+        $file = $track === null ? null : (new HoldMusicStore())->file($track['file']);
+        if ($file === null) {
+            http_response_code(404);
+            exit('No recording');
+        }
+        $play($file, 'hold-music-' . $track['id'] . '.wav');
+
     case 'announcement':
         // An announcement's recording, named by its row only.
         $row = (new AnnouncementRepository())->find(isset($_GET['id']) ? (int) $_GET['id'] : 0);

@@ -111,4 +111,24 @@ $canBackup = Auth::can('backups');
     </section>
   <?php endif; ?>
 
+  <?php $guide = new Onboarding(); ?>
+  <?php if (Auth::can('devices') && !$guide->visible()): ?>
+    <section class="tc-card">
+      <div class="tc-row" style="justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center">
+        <div>
+          <h2 class="tc-card__title">Getting started</h2>
+          <p class="tc-card__hint" style="margin:0">
+            <?= $guide->complete() ? 'Finished' : 'Hidden' ?> — the steps from a fresh install to a line the family can use.
+          </p>
+        </div>
+        <form method="post" action="/">
+          <?= form_fields() ?>
+          <input type="hidden" name="action" value="onboarding">
+          <input type="hidden" name="do" value="show">
+          <button class="tc-btn tc-btn--ghost" type="submit">Show it again</button>
+        </form>
+      </div>
+    </section>
+  <?php endif; ?>
+
 </div>

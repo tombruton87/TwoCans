@@ -8,3 +8,10 @@ the Apache License, Version 2.0 (the text of which is in LICENSE-APACHE).
 "TwoCans" and the two-cans mark are trademarks of Hamlet Digital. The licenses
 granted above do not include any rights in these marks; they may be used only
 with prior written permission from Hamlet Digital.
+
+Music on hold: install.sh downloads Asterisk's Opsound music-on-hold set
+(asterisk-moh-opsound) from downloads.asterisk.org at install time; it is not
+part of this repository. The tracks are by Paul Shuler (Macroform), Manolo
+Camp and Reno Project, distributed under the Creative Commons
+Attribution-ShareAlike 3.0 licence — see the CREDITS and LICENSE files that
+come with them.

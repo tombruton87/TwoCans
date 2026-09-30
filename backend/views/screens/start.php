@@ -37,7 +37,7 @@ $number = 0;
     <div class="tc-grow">
       <?php if ($complete): ?>
         <h2 class="tc-start__title">You're all set 🎉</h2>
-        <p class="tc-card__hint">The line is ready for the family. Everything here stays in the menu under <b>Getting started</b>.</p>
+        <p class="tc-card__hint">The line is ready for the family. Getting started leaves the menu now — System can bring it back.</p>
       <?php else: ?>
         <h2 class="tc-start__title">Let's get your line working</h2>
         <p class="tc-card__hint">A few steps, each ticked off as you do it. Stop whenever you like — they'll wait for you.</p>
@@ -61,6 +61,17 @@ $number = 0;
           <input type="hidden" name="action" value="onboarding">
           <input type="hidden" name="do" value="later">
           <button class="tc-btn tc-btn--ghost" type="submit">Do it later</button>
+        </form>
+      <?php endif; ?>
+      <?php if (!$complete): ?>
+        <?php /* For a household that knows its way round: gone from the menu and
+                 the dashboard, and back only from System. */ ?>
+        <form method="post" action="/">
+          <?= form_fields() ?>
+          <input type="hidden" name="action" value="onboarding">
+          <input type="hidden" name="do" value="hide">
+          <button class="tc-link" type="submit"
+                  data-tc-confirm="Hide Getting started? It goes from the menu and the dashboard — System can bring it back.">Hide this</button>
         </form>
       <?php endif; ?>
     </div>

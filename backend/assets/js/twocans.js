@@ -289,6 +289,94 @@
     }
   });
 
+  /* GHP621 hotkeys: the phone's face shows each key's label as it's picked,
+     and lights the key whose picker has focus. */
+  document.addEventListener('change', function (ev) {
+    var sel = ev.target.closest('[data-tc-gskey]');
+    if (!sel) return;
+    var key = document.querySelector('[data-tc-gsface-key="' + sel.getAttribute('data-tc-gskey') + '"]');
+    if (!key) return;
+    var label = sel.options[sel.selectedIndex].getAttribute('data-label') || '';
+    key.querySelector('.tc-gsface__label').textContent = label || sel.getAttribute('data-tc-gskey');
+    key.classList.toggle('is-empty', label === '');
+  });
+  ['focusin', 'focusout'].forEach(function (type) {
+    document.addEventListener(type, function (ev) {
+      var sel = ev.target.closest && ev.target.closest('[data-tc-gskey]');
+      if (!sel) return;
+      var key = document.querySelector('[data-tc-gsface-key="' + sel.getAttribute('data-tc-gskey') + '"]');
+      if (key) key.classList.toggle('is-active', type === 'focusin');
+    });
+  });
+
+  /* The faceplate preview beside a desk phone's hotkeys: drawn from what each
+     key dials now, and redrawn as a key's picker changes — see
+     views/partials/faceplate_preview.php. */
+  var fpShrink = function (el) {
+    el.style.fontSize = '';
+    var size = parseFloat(getComputedStyle(el).fontSize), min = size * 0.55;
+    while (el.scrollWidth > el.clientWidth && size > min) { size -= 0.25; el.style.fontSize = size + 'px'; }
+  };
+  var fpDraw = function (view, index, number) {
+    var choices = view._tcChoices || {};
+    var slot = view.querySelector('[data-tc-fpview-key="' + index + '"]');
+    if (!slot) return;
+    var k = number ? choices[number] : null;
+    slot.hidden = !k;
+    if (!k) return;
+    var photo = slot.querySelector('.tc-fpview__photo');
+    var name = slot.querySelector('.tc-fpview__name');
+    photo.textContent = '';
+    photo.style.background = k.color || 'var(--tc-ink-4)';
+    if (k.photo) {
+      var img = document.createElement('img');
+      img.src = k.photo; img.alt = '';
+      photo.appendChild(img);
+    } else if (k.icon) {
+      var icon = document.createElement('i');
+      icon.className = k.icon;
+      photo.appendChild(icon);
+    } else {
+      photo.textContent = k.initial || '';
+    }
+    name.textContent = k.name;
+    fpShrink(name);
+  };
+  document.querySelectorAll('[data-tc-fpview]').forEach(function (view) {
+    try {
+      view._tcChoices = JSON.parse(view.querySelector('[data-tc-fpview-choices]').textContent);
+      var now = JSON.parse(view.querySelector('[data-tc-fpview-now]').textContent);
+      Object.keys(now).forEach(function (i) { fpDraw(view, i, now[i]); });
+    } catch (e) { /* no preview, the page still works */ }
+  });
+  document.addEventListener('change', function (ev) {
+    var sel = ev.target.closest && ev.target.closest('[data-tc-gskey]');
+    if (!sel) return;
+    document.querySelectorAll('[data-tc-fpview]').forEach(function (view) {
+      fpDraw(view, sel.getAttribute('data-tc-gskey'), sel.value);
+    });
+  });
+
+  /* Faceplate: print it, and shrink any name too long for its key to fit. */
+  document.addEventListener('click', function (ev) {
+    if (ev.target.closest('[data-tc-print]')) window.print();
+  });
+  var fitNames = function () {
+    document.querySelectorAll('[data-tc-fit]').forEach(function (el) {
+      el.style.fontSize = '';
+      var size = parseFloat(getComputedStyle(el).fontSize);
+      var min = size * 0.6;
+      while (el.scrollWidth > el.clientWidth && size > min) {
+        size -= 0.25;
+        el.style.fontSize = size + 'px';
+      }
+    });
+  };
+  if (document.querySelector('[data-tc-fit]')) {
+    fitNames();
+    if (document.fonts) document.fonts.ready.then(fitNames);
+  }
+
   /* Account / settings dropdown in the header. Closes on outside click and Escape. */
   document.querySelectorAll('[data-tc-menu]').forEach(function (menu) {
     var toggle = menu.querySelector('[data-tc-menu-toggle]');
@@ -485,7 +573,10 @@
    * turns solid teal, the equalizer appears underneath while sound is coming
    * out, and pausing freezes the bars. Clicking the bars seeks by position.
    */
-  document.querySelectorAll('[data-play]').forEach(function (play) {
+  function bindPlayers(root) {
+  root.querySelectorAll('[data-play]').forEach(function (play) {
+    if (play.dataset.tcBound) return;
+    play.dataset.tcBound = '1';
     /* The audio sits beside the button in the row that owns it. That row is a
        different wrapper on every screen — .tc-call-row in the call log,
        .tc-vm-row on voicemail, the joke line and the phones' refusal messages,
@@ -547,6 +638,100 @@
       if (audio.paused) audio.play().catch(function () {});
     });
   });
+  }
+  bindPlayers(document);
+
+  /* The confirmation pill, for a message that arrives without a page load. */
+  function showToast(text) {
+    if (!text) return;
+    var old = document.querySelector('[data-tc-toast]');
+    if (old) old.remove();
+    var pill = document.createElement('div');
+    pill.className = 'tc-toast';
+    pill.setAttribute('role', 'status');
+    pill.setAttribute('data-tc-toast', '');
+    pill.textContent = text;
+    document.body.appendChild(pill);
+    setTimeout(function () {
+      pill.style.transition = 'opacity .3s';
+      pill.style.opacity = '0';
+      setTimeout(function () { pill.remove(); }, 320);
+    }, 2600);
+  }
+
+  /* Something still happening on the server (a scan for phones): look again
+     in a few seconds. */
+  var reloadAfter = document.querySelector('[data-tc-reload-after]');
+  if (reloadAfter) {
+    setTimeout(function () { location.reload(); }, 1000 * Number(reloadAfter.getAttribute('data-tc-reload-after') || 3));
+  }
+
+  /* A button that does something hard to take back asks first
+     (data-tc-confirm="…"). Capture, so it runs before a form is sent. */
+  document.addEventListener('submit', function (ev) {
+    var by = ev.submitter;
+    var ask = by && by.getAttribute('data-tc-confirm');
+    if (ask && !window.confirm(ask)) {
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+    }
+  }, true);
+
+  /* Forms marked data-tc-ajax save without leaving the page: the server
+     answers with its message and where the fresh page is, and only the part of
+     the page around the form (data-tc-ajax-region) is swapped for the new one.
+     Without JavaScript they are ordinary forms. */
+  document.addEventListener('submit', function (ev) {
+    var form = ev.target;
+    if (!form.matches || !form.matches('[data-tc-ajax]') || !window.fetch || !window.FormData) return;
+    ev.preventDefault();
+    if (form.dataset.tcSending) return;
+    form.dataset.tcSending = '1';
+    form.classList.add('is-sending');
+    var region = form.closest('[data-tc-ajax-region]');
+    var name = form.querySelector('[data-tc-filename]');
+    // After the picker has shown the file's name, which it does on the same change.
+    if (name && form.querySelector('input[type=file]')) setTimeout(function () { name.textContent = 'Saving…'; }, 0);
+
+    var failed = function () {
+      showToast("Couldn't save that — try again.");
+      if (name) name.textContent = 'Record or choose a file';
+    };
+    fetch(form.getAttribute('action') || '/', {
+      method: 'POST',
+      body: new FormData(form),
+      credentials: 'same-origin',
+      headers: { 'X-Twocans-Ajax': '1', 'Accept': 'application/json' }
+    })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (!data || !data.ok) { failed(); return null; }
+        showToast(data.toast);
+        if (!region || !region.id || !data.location) return null;
+        return fetch(data.location, { credentials: 'same-origin' })
+          .then(function (r) { return r.ok ? r.text() : null; })
+          .then(function (html) {
+            if (!html) return;
+            var fresh = new DOMParser().parseFromString(html, 'text/html').getElementById(region.id);
+            if (!fresh) {
+              // Saved and finished with (a contact's Save closes its sheet):
+              // go where the server said, and say it there.
+              try { sessionStorage.setItem('tcToast', data.toast || ''); } catch (e) { /* the page still works */ }
+              location.href = data.location;
+              return;
+            }
+            // Keep it as it was on screen: open if it was open.
+            if (region.tagName === 'DETAILS') fresh.open = region.open;
+            region.replaceWith(fresh);
+            bindPlayers(fresh);
+          });
+      })
+      .catch(failed)
+      .finally(function () {
+        delete form.dataset.tcSending;
+        form.classList.remove('is-sending');
+      });
+  });
 
   /* Picking a photo submits straight away — nobody expects to choose a
      picture and then have to press Save as well. */
@@ -599,6 +784,16 @@
       note.classList.add('tc-photo-note--pending');
     }
   });
+
+  /* A message carried over from a save that ended by moving page (see
+     the data-tc-ajax handler), shown once it has loaded. */
+  try {
+    var carried = sessionStorage.getItem('tcToast');
+    if (carried !== null) {
+      sessionStorage.removeItem('tcToast');
+      if (carried) setTimeout(function () { showToast(carried); }, 0);
+    }
+  } catch (e) { /* the page still works */ }
 
   /* Toast fades itself out after ~2.6s, matching the prototype. */
   var toast = document.querySelector('[data-tc-toast]');

@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 /**
- * Grandstream provisioning: hand a GHP621 desk phone, or an HT801/HT802
+ * Grandstream provisioning: hand a GHP61x/62x desk phone, or an HT801/HT802
  * adapter, its SIP account(s) as a Grandstream config file (cfg{MAC}.xml).
  *
  * Grandstream phones fetch this file from a "Config Server Path" (set in the
@@ -14,9 +14,8 @@ declare(strict_types=1);
  * phone needs to be told.
  *
  * SIP account P-codes below (P271/P3/P47/P35/P36/P34) are the standard account-1
- * codes shared across Grandstream models. The hotkey codes are the GHP series'
- * own and are marked TODO(verify): confirm them against the official GHP621
- * config template before relying on them.
+ * codes shared across Grandstream models. The hotkeys are the GHP62x's six
+ * Multi-Purpose Keys, from Grandstream's own template (ghp6xx_config_1.0.1.101).
  *
  * The adapters' codes follow Grandstream's HT80x template: socket 1 uses the
  * account-1 codes, socket 2 of an HT802 its own set (P401, P747, ...).
@@ -24,22 +23,63 @@ declare(strict_types=1);
 final class GrandstreamProvisioning
 {
     /**
-     * Physical hotkeys on the GHP621, key index => the P-code that holds that
-     * key's speed-dial number.
-     *
-     * TODO(verify): confirm these P-codes against the official GHP621 config
-     * template. They are the one part of this file that is not yet proven.
+     * A GHP62x's six Multi-Purpose Keys (a GHP61x has the first three), key
+     * index => its P-codes: the mode
+     * (-1 none, 0 speed dial), which account dials (0 = account 1), the label
+     * and the number.
      */
     public const HOTKEY_PCODES = [
-        1 => 'P2440',
-        2 => 'P2441',
-        3 => 'P2442',
-        4 => 'P2443',
+        1 => ['mode' => 'P365', 'account' => 'P366', 'label' => 'P367', 'value' => 'P368'],
+        2 => ['mode' => 'P369', 'account' => 'P370', 'label' => 'P371', 'value' => 'P372'],
+        3 => ['mode' => 'P373', 'account' => 'P374', 'label' => 'P375', 'value' => 'P376'],
+        4 => ['mode' => 'P377', 'account' => 'P378', 'label' => 'P379', 'value' => 'P380'],
+        5 => ['mode' => 'P381', 'account' => 'P382', 'label' => 'P383', 'value' => 'P384'],
+        6 => ['mode' => 'P385', 'account' => 'P386', 'label' => 'P387', 'value' => 'P388'],
     ];
 
     public static function keyCount(): int
     {
         return count(self::HOTKEY_PCODES);
+    }
+
+    /**
+     * Tell a Grandstream to fetch its settings file now — or to restart,
+     * which fetches it on the way back up — with a SIP NOTIFY (check-sync)
+     * through Asterisk. See docker/asterisk/etc/pjsip_notify.conf.
+     *
+     * @param array $device DeviceRepository::toView() shape
+     * @return array{ok:bool,error:?string}
+     */
+    public static function notify(array $device, bool $reboot = false): array
+    {
+        if (($device['family'] ?? 'app') === 'app' || ($device['sipUsername'] ?? '') === '') {
+            return ['ok' => false, 'error' => 'Only a Grandstream can be sent its settings.'];
+        }
+        if (!($device['online'] ?? false)) {
+            return ['ok' => false, 'error' => $device['name'] . " isn't online, so it can't be reached — it'll fetch them when it next starts."];
+        }
+        try {
+            $ami = new Ami();
+            $ami->connect();
+            $send = static fn(): array => $ami->send('PJSIPNotify', [
+                'Endpoint' => (string) $device['sipUsername'],
+                'Option' => $reboot ? 'twocans-reboot' : 'twocans-resync',
+            ]);
+            $reply = $send();
+            // Updated without Asterisk restarting, the module that sends these
+            // (which needs pjsip_notify.conf, new then) isn't running yet.
+            if (str_contains((string) ($reply['message'] ?? ''), 'unknown command')) {
+                $ami->send('Command', ['Command' => 'module load res_pjsip_notify.so']);
+                $reply = $send();
+            }
+            $ami->disconnect();
+        } catch (Throwable $e) {
+            return ['ok' => false, 'error' => 'Could not reach the phone system: ' . $e->getMessage()];
+        }
+
+        return ($reply['response'] ?? '') === 'Success'
+            ? ['ok' => true, 'error' => null]
+            : ['ok' => false, 'error' => (string) ($reply['message'] ?? 'The phone system could not send it.')];
     }
 
     /** Normalise a pasted MAC to 12 uppercase hex chars, or '' when it cannot be one. */
@@ -143,12 +183,14 @@ final class GrandstreamProvisioning
     }
 
     /**
-     * A GHP621 desk phone.
+     * A GHP610, 611, 620 or 621 desk phone: one settings file for them all,
+     * the GHP61x's three hotkeys being the first three of the GHP62x's six.
      *
      * @param array            $device  DeviceRepository::toView() shape
      * @param array<int,string> $hotkeys key index => number to dial
+     * @param array<string,string> $labels number => who it is, for the key's label
      */
-    public function xml(array $device, array $hotkeys): string
+    public function xml(array $device, array $hotkeys, array $labels = []): string
     {
         $p = static fn(string $code, string $value): string => trim(self::p($code, $value));
 
@@ -169,9 +211,24 @@ final class GrandstreamProvisioning
         // into ringing. Only that header does it — ordinary calls still ring.
         $xml .= '    ' . $p('P298', '1') . "\n";                         // allow auto answer by Call-Info
 
-        // Hotkeys: one speed dial per physical key.
-        foreach (self::HOTKEY_PCODES as $index => $code) {
-            $xml .= '    ' . $p($code, (string) ($hotkeys[$index] ?? '')) . "\n";
+        // Pages: listen for twocans' multicast pages (see Pager), and play them
+        // through the speaker as they come. A page doesn't cut into a call.
+        $xml .= '    ' . $p('P1567', '1') . "\n";                        // paging priority active
+        $xml .= '    ' . $p('P1566', '0') . "\n";                        // paging barge: never into a call
+        $xml .= '    ' . $p('P8454', '0') . "\n";                        // plain RTP, not Polycom's format
+        $xml .= '    ' . $p('P1569', Pager::address((int) $device['id'])) . "\n"; // priority 1 listening address
+        $xml .= '    ' . $p('P1570', 'twocans') . "\n";                  // its label
+
+        // Hotkeys: one speed dial per physical key — three on a GHP61x, six on
+        // a GHP62x. Every one of its keys is written, so a key cleared here is
+        // cleared on the phone too.
+        $keys = DeviceRepository::keys((string) ($device['type'] ?? 'ghp621')) ?: count(self::HOTKEY_PCODES);
+        foreach (array_slice(self::HOTKEY_PCODES, 0, $keys, true) as $index => $code) {
+            $number = (string) ($hotkeys[$index] ?? '');
+            $xml .= '    ' . $p($code['mode'], $number === '' ? '-1' : '0') . "\n";
+            $xml .= '    ' . $p($code['account'], '0') . "\n";
+            $xml .= '    ' . $p($code['label'], $number === '' ? '' : ($labels[$number] ?? $number)) . "\n";
+            $xml .= '    ' . $p($code['value'], $number) . "\n";
         }
 
         return $xml . self::close();

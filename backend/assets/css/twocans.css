@@ -2593,3 +2593,139 @@ div:has(> .tc-win-grid #win-custom:checked) > .tc-win-custom { display: block; }
 }
 .tc-start__list { margin: 10px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; font: 600 13px/1.5 var(--tc-body); color: var(--tc-ink-6); }
 .tc-start__list b { color: var(--tc-ink); }
+
+/* GHP621 hotkeys: the phone's black face, keys 1–3 above 4–6, with the
+   pickers beneath in the same places. */
+.tc-gsface {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px 14px;
+  background: #0B0B0C; border-radius: 16px; padding: 20px 16px 22px;
+  box-shadow: inset 0 0 0 2px #26262A;
+}
+.tc-gsface__key { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }
+.tc-gsface__label {
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 700 14px var(--tc-body); color: #F4F4F5; min-height: 1.3em;
+}
+.tc-gsface__key.is-empty .tc-gsface__label { color: #5A5A60; }
+.tc-gsface__button {
+  width: min(80px, 100%); height: 32px; border-radius: 6px; background: #4A4A52;
+  transition: background .15s, box-shadow .15s;
+}
+.tc-gsface__key.is-active .tc-gsface__button { background: var(--tc-teal); box-shadow: 0 0 0 3px rgba(91, 199, 184, .35); }
+.tc-gskeys { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 14px; }
+.tc-gskeys .tc-input { min-width: 0; width: 100%; }
+@media (max-width: 420px) {
+  .tc-gsface { gap: 18px 8px; padding: 16px 10px 18px; }
+  .tc-gsface__label { font-size: 12px; }
+  .tc-gskeys { gap: 10px 8px; }
+  .tc-gskeys .tc-input { font-size: 13px; padding-left: 8px; padding-right: 8px; }
+}
+
+/* A phone's page in tabs — Rules, Keys & faceplate, Setup. Links, so each has
+   its own address; a strip that scrolls sideways on a narrow screen. */
+.tc-tabs {
+  display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none;
+  border-bottom: 2px solid var(--tc-border-3); margin: 4px 0 2px;
+}
+.tc-tabs::-webkit-scrollbar { display: none; }
+.tc-tabs__tab {
+  flex: none; padding: 10px 16px; margin-bottom: -2px; border-bottom: 3px solid transparent;
+  font: 800 15px var(--tc-display); color: var(--tc-ink-3); text-decoration: none; white-space: nowrap;
+}
+.tc-tabs__tab:hover { color: var(--tc-ink); }
+.tc-tabs__tab.is-active { color: var(--tc-ink); border-bottom-color: var(--tc-coral); }
+.tc-device__grid--keys { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); }
+@media (max-width: 1100px) { .tc-device__grid--keys { grid-template-columns: 1fr; } }
+
+/* A white desk phone (GHP610, GHP620): its face in its own colour. */
+.tc-gsface--white { background: #F4F4F2; box-shadow: inset 0 0 0 2px #DDDDD8; }
+.tc-gsface--white .tc-gsface__label { color: #2B2B2E; }
+.tc-gsface--white .tc-gsface__key.is-empty .tc-gsface__label { color: #B5B5B0; }
+.tc-gsface--white .tc-gsface__button { background: #D6D6D1; }
+
+/* Adding a phone: the kind, then the model, each drawn as it looks. */
+.tc-wizard-pick { border-color: var(--tc-teal-deep); background: var(--tc-teal-bg); }
+.tc-wizard-pick .tc-provider-row__mark { background: var(--tc-teal-deep); }
+.tc-wizard-pick__go { color: var(--tc-teal-deep); font: 800 18px var(--tc-display); }
+.tc-wizard-models { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.tc-wizard-models form { display: flex; }
+.tc-wizard-model {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 14px 10px;
+  border: 2px solid var(--tc-border-3); border-radius: 16px; background: #fff; cursor: pointer; font: inherit;
+}
+.tc-wizard-model:hover, .tc-wizard-model:focus-visible { border-color: var(--tc-teal-deep); background: var(--tc-teal-bg); }
+.tc-wizard-model__name { font: 800 17px var(--tc-display); color: var(--tc-ink); }
+.tc-wizard-model__sub { font: 700 12px var(--tc-body); color: var(--tc-ink-3); text-align: center; }
+.tc-wizard-model__phone {
+  display: grid; grid-template-columns: repeat(3, 12px); gap: 6px 5px; align-content: end;
+  width: 58px; height: 46px; padding: 8px 8px 9px; border-radius: 9px; box-sizing: border-box; margin-bottom: 4px;
+}
+.tc-wizard-model__phone span { height: 6px; border-radius: 2px; }
+.tc-wizard-model__phone--black { background: #1C1C1F; }
+.tc-wizard-model__phone--black span { background: #55555C; }
+.tc-wizard-model__phone--white { background: #F1F1EE; box-shadow: inset 0 0 0 2px #D9D9D4; }
+.tc-wizard-model__phone--white span { background: #C9C9C4; }
+.tc-wizard-model__adapter {
+  display: flex; gap: 6px; align-items: center; justify-content: center;
+  width: 58px; height: 46px; border-radius: 9px; background: #F1F1EE; box-shadow: inset 0 0 0 2px #D9D9D4;
+  color: var(--tc-ink-3); font-size: 14px; margin-bottom: 4px;
+}
+
+/* When a Grandstream last fetched its settings, and sending them again. */
+.tc-device__fetched { font: 700 13px var(--tc-body); color: var(--tc-ink-2); margin: 2px 0 12px; }
+.tc-device__fetched .fa-circle-check { color: var(--tc-teal-deep); }
+.tc-device__fetched .fa-hourglass-half { color: var(--tc-ink-4); }
+.tc-device__remote { gap: 8px; margin-bottom: 14px; }
+
+/* Phones found on the network, at the top of adding one. */
+.tc-wizard-found {
+  border: 1.5px dashed var(--tc-border-3); border-radius: 16px; padding: 12px 14px; margin-bottom: 18px;
+  background: var(--tc-card);
+}
+.tc-wizard-found__title { font: 800 15px var(--tc-display); color: var(--tc-ink); }
+.tc-wizard-found .tc-card__hint { margin: 6px 0 0; }
+.tc-wizard-found .tc-stack { margin-top: 10px; }
+.tc-wizard-found__phone { cursor: pointer; }
+.tc-wizard-found__phone:hover:not(:disabled) { border-color: var(--tc-teal-deep); background: var(--tc-teal-bg); }
+.tc-wizard-found__phone .tc-provider-row__mark { background: var(--tc-teal-deep); }
+.tc-wizard-found__phone:disabled { cursor: default; opacity: .7; }
+
+/* The faceplate preview beside a desk phone's hotkeys, at real size in mm (the
+   label strip enlarged, being tiny). See views/partials/faceplate_preview.php. */
+.tc-fpview { display: flex; justify-content: center; padding: 6px 0 16px; }
+.tc-fpview__card {
+  position: relative; overflow: hidden; background: #FBF3E4; border-radius: 3px;
+  box-shadow: 0 0 0 1px var(--tc-border-3), 0 6px 18px rgba(74, 59, 51, .12);
+}
+.tc-fpview--strip .tc-fpview__card { zoom: 2.2; }
+.tc-fpview__logo { position: absolute; left: 50%; top: 3.2mm; width: 26mm; height: 13mm; transform: translateX(-50%); }
+.tc-fpview__title {
+  position: absolute; left: 3mm; right: 3mm; top: 17.5mm; text-align: center; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; font: 800 5.2mm/1.15 var(--tc-display); color: var(--tc-ink);
+}
+.tc-fpview__slot { position: absolute; border: .25mm dashed #999; border-radius: 1.8mm; background: #fff; box-sizing: border-box; }
+.tc-fpview__photo {
+  position: absolute; width: var(--photo); height: var(--photo); border-radius: 50%; overflow: hidden;
+  display: flex; align-items: center; justify-content: center; color: #fff;
+  font: 800 calc(var(--photo) * .46) var(--tc-display); box-shadow: 0 0 0 .35mm #fff;
+}
+.tc-fpview__photo img { width: 100%; height: 100%; object-fit: cover; }
+.tc-fpview__name {
+  position: absolute; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font: 800 var(--name)/1.15 var(--tc-display); color: var(--tc-ink);
+}
+
+/* A desk phone's hotkeys on its card in the phones list. */
+.tc-device-card__keys { display: flex; gap: 5px; margin-top: 8px; flex-wrap: wrap; }
+.tc-keydot {
+  width: 24px; height: 24px; border-radius: 50%; overflow: hidden; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #fff; font: 800 11px var(--tc-display);
+}
+.tc-keydot img { width: 100%; height: 100%; object-fit: cover; }
+.tc-keydot--empty { background: transparent; color: var(--tc-ink-4); box-shadow: inset 0 0 0 1.5px var(--tc-border-3); }
+
+/* After saving someone: put them on a desk phone's free hotkey? */
+.tc-key-offer { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; border: 2px solid var(--tc-teal-pale); background: var(--tc-teal-bg); }
+.tc-key-offer__icon { width: 40px; height: 40px; border-radius: 11px; background: var(--tc-teal-deep); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 17px; flex: none; }
+.tc-key-offer__title { font: 800 16px var(--tc-display); color: var(--tc-ink); }

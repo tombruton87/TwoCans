@@ -310,7 +310,8 @@ final class ContactRepository
             }
         }
 
-        $existingNumber = (string) ($this->find($id)['number_e164'] ?? '');
+        $before = $this->find($id);
+        $existingNumber = (string) ($before['number_e164'] ?? '');
 
         $window = (string) ($input['window'] ?? 'afterschool');
         if (!isset(Presenter::WINDOWS[$window])) {
@@ -363,6 +364,16 @@ final class ContactRepository
 
         if ($isGroup) {
             $this->setMembers($id, $memberIds);
+        }
+
+        // Hotkeys follow who they ring: a person by their number, a group by
+        // its speed dial. See DeviceHotkeyRepository.
+        if ($before !== null) {
+            $was = (int) ($before['is_group'] ?? 0) === 1 ? (string) ($before['speed_dial'] ?? '') : $existingNumber;
+            $now = $isGroup ? $code : $number;
+            if ($was !== '' && $was !== $now) {
+                (new DeviceHotkeyRepository())->retarget($was, $now);
+            }
         }
 
         return null;

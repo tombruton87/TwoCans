@@ -10,6 +10,8 @@ declare(strict_types=1);
  * Settings:
  *   onboarding          '' (new: shown, with a reminder on the dashboard),
  *                       'later' (put off: only in the menu) or 'done'
+ *                       (finished, or hidden: gone from the menu, and back
+ *                       only from System)
  *   onboarding_skipped  steps passed over, comma-separated (only the line can be)
  *   onboarding_tested   '1' once a test call has rung a phone
  */
@@ -92,6 +94,15 @@ final class Onboarding
         $p = $this->progress();
 
         return $p['done'] === $p['total'];
+    }
+
+    /**
+     * Whether it's in the menu at all: not once it's finished, or hidden from
+     * its own page. Every step done counts as finished, pressed or not.
+     */
+    public function visible(): bool
+    {
+        return $this->state() !== 'done' && !$this->complete();
     }
 
     /** Whether the dashboard reminds them: new, and not everything done. */

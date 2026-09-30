@@ -252,6 +252,28 @@ abstract class AudioStore
     }
 
     /** Absolute path of a stored clip, or null if it isn't there. */
+    /**
+     * Which of $names (keyed by whatever they belong to) holds the same audio
+     * as the one just converted — its sha256 — or null. For "that's the same
+     * recording as Dinner": picking the wrong file is easy, and silent.
+     *
+     * @param array<int|string,string> $names owner => stored filename
+     */
+    public function sameAs(?string $sha256, array $names): int|string|null
+    {
+        if ($sha256 === null || $sha256 === '') {
+            return null;
+        }
+        foreach ($names as $owner => $name) {
+            $path = $this->file($name);
+            if ($path !== null && hash_file('sha256', $path) === $sha256) {
+                return $owner;
+            }
+        }
+
+        return null;
+    }
+
     public function file(?string $name): ?string
     {
         $name = trim((string) $name);

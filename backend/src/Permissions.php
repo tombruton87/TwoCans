@@ -33,6 +33,8 @@ final class Permissions
         // The message bedtime plays belongs to the house rather than to one
         // phone, so it sits with the other rules too.
         'quiet_message' => 'rules',
+        'hold_music_add' => 'rules',
+        'hold_music_remove' => 'rules',
         'quiet_message_remove' => 'rules',
         // Whether an unrecognised caller may leave a message is part of what the
         // line does, like bedtime, so it sits with the other rules.
@@ -52,6 +54,9 @@ final class Permissions
         'device_adult' => 'devices',
         'device_limits' => 'devices',
         'device_remove' => 'devices',
+        'device_pick_family' => 'devices',
+        'device_scan' => 'devices',
+        'device_pick_found' => 'devices',
         'device_pick_model' => 'devices',
         // The Getting started guide walks through adding phones.
         'onboarding' => 'devices',
@@ -68,6 +73,10 @@ final class Permissions
         'device_mac' => 'devices',
         'device_add_socket' => 'devices',
         'hotkey_set' => 'devices',
+        'hotkey_offer' => 'devices',
+        'hotkey_offer_dismiss' => 'devices',
+        'device_resync' => 'devices',
+        'device_reboot' => 'devices',
         'contact_add' => 'contacts',
         'contact_save' => 'contacts',
         'contact_group_toggle' => 'contacts',

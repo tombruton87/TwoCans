@@ -4,7 +4,7 @@
 #
 #   ./twocans                 what it can do
 #   ./twocans status          is everything working?
-#   ./twocans logs [part]     follow what's happening: phone, web, transcription, database, all
+#   ./twocans logs [part]     follow what's happening: phone, web, transcription, database, pager, all
 #   ./twocans backup          make a backup now
 #   ./twocans backups         list the backups
 #   ./twocans restore [name]  put a backup back
@@ -96,7 +96,7 @@ cmd_help() {
   echo
   local rows=(
     "status|is everything working?"
-    "logs [part]|follow what's happening — phone, web, transcription, database or all"
+    "logs [part]|follow what's happening — phone, web, transcription, database, pager or all"
     "backup|make a backup now"
     "backups|list the backups"
     "restore [name]|put a backup back"
@@ -125,6 +125,7 @@ cmd_status() {
     "twocans-mariadb|database"
     "twocans-transcriber|transcription"
     "twocans-whisper|speech-to-text"
+    "twocans-pager|paging desk phones"
   )
   if $DEV_SETUP; then
     parts=("twocans-php|web app (development setup)" "twocans-nginx|web server" "${parts[@]}")
@@ -195,8 +196,9 @@ cmd_logs() {
     web|app) $DEV_SETUP && containers=(twocans-php twocans-nginx) || containers=(twocans-web) ;;
     transcription|transcriber|whisper) containers=(twocans-transcriber twocans-whisper) ;;
     database|db|mariadb) containers=(twocans-mariadb) ;;
+    pager|paging) containers=(twocans-pager) ;;
     all) mapfile -t containers < <(docker ps --format '{{.Names}}' | grep '^twocans-' | sort) ;;
-    *) die "No part called '$part' — try phone, web, transcription, database or all." ;;
+    *) die "No part called '$part' — try phone, web, transcription, database, pager or all." ;;
   esac
   ((${#containers[@]})) || die "twocans isn't running."
   echo "  ${dim}Following ${part} — Ctrl+C to stop.${off}"

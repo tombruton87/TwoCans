@@ -306,7 +306,7 @@ if $UNINSTALL; then
   # Everything twocans keeps, inside this folder. Folder contents only, never
   # the files that come with the repo (.gitkeep, the config placeholders).
   DATA_DIRS=(
-    storage/photos storage/jokes storage/refusals storage/backups storage/exports storage/reports
+    storage/photos storage/jokes storage/refusals storage/pager storage/backups storage/exports storage/reports
     docker/asterisk/recordings docker/asterisk/voicemail docker/asterisk/cdr docker/asterisk/asks
     docker/asterisk/etc/generated docker/asterisk/etc/secrets
     docker/mariadb/log docker/php/log docker/nginx/log docker/nginx/certs docker/nginx/acme
@@ -1005,8 +1005,8 @@ set -a; . "./$ENV_FILE"; set +a
 write_secrets
 ok "Asterisk passwords in place"
 
-mkdir -p docker/asterisk/{cdr,recordings,voicemail,asks} docker/{nginx,php,mariadb}/log storage/{photos,jokes,refusals}
-chmod 777 docker/asterisk/{cdr,recordings,voicemail,asks} storage/photos storage/jokes storage/refusals 2>/dev/null || true
+mkdir -p docker/asterisk/{cdr,recordings,voicemail,asks} docker/{nginx,php,mariadb}/log storage/{photos,jokes,refusals,pager}
+chmod 777 docker/asterisk/{cdr,recordings,voicemail,asks} storage/photos storage/jokes storage/refusals storage/pager 2>/dev/null || true
 ok "data folders ready"
 
 if $NO_START; then
@@ -1080,6 +1080,36 @@ install_sounds() {
   ok "Asterisk's spoken prompts installed"
 }
 install_sounds
+
+# Music on hold: without it, a phone putting someone on hold leaves them in
+# silence. Asterisk's own Opsound set (CC-BY-SA), about 2MB; see
+# docker/asterisk/etc/musiconhold.conf.
+MOH_URL="https://downloads.asterisk.org/pub/telephony/sounds/asterisk-moh-opsound-ulaw-current.tar.gz"
+
+install_moh() {
+  local have tmp
+  have=$("${COMPOSE[@]}" exec -T asterisk sh -c \
+    'ls /var/lib/asterisk/moh/*.ulaw 2>/dev/null | wc -l' 2>/dev/null | tr -d '\r ')
+  if [[ "${have:-0}" -gt 0 ]]; then
+    ok "music on hold is installed"
+    return 0
+  fi
+  echo "  fetching music on hold (~2MB)…"
+  tmp=$(mktemp -d)
+  if ! curl -fsSL --max-time 120 -o "$tmp/moh.tar.gz" "$MOH_URL"; then
+    rm -rf "$tmp"
+    warn "couldn't download music on hold — calls on hold are silent until ./install.sh is run again with internet"
+    return 0
+  fi
+  mkdir -p "$tmp/moh"
+  tar xzf "$tmp/moh.tar.gz" -C "$tmp/moh"
+  "${COMPOSE[@]}" exec -T asterisk mkdir -p /var/lib/asterisk/moh >/dev/null 2>&1 || true
+  "${COMPOSE[@]}" cp "$tmp/moh/." asterisk:/var/lib/asterisk/moh/ >/dev/null 2>&1
+  "${COMPOSE[@]}" exec -T asterisk sh -c 'chown -R asterisk:asterisk /var/lib/asterisk/moh; asterisk -rx "module load res_musiconhold.so" >/dev/null 2>&1; asterisk -rx "moh reload" >/dev/null 2>&1' 2>/dev/null || true
+  rm -rf "$tmp"
+  ok "music on hold installed"
+}
+install_moh
 
 quietly "Updating the database" "${COMPOSE[@]}" exec -T web php /var/www/html/bin/migrate.php
 ok "database up to date"

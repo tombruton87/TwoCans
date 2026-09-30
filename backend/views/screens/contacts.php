@@ -6,7 +6,38 @@
 $rows = array_map([ContactRepository::class, 'toView'], $contacts->all());
 $rows = array_map([Presenter::class, 'contact'], $rows);
 $canEdit = Auth::can('contacts');
+
+// Just saved someone who isn't on a hotkey, with a desk phone's key free:
+// offer to put them on one. See actions.php, contact_save.
+$offerFor = isset($_SESSION['keyOffer']) && Auth::can('devices') ? $contacts->find((int) $_SESSION['keyOffer']) : null;
+$offers = $offerFor !== null ? (new DeviceHotkeyRepository())->offersFor(DeviceHotkeyRepository::targetOf($offerFor)) : [];
+unset($_SESSION['keyOffer']); // offered once; the buttons don't need it
 ?>
+<?php if ($offers !== []): ?>
+  <section class="tc-card tc-key-offer" role="status">
+    <i class="fa-solid fa-phone-flip tc-key-offer__icon" aria-hidden="true"></i>
+    <div class="tc-grow">
+      <div class="tc-key-offer__title">Put <?= e((string) $offerFor['name']) ?> on a hotkey?</div>
+      <div class="tc-card__hint">One press on a desk phone and it rings <?= (int) $offerFor['is_group'] === 1 ? 'them all' : 'them' ?>.</div>
+    </div>
+    <div class="tc-row tc-row--wrap" style="gap:8px">
+      <?php foreach ($offers as $o): ?>
+        <form method="post" action="/">
+          <?= form_fields() ?>
+          <input type="hidden" name="action" value="hotkey_offer">
+          <input type="hidden" name="id" value="<?= (int) $offerFor['id'] ?>">
+          <input type="hidden" name="device" value="<?= (int) $o['id'] ?>">
+          <button class="tc-btn tc-btn--teal tc-btn--sm" type="submit"><?= e($o['name']) ?> · key <?= (int) $o['key'] ?></button>
+        </form>
+      <?php endforeach; ?>
+      <form method="post" action="/">
+        <?= form_fields() ?>
+        <input type="hidden" name="action" value="hotkey_offer_dismiss">
+        <button class="tc-btn tc-btn--ghost tc-btn--sm" type="submit">Not now</button>
+      </form>
+    </div>
+  </section>
+<?php endif; ?>
 <?php if ($rows === []): ?>
   <div class="tc-card" style="text-align:center;padding:34px 22px;margin-bottom:16px">
     <div style="font:800 18px var(--tc-display);margin-bottom:6px">Nobody on the list yet</div>

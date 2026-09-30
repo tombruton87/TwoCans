@@ -61,8 +61,9 @@ $canNotifications = Auth::can('notifications');
         </div>
         <div class="tc-menu__divider" role="separator"></div>
 
-        <?php if (Auth::can('devices')): ?>
-          <?php $gettingStarted = (new Onboarding())->progress(); ?>
+        <?php $onboardingMenu = new Onboarding(); ?>
+        <?php if (Auth::can('devices') && ($onboardingMenu->visible() || $screen === 'start')): ?>
+          <?php $gettingStarted = $onboardingMenu->progress(); ?>
           <a class="tc-menu__item <?= $screen === 'start' ? 'is-active' : '' ?>" role="menuitem"
              href="<?= e(url(['screen' => 'start'])) ?>">
             <i class="fa-solid fa-flag-checkered" aria-hidden="true"></i> Getting started

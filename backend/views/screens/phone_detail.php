@@ -3,16 +3,30 @@
  * One device's settings. Text and time fields save on blur (JS submits the
  * surrounding form); without JS the same forms still submit normally.
  *
- * Laid out in two columns on a wide screen: what a parent changes on the
- * left (calls, hours, the refusal, a desk phone's keys), and what they look up
- * on the right (setting the app up, the numbers to dial). One column, in that
- * order, once the screen is narrow.
+ * In tabs, so each kind of phone shows what it has: Rules (calls, hours,
+ * limits, what an unknown caller hears — the same for every phone), Keys (a
+ * desk phone's hotkeys, its faceplate and how it's paged) and Setup (the QR
+ * code for the app, or a Grandstream's provisioning; its account; the numbers
+ * to dial). Each tab is a link of its own, and works without JavaScript; two
+ * columns on a wide screen, one once it's narrow.
  *
  * @var Store $store
  * @var array $device
  */
 $d = Presenter::device(DeviceRepository::toView($device));
 $canEdit = Auth::can('devices');
+
+$tabs = ['rules' => 'Rules'];
+if ($d['desk'] && $canEdit) {
+    $tabs['keys'] = 'Keys & faceplate';
+}
+$tabs['setup'] = 'Setup';
+// A phone that has never signed in opens on how to set it up.
+$tab = (string) ($_GET['tab'] ?? '');
+if (!isset($tabs[$tab])) {
+    $tab = $d['available'] && !$d['registered'] ? 'setup' : 'rules';
+}
+$tabUrl = static fn(string $t): string => url(['screen' => 'phones', 'device' => $d['id'], 'tab' => $t]);
 ?>
 <div class="tc-stack tc-device">
   <a class="tc-back" href="<?= e(url(['screen' => 'phones'])) ?>">← All phones</a>
@@ -57,7 +71,7 @@ $canEdit = Auth::can('devices');
     <?php else: ?>
       <?php $picture(); ?>
     <?php endif; ?>
-    <form class="tc-grow" method="post" action="/">
+    <form class="tc-grow" method="post" action="/" data-tc-ajax>
       <?= form_fields() ?>
       <input type="hidden" name="action" value="device_edit">
       <input type="hidden" name="id" value="<?= e($d['id']) ?>">
@@ -108,10 +122,10 @@ $canEdit = Auth::can('devices');
         check it's plugged in and has power. It comes back within a minute or so of starting.
         <?php endif; ?>
       <?php elseif ($d['type'] !== 'linphone'): ?>
-        Waiting for the <?= $d['ata'] ? 'adapter' : 'phone' ?> to sign in — follow <b>How to set it up</b> under
-        Provisioning, then reboot it. This turns green on its own once it signs in.
+        Waiting for the <?= $d['ata'] ? 'adapter' : 'phone' ?> to sign in — follow the steps under
+        <a class="tc-link" href="<?= e($tabUrl('setup')) ?>">Setup</a>, then reboot it. This turns green on its own once it signs in.
       <?php else: ?>
-        Waiting for Linphone to sign in with the details under <b>Set up the app</b>.
+        Waiting for Linphone to sign in with the details under <a class="tc-link" href="<?= e($tabUrl('setup')) ?>">Setup</a>.
         Leave this page open — it turns green on its own once the app signs in.
       <?php endif; ?>
     </div>
@@ -140,11 +154,16 @@ $canEdit = Auth::can('devices');
     </section>
   <?php endif; ?>
 
+  <nav class="tc-tabs" aria-label="<?= e($d['name']) ?>">
+    <?php foreach ($tabs as $key => $label): ?>
+      <a class="tc-tabs__tab<?= $key === $tab ? ' is-active' : '' ?>" href="<?= e($tabUrl($key)) ?>"
+         <?= $key === $tab ? 'aria-current="page"' : '' ?>><?= e($label) ?></a>
+    <?php endforeach; ?>
+  </nav>
+
+  <?php if ($tab === 'rules'): ?>
   <div class="tc-device__grid">
-
-    <!-- Left: what a parent changes -->
     <div class="tc-stack">
-
       <?php if ($d['adult']): ?>
         <section class="tc-card tc-adult-off">
           <div class="tc-card__intro">
@@ -157,7 +176,7 @@ $canEdit = Auth::can('devices');
           </div>
         </section>
       <?php else: ?>
-      <section class="tc-card">
+      <section id="device-calls" data-tc-ajax-region class="tc-card">
         <div class="tc-card__intro">
           <h2 class="tc-card__title">Calls</h2>
           <p class="tc-card__hint">Master switches for the whole phone. Fine-tune per person in People.</p>
@@ -176,7 +195,7 @@ $canEdit = Auth::can('devices');
                 <div class="tc-rule-row__title"><?= e($rule['title']) ?></div>
                 <div class="tc-rule-row__hint"><?= e($rule['hint']) ?></div>
               </div>
-              <form method="post" action="/">
+              <form method="post" action="/" data-tc-ajax>
                 <?= form_fields() ?>
                 <input type="hidden" name="action" value="device_toggle">
                 <input type="hidden" name="id" value="<?= e($d['id']) ?>">
@@ -199,7 +218,7 @@ $canEdit = Auth::can('devices');
           </p>
         </div>
         <?php if ($canEdit): ?>
-          <form method="post" action="/">
+          <form method="post" action="/" data-tc-ajax>
             <?= form_fields() ?>
             <input type="hidden" name="action" value="device_hours">
             <input type="hidden" name="id" value="<?= e($d['id']) ?>">
@@ -233,7 +252,7 @@ $canEdit = Auth::can('devices');
             <?php endif; ?>
           </p>
         </div>
-        <form method="post" action="/" class="tc-row tc-row--wrap">
+        <form method="post" action="/" class="tc-row tc-row--wrap" data-tc-ajax>
           <?= form_fields() ?>
           <input type="hidden" name="action" value="device_limits">
           <input type="hidden" name="id" value="<?= e($d['id']) ?>">
@@ -256,9 +275,11 @@ $canEdit = Auth::can('devices');
       </section>
 
       <?php endif; ?>
+    </div>
 
+    <div class="tc-stack">
       <!-- The message a caller who isn't on the list hears -->
-      <section class="tc-card">
+      <section id="device-refusal" data-tc-ajax-region class="tc-card">
         <div class="tc-card__intro">
           <h2 class="tc-card__title">If someone not on the list calls…</h2>
           <p class="tc-card__hint">
@@ -288,7 +309,7 @@ $canEdit = Auth::can('devices');
               </div>
             </div>
             <?php if ($canEdit): ?>
-              <form method="post" action="/" class="tc-inline-form">
+              <form method="post" action="/" class="tc-inline-form" data-tc-ajax>
                 <?= form_fields() ?>
                 <input type="hidden" name="action" value="device_refusal_remove">
                 <input type="hidden" name="id" value="<?= e((string) $d['id']) ?>">
@@ -304,7 +325,7 @@ $canEdit = Auth::can('devices');
         <?php endif; ?>
 
         <?php if ($canEdit): ?>
-          <form method="post" action="/" enctype="multipart/form-data" class="tc-row tc-row--wrap">
+          <form method="post" action="/" enctype="multipart/form-data" class="tc-row tc-row--wrap" data-tc-ajax>
             <?= form_fields() ?>
             <input type="hidden" name="action" value="device_refusal_message">
             <input type="hidden" name="id" value="<?= e((string) $d['id']) ?>">
@@ -322,7 +343,7 @@ $canEdit = Auth::can('devices');
             Up to 30 seconds — any audio file or voice memo will do.
           </p>
 
-          <form method="post" action="/" class="tc-device__wording">
+          <form method="post" action="/" class="tc-device__wording" data-tc-ajax>
               <?= form_fields() ?>
               <input type="hidden" name="action" value="device_refusal_transcript">
               <input type="hidden" name="id" value="<?= e((string) $d['id']) ?>">
@@ -345,7 +366,7 @@ $canEdit = Auth::can('devices');
       $people = array_filter((new ContactRepository())->all(), static fn(array $r): bool => (int) ($r['is_group'] ?? 0) !== 1);
       $named = count(array_filter($people, static fn(array $r): bool => (string) ($r['announce_clip'] ?? '') !== ''));
       ?>
-      <section class="tc-card">
+      <section id="device-announce" data-tc-ajax-region class="tc-card">
         <div class="tc-rule-row">
           <div class="tc-rule-row__icon tc-rule-row__icon--in"><i class="fa-solid fa-comment-dots" aria-hidden="true"></i></div>
           <div class="tc-grow">
@@ -356,7 +377,7 @@ $canEdit = Auth::can('devices');
             </div>
           </div>
           <?php if ($canEdit): ?>
-            <form method="post" action="/">
+            <form method="post" action="/" data-tc-ajax>
               <?= form_fields() ?>
               <input type="hidden" name="action" value="device_toggle">
               <input type="hidden" name="id" value="<?= e($d['id']) ?>">
@@ -373,100 +394,6 @@ $canEdit = Auth::can('devices');
           </p>
         <?php endif; ?>
       </section>
-
-      <?php if ($d['type'] !== 'linphone' && $canEdit): ?>
-        <!-- Grandstream provisioning -->
-        <?php
-        $siblings = $d['type'] === 'ht802' && $d['mac'] !== ''
-            ? array_values(array_filter((new DeviceRepository())->findByMac($d['mac']), static fn(array $r): bool => (int) $r['id'] !== $d['id']))
-            : [];
-        ?>
-        <section class="tc-card">
-          <div class="tc-card__intro">
-            <h2 class="tc-card__title">Provisioning</h2>
-            <p class="tc-card__hint tc-card__hint--loose">
-              <?php if ($d['ata']): ?>
-                <?= $d['type'] === 'ht802' ? 'The corded phone in socket <b>' . (int) $d['port'] . '</b> of this HT802.' : 'The corded phone plugged into this HT801.' ?>
-                The adapter fetches its settings from twocans when it starts.
-              <?php else: ?>
-                The phone fetches its settings from twocans on boot and on reprovision.
-              <?php endif; ?>
-            </p>
-          </div>
-          <details class="tc-manual-setup">
-            <summary>How to set it up</summary>
-            <?php view('partials/grandstream_setup', ['d' => $d]); ?>
-          </details>
-          <form method="post" action="/" class="tc-stack tc-stack--tight tc-mt-14">
-            <?= form_fields() ?>
-            <input type="hidden" name="action" value="device_mac">
-            <input type="hidden" name="id" value="<?= e((string) $d['id']) ?>">
-            <label class="tc-label">MAC address
-              <input class="tc-input" type="text" name="mac" value="<?= e($d['mac']) ?>" placeholder="00:0B:82:C1:23:45" autocomplete="off">
-            </label>
-            <button class="tc-btn tc-btn--teal tc-device__save" type="submit">Save MAC</button>
-          </form>
-
-          <?php if ($d['type'] === 'ht802' && $d['mac'] !== ''): ?>
-            <div class="tc-card__intro tc-card__intro--sub">
-              <h3 class="tc-card__subtitle">The other socket</h3>
-            </div>
-            <?php if ($siblings !== []): ?>
-              <?php $sib = DeviceRepository::toView($siblings[0]); ?>
-              <a class="tc-btn tc-btn--ghost" href="<?= e(url(['screen' => 'phones', 'device' => $sib['id']])) ?>">
-                <i class="fa-solid fa-plug" aria-hidden="true"></i> Socket <?= (int) $sib['port'] ?>: <?= e($sib['name']) ?>
-              </a>
-            <?php else: ?>
-              <form method="post" action="/" class="tc-row" style="gap:8px">
-                <?= form_fields() ?>
-                <input type="hidden" name="action" value="device_add_socket">
-                <input type="hidden" name="id" value="<?= e((string) $d['id']) ?>">
-                <input class="tc-input tc-grow" type="text" name="name" placeholder="Kitchen Phone" aria-label="Name for the phone in the other socket" required>
-                <button class="tc-btn tc-btn--teal" type="submit">Add socket <?= $d['port'] === 1 ? 2 : 1 ?></button>
-              </form>
-              <p class="tc-card__hint">Plug a second corded phone in and give it a name — reboot the adapter afterwards.</p>
-            <?php endif; ?>
-          <?php endif; ?>
-        </section>
-      <?php endif; ?>
-
-      <?php if ($d['type'] === 'ghp621' && $canEdit): ?>
-        <!-- Hotkeys -->
-        <section class="tc-card">
-          <div class="tc-card__intro">
-            <h2 class="tc-card__title">Hotkeys</h2>
-            <p class="tc-card__hint">Pick who each key dials — press the key and it rings that person.</p>
-          </div>
-          <form method="post" action="/" class="tc-stack tc-stack--tight">
-            <?= form_fields() ?>
-            <input type="hidden" name="action" value="hotkey_set">
-            <input type="hidden" name="id" value="<?= e((string) $d['id']) ?>">
-            <?php
-            $contactRepo = new ContactRepository();
-            $assigned = (new DeviceHotkeyRepository())->forDevice((int) $d['id']);
-            $services = PjsipConfig::testNumbers();
-            foreach (GrandstreamProvisioning::HOTKEY_PCODES as $index => $code):
-            ?>
-              <label class="tc-label">Key <?= (int) $index ?>
-                <select class="tc-input" name="hotkey[<?= (int) $index ?>]">
-                  <option value="">— none —</option>
-                  <?php foreach ($contactRepo->all() as $c): if (($c['number_e164'] ?? '') === '') continue; ?>
-                    <option value="<?= e($c['number_e164']) ?>" <?= ($assigned[$index] ?? '') === $c['number_e164'] ? 'selected' : '' ?>>
-                      <?= e($c['name']) ?> — <?= e($c['number_e164']) ?>
-                    </option>
-                  <?php endforeach; ?>
-                  <?php foreach ($services as $number => $service): ?>
-                    <option value="<?= e($number) ?>" <?= ($assigned[$index] ?? '') === $number ? 'selected' : '' ?>>
-                      <?= e($service['label']) ?> — <?= e($number) ?>
-                    </option>
-                  <?php endforeach; ?>
-                </select>
-              </label>
-            <?php endforeach; ?>
-            <button class="tc-btn tc-btn--teal tc-device__save" type="submit">Save hotkeys</button>
-          </form>
-        </section>
-      <?php endif; ?>
 
       <?php if ($canEdit && !$d['adult']): ?>
         <!-- Adult mode: switched on only through the confirmation below -->
@@ -507,23 +434,95 @@ $canEdit = Auth::can('devices');
           </form>
         </dialog>
       <?php endif; ?>
-
     </div>
+  </div>
 
-    <!-- Right: what a parent looks up -->
+  <?php elseif ($tab === 'keys'): ?>
+  <div class="tc-device__grid tc-device__grid--keys">
     <div class="tc-stack">
-      <?php if ($d['available'] && $d['type'] !== 'linphone'): ?>
-        <section class="tc-card">
+      <?php if ($d['desk'] && $canEdit): ?>
+        <!-- Hotkeys -->
+        <section id="device-hotkeys" data-tc-ajax-region class="tc-card">
           <div class="tc-card__intro">
-            <h2 class="tc-card__title">Its account</h2>
-            <p class="tc-card__hint">twocans hands these over by itself — only needed if you set the <?= $d['ata'] ? 'adapter' : 'phone' ?> up by hand.</p>
+            <h2 class="tc-card__title">Hotkeys</h2>
+            <p class="tc-card__hint">Pick who each of its <?= $d['keys'] === 3 ? 'three' : 'six' ?> hotkeys dials — press the key and it rings that person.
+              Saving sends them straight to the phone. Keys set on the phone itself are replaced by these.</p>
           </div>
-          <details class="tc-manual-setup">
-            <summary>Show the details</summary>
-            <?php view('partials/sip_credentials', ['d' => $d]); ?>
-          </details>
+          <form method="post" action="/" class="tc-stack tc-stack--tight" data-tc-ajax>
+            <?= form_fields() ?>
+            <input type="hidden" name="action" value="hotkey_set">
+            <input type="hidden" name="id" value="<?= e((string) $d['id']) ?>">
+            <?php
+            $hotkeyRepo = new DeviceHotkeyRepository();
+            $assigned = $hotkeyRepo->forDevice((int) $d['id']);
+            $keyLabels = $hotkeyRepo->labels();
+            // People by their number, groups by their speed dial; a group
+            // without one can't be dialled yet, so it's shown but can't be picked.
+            $callable = $hotkeyRepo->contactTargets();
+            $people = array_filter($callable, static fn(array $c): bool => (int) $c['is_group'] === 0);
+            $groups = array_filter($callable, static fn(array $c): bool => (int) $c['is_group'] === 1);
+            $unreachable = array_filter((new ContactRepository())->groups(), static fn(array $g): bool => (string) ($g['speed_dial'] ?? '') === '');
+            $services = PjsipConfig::testNumbers();
+            // What the phone shows above a key: who it rings, or the number itself.
+            $keyLabel = static fn(string $number): string => $number === '' ? '' : ($keyLabels[$number] ?? $number);
+            ?>
+            <?php $phoneKeys = array_slice(GrandstreamProvisioning::HOTKEY_PCODES, 0, $d['keys'], true); ?>
+            <!-- The phone's face, in its own colour: keys 1–3 in a row, and 4–6 under them on a GHP62x -->
+            <div class="tc-gsface tc-gsface--<?= e((string) $d['body']) ?>" data-tc-gsface aria-hidden="true">
+              <?php foreach ($phoneKeys as $index => $code): ?>
+                <div class="tc-gsface__key<?= ($assigned[$index] ?? '') === '' ? ' is-empty' : '' ?>" data-tc-gsface-key="<?= (int) $index ?>">
+                  <span class="tc-gsface__label"><?= e($keyLabel($assigned[$index] ?? '')) ?: (int) $index ?></span>
+                  <span class="tc-gsface__button"></span>
+                </div>
+              <?php endforeach; ?>
+            </div>
+            <div class="tc-gskeys">
+              <?php foreach ($phoneKeys as $index => $code): ?>
+                <label class="tc-label">Key <?= (int) $index ?>
+                  <select class="tc-input" name="hotkey[<?= (int) $index ?>]" data-tc-gskey="<?= (int) $index ?>">
+                    <option value="" data-label="">— none —</option>
+                    <?php foreach ($people as $target => $c): $target = (string) $target; ?>
+                      <option value="<?= e($target) ?>" data-label="<?= e($keyLabel($target)) ?>" <?= ($assigned[$index] ?? '') === $target ? 'selected' : '' ?>>
+                        <?= e($c['name'] !== '' ? $c['name'] : $target) ?>
+                      </option>
+                    <?php endforeach; ?>
+                    <?php if ($groups !== [] || $unreachable !== []): ?>
+                      <optgroup label="Groups">
+                        <?php foreach ($groups as $target => $c): $target = (string) $target; ?>
+                          <option value="<?= e($target) ?>" data-label="<?= e($keyLabel($target)) ?>" <?= ($assigned[$index] ?? '') === $target ? 'selected' : '' ?>>
+                            <?= e($c['name']) ?>
+                          </option>
+                        <?php endforeach; ?>
+                        <?php foreach ($unreachable as $g): ?>
+                          <option value="" disabled><?= e($g['name']) ?> — give it a speed dial first</option>
+                        <?php endforeach; ?>
+                      </optgroup>
+                    <?php endif; ?>
+                    <optgroup label="twocans">
+                      <?php foreach ($services as $number => $service): ?>
+                        <option value="<?= e($number) ?>" data-label="<?= e($keyLabel((string) $number)) ?>" <?= ($assigned[$index] ?? '') === (string) $number ? 'selected' : '' ?>>
+                          <?= e($service['label']) ?>
+                        </option>
+                      <?php endforeach; ?>
+                    </optgroup>
+                  </select>
+                </label>
+              <?php endforeach; ?>
+            </div>
+            <button class="tc-btn tc-btn--teal tc-device__save" type="submit">Save hotkeys</button>
+          </form>
         </section>
       <?php endif; ?>
+    </div>
+
+    <div class="tc-stack">
+      <?php view('partials/device_keys_side', ['d' => $d]); ?>
+    </div>
+  </div>
+
+  <?php else: ?>
+  <div class="tc-device__grid">
+    <div class="tc-stack">
       <?php if ($d['available']): ?>
         <?php if ($d['type'] === 'linphone'): ?>
         <section class="tc-card">
@@ -539,7 +538,104 @@ $canEdit = Auth::can('devices');
           </details>
         </section>
         <?php endif; ?>
+      <?php endif; ?>
+      <?php if ($d['family'] !== 'app' && $canEdit): ?>
+        <!-- Grandstream provisioning -->
+        <?php
+        $siblings = $d['type'] === 'ht802' && $d['mac'] !== ''
+            ? array_values(array_filter((new DeviceRepository())->findByMac($d['mac']), static fn(array $r): bool => (int) $r['id'] !== $d['id']))
+            : [];
+        ?>
+        <section class="tc-card" id="device-provisioning" data-tc-ajax-region>
+          <div class="tc-card__intro">
+            <h2 class="tc-card__title">Provisioning</h2>
+            <p class="tc-card__hint tc-card__hint--loose">
+              <?php if ($d['ata']): ?>
+                <?= $d['type'] === 'ht802' ? 'The corded phone in socket <b>' . (int) $d['port'] . '</b> of this HT802.' : 'The corded phone plugged into this HT801.' ?>
+                The adapter fetches its settings from twocans when it starts.
+              <?php else: ?>
+                The phone fetches its settings from twocans when it starts, or when sent them from here.
+              <?php endif; ?>
+            </p>
+          </div>
+          <div class="tc-device__fetched">
+            <?php if ($d['settingsFetched'] !== null): ?>
+              <i class="fa-solid fa-circle-check" aria-hidden="true"></i>
+              Settings fetched <b><?= e($d['settingsFetched']) ?></b>
+            <?php else: ?>
+              <i class="fa-solid fa-hourglass-half" aria-hidden="true"></i>
+              It hasn't fetched its settings yet — follow the steps below, then restart it.
+            <?php endif; ?>
+          </div>
+          <?php if ($d['online']): ?>
+            <div class="tc-row tc-row--wrap tc-device__remote">
+              <form method="post" action="/" data-tc-ajax>
+                <?= form_fields() ?>
+                <input type="hidden" name="action" value="device_resync">
+                <input type="hidden" name="id" value="<?= e((string) $d['id']) ?>">
+                <button class="tc-btn tc-btn--teal" type="submit"><i class="fa-solid fa-rotate" aria-hidden="true"></i> Send its settings now</button>
+              </form>
+              <form method="post" action="/" data-tc-ajax>
+                <?= form_fields() ?>
+                <input type="hidden" name="action" value="device_reboot">
+                <input type="hidden" name="id" value="<?= e((string) $d['id']) ?>">
+                <button class="tc-btn tc-btn--ghost" type="submit"
+                        data-tc-confirm="Restart <?= e($d['name']) ?>? A call on it now would be cut off."><i class="fa-solid fa-power-off" aria-hidden="true"></i> Restart it</button>
+              </form>
+            </div>
+          <?php endif; ?>
+          <details class="tc-manual-setup">
+            <summary>How to set it up</summary>
+            <?php view('partials/grandstream_setup', ['d' => $d]); ?>
+          </details>
+          <form method="post" action="/" class="tc-stack tc-stack--tight tc-mt-14" data-tc-ajax>
+            <?= form_fields() ?>
+            <input type="hidden" name="action" value="device_mac">
+            <input type="hidden" name="id" value="<?= e((string) $d['id']) ?>">
+            <label class="tc-label">MAC address
+              <input class="tc-input" type="text" name="mac" value="<?= e($d['mac']) ?>" placeholder="00:0B:82:C1:23:45" autocomplete="off">
+            </label>
+            <button class="tc-btn tc-btn--teal tc-device__save" type="submit">Save MAC</button>
+          </form>
 
+          <?php if ($d['type'] === 'ht802' && $d['mac'] !== ''): ?>
+            <div class="tc-card__intro tc-card__intro--sub">
+              <h3 class="tc-card__subtitle">The other socket</h3>
+            </div>
+            <?php if ($siblings !== []): ?>
+              <?php $sib = DeviceRepository::toView($siblings[0]); ?>
+              <a class="tc-btn tc-btn--ghost" href="<?= e(url(['screen' => 'phones', 'device' => $sib['id']])) ?>">
+                <i class="fa-solid fa-plug" aria-hidden="true"></i> Socket <?= (int) $sib['port'] ?>: <?= e($sib['name']) ?>
+              </a>
+            <?php else: ?>
+              <form method="post" action="/" class="tc-row" style="gap:8px">
+                <?= form_fields() ?>
+                <input type="hidden" name="action" value="device_add_socket">
+                <input type="hidden" name="id" value="<?= e((string) $d['id']) ?>">
+                <input class="tc-input tc-grow" type="text" name="name" placeholder="Kitchen Phone" aria-label="Name for the phone in the other socket" required>
+                <button class="tc-btn tc-btn--teal" type="submit">Add socket <?= $d['port'] === 1 ? 2 : 1 ?></button>
+              </form>
+              <p class="tc-card__hint">Plug a second corded phone in and give it a name — reboot the adapter afterwards.</p>
+            <?php endif; ?>
+          <?php endif; ?>
+        </section>
+      <?php endif; ?>
+    </div>
+
+    <div class="tc-stack">
+      <?php if ($d['available'] && $d['type'] !== 'linphone'): ?>
+        <section class="tc-card">
+          <div class="tc-card__intro">
+            <h2 class="tc-card__title">Its account</h2>
+            <p class="tc-card__hint">twocans hands these over by itself — only needed if you set the <?= $d['ata'] ? 'adapter' : 'phone' ?> up by hand.</p>
+          </div>
+          <details class="tc-manual-setup">
+            <summary>Show the details</summary>
+            <?php view('partials/sip_credentials', ['d' => $d]); ?>
+          </details>
+        </section>
+      <?php endif; ?>
+      <?php if ($d['available']): ?>
         <section class="tc-card">
           <div class="tc-card__intro">
             <h2 class="tc-card__title">Numbers to dial</h2>
@@ -578,6 +674,6 @@ $canEdit = Auth::can('devices');
         </form>
       <?php endif; ?>
     </div>
-
   </div>
+  <?php endif; ?>
 </div>

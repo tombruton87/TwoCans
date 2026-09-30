@@ -157,11 +157,18 @@ if ($gsConfigMatch || $phonebookMatch) {
 
     $found = (new DeviceRepository())->findByMac(strtoupper($gsMac[1]));
     if ($found === []) {
+        // Not added yet: remember it, so adding a phone can offer it.
+        (new FoundPhones())->sawFetch($gsMac[1], (string) ($_SERVER['REMOTE_ADDR'] ?? ''), (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''));
         http_response_code(404);
         header('Content-Type: text/plain; charset=utf-8');
         exit("twocans: no phone with that MAC\n");
     }
     $device = $found[0];
+    // Every phone behind this MAC — both of an HT802's sockets — has just
+    // been handed its settings.
+    foreach ($found as $row) {
+        (new DeviceRepository())->touchSettingsFetched((int) $row['id']);
+    }
 
     // An adapter: one file carries every socket's account.
     if (in_array($device['type'], ['ht801', 'ht802'], true)) {
@@ -173,8 +180,15 @@ if ($gsConfigMatch || $phonebookMatch) {
         exit;
     }
 
-    $hotkeys = (new DeviceHotkeyRepository())->forDevice((int) $device['id']);
-    echo (new GrandstreamProvisioning())->xml(DeviceRepository::toView($device), $hotkeys);
+    // Fetched from home, it can be paged by multicast from now on; from
+    // anywhere else, it can't hear those, so it's paged with a call.
+    (new DeviceRepository())->setPagingMulticast((int) $device['id'], Pager::onHomeNetwork((string) ($_SERVER['REMOTE_ADDR'] ?? '')));
+    $hotkeyRepo = new DeviceHotkeyRepository();
+    echo (new GrandstreamProvisioning())->xml(
+        DeviceRepository::toView($device),
+        $hotkeyRepo->forDevice((int) $device['id']),
+        $hotkeyRepo->labels()
+    );
     exit;
 }
 
@@ -224,6 +238,28 @@ if (isset($_GET['photo'])) {
     // Filenames are random and never reused, so this can cache hard.
     header('Cache-Control: private, max-age=604800');
     readfile($file);
+    exit;
+}
+
+// A desk phone's faceplate, to print: see Faceplate.
+if (isset($_GET['faceplate'])) {
+    $device = Auth::can('devices') ? (new DeviceRepository())->find((int) $_GET['faceplate']) : null;
+    if ($device === null || (DeviceRepository::TYPES[$device['type']]['faceplate'] ?? null) === null) {
+        http_response_code(404);
+        exit('Not found');
+    }
+    $device = DeviceRepository::toView($device);
+    $title = trim((string) ($_GET['title'] ?? ''));
+    view('faceplate', [
+        'device' => $device,
+        'keys' => Faceplate::keys((new DeviceHotkeyRepository())->forDevice((int) $device['id']), $device['keys']),
+        'options' => [
+            'title' => mb_substr($title !== '' ? $title : (string) $device['name'], 0, 40),
+            'theme' => ($_GET['theme'] ?? '') === 'white' ? 'white' : 'twocans',
+            'cut' => ($_GET['cut'] ?? '') === 'split' ? 'split' : 'slot',
+            'photos' => ($_GET['photos'] ?? '1') !== '0',
+        ],
+    ]);
     exit;
 }
 

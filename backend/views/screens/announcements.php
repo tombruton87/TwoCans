@@ -38,7 +38,7 @@ $base = ($https ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localho
     $hook = $base . '/hook/announce/' . $a['token'];
     $toSome = $a['devices'] !== null;
     ?>
-    <details class="tc-card tc-announce__card" id="announce-<?= (int) $a['id'] ?>"<?= $open ? ' open' : '' ?>>
+    <details class="tc-card tc-announce__card" id="announce-<?= (int) $a['id'] ?>" data-tc-ajax-region<?= $open ? ' open' : '' ?>>
       <summary class="tc-announce__head">
         <span class="tc-announce__emoji"><?= icon_html($a['emoji']) ?></span>
         <span class="tc-grow">
@@ -53,7 +53,7 @@ $base = ($https ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localho
       </summary>
 
       <?php if ($canEdit): ?>
-        <form method="post" action="/" class="tc-announce__form">
+        <form method="post" action="/" class="tc-announce__form" data-tc-ajax>
           <?= form_fields() ?>
           <input type="hidden" name="action" value="announce_save">
           <input type="hidden" name="id" value="<?= (int) $a['id'] ?>">
@@ -129,7 +129,7 @@ $base = ($https ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localho
         </div>
         <?php if ($a['audio'] !== ''): ?>
           <div class="tc-vm-row tc-vm-row--bare">
-            <audio data-audio preload="none" src="<?= e(url(['download' => 'announcement', 'id' => $a['id']])) ?>"></audio>
+            <audio data-audio preload="none" src="<?= e(url(['download' => 'announcement', 'id' => $a['id'], 'v' => substr($a['audio'], 0, 8)])) ?>"></audio>
             <button class="tc-vm-play" type="button" data-play aria-label="Play this message">▶</button>
             <div class="tc-grow">
               <div class="tc-vm-row__name">What the phones will hear</div>
@@ -137,7 +137,7 @@ $base = ($https ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localho
             </div>
           </div>
         <?php endif; ?>
-        <form method="post" action="/" enctype="multipart/form-data" class="tc-row tc-row--wrap">
+        <form method="post" action="/" enctype="multipart/form-data" class="tc-row tc-row--wrap" data-tc-ajax>
           <?= form_fields() ?>
           <input type="hidden" name="action" value="announce_audio">
           <input type="hidden" name="id" value="<?= (int) $a['id'] ?>">
