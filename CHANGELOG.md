@@ -7,6 +7,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-09-30
+
+Grandstream desk phones, properly: all four models, hotkeys that work,
+printable faceplates, changes sent straight to the phone, and announcements
+that play through the speaker instead of as a call.
+
+### Added
+
+- **More desk phones.** The GHP610 and GHP611 (three hotkeys) and the GHP620
+  (the white GHP621) alongside the GHP621. They share the GHP621's settings,
+  so should work the same — but only the GHP621 has been tried on a real phone.
+- **Adding a phone goes by what it is** — an app, a desk phone or an adapter,
+  then the model, each drawn as it looks. **Look for phones** scans your
+  network for Grandstreams that aren't added yet and knows each one's model;
+  pick one and its MAC is filled in. One that asks twocans for its settings
+  before it's added is offered too.
+- **A phone's page is in tabs:** Rules, Keys & faceplate (desk phones), Setup.
+  A phone that hasn't signed in yet opens on Setup.
+- **Changes reach a Grandstream straight away.** Saving hotkeys, renaming it,
+  or changing the name of someone on one of its keys sends it its settings —
+  no restart. Its Setup tab can send them again, or restart it, and says when
+  it last fetched them.
+- **Hotkeys, laid out like the phone,** with a preview of its face, for a
+  person, a group (by its speed dial) or a twocans number. A key follows a
+  person or group when their number or speed dial changes. After you save
+  someone who isn't on a key, twocans offers a free one; the phones list shows
+  each desk phone's keys.
+- **Printable faceplates.** A GHP62x's is a card for behind its clear cover; a
+  GHP61x's a 35 × 8.5 mm label for above its three keys. Each shows the photo
+  and name of whoever a key rings, in twocans colours or plain white, and is
+  previewed beside the hotkeys as they're picked.
+- **Announcements play through a desk phone's speaker,** with no call to
+  answer and no microphone open — the way the phones page natively. A new
+  `pager` service sends them as multicast on the house network (it opens no
+  ports). A desk phone that has fetched its settings at home gets them this
+  way; phone apps, and desk phones away from home, still get a call.
+  `./twocans status` and System show whether the pager is running.
+- **Your own hold music:** add songs under Greetings → Someone put on hold;
+  whoever a phone puts on hold hears them, one after another.
+- **A proper welcome for test calls** — "Congratulations! Your new phone is
+  now on the twocans system…" — instead of Asterisk's stock demo, until a
+  household records its own greeting. Built-in sounds live in
+  `storage/defaults/`.
+- **A recording that's the same as another's** (another announcement, or
+  another phone's message) is saved, but says so: it's usually the wrong file
+  picked.
+
+### Changed
+
+- **Saving doesn't reload the page.** Announcements, a phone's calls, hours,
+  limits, message, hotkeys and provisioning, and the contact editor, save in
+  place and say so, refreshing just what changed.
+- **Getting started leaves the menu** once every step is done, and its page
+  can hide it early. System brings it back.
+
+### Fixed
+
+- **A GHP621's hotkeys reach the phone.** They were written to settings the
+  phone doesn't have, so it never saw them.
+- **Music on hold.** A phone putting someone on hold left them in silence.
+  The installer now fetches Asterisk's Opsound set (credited in NOTICE), and
+  `./twocans update` adds it to an existing install.
+
 ## [0.1.4] - 2026-09-30
 
 ### Changed
@@ -378,7 +441,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **Numbers the kids tried** log on the call log, one card per number with the
   same two buttons. Both leave out anyone who has since been added as a contact.
 
-[Unreleased]: https://github.com/tombruton87/TwoCans/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/tombruton87/TwoCans/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/tombruton87/TwoCans/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/tombruton87/TwoCans/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/tombruton87/TwoCans/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/tombruton87/TwoCans/compare/v0.1.1...v0.1.2
