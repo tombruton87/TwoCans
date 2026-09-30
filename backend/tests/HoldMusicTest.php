@@ -30,6 +30,8 @@ return [
     }),
     test('with a track, the twocans class plays it and every phone asks for it', function () use ($fresh) {
         $fresh(function (HoldMusic $m) {
+            // A phone of its own: a fresh database (as in CI) has none to ask.
+            (new DeviceRepository())->create('Test hall', 'ghp621', 'udp');
             $m->add('0123456789abcdef0123456789abcdef.wav', 'Test', 60);
             assertTrue($m->hasOwn());
             assertContains('[twocans]', $m->render());
