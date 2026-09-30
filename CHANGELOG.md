@@ -7,6 +7,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-09-30
+
+Voicemail that goes where it should, announcements on a timetable, a choice of
+which number calls go out from, and recording straight into the browser.
+
+### Added
+
+- **Each number's messages go to the right mailbox.** A number that rings one
+  phone takes messages in that phone's mailbox — so the child hears them by
+  dialling 700 — and any other number in the house's. Either can be changed
+  on the Phone line screen ("messages go to").
+- **Move a message to another mailbox** from the Voicemail screen: out of the
+  house's into a phone's, say. It keeps its transcript and arrives unheard, so
+  the phone's message light comes on. Each message says which mailbox it's in.
+- **Rings before voicemail, for each phone** — 2 to 10 rings, on the phone's
+  Rules tab. A call ringing several phones goes to voicemail once the longest
+  of them stops. Five rings (30 seconds), as before, until it's set.
+- **A speed dial for messages** — say 1 — as well as 700, set on the
+  Voicemail screen. It's checked against every other number a child dials,
+  shows in each phone's numbers, and can go on a hotkey.
+- **Announcements that play by themselves** at a set time on chosen days —
+  "bath time in ten minutes" at 18:50 on school nights. Set under the
+  announcement's "Play it by itself".
+- **Choose which number calls go out from.** A line with more than one
+  number has a "Calls out from" card: the line's number for every phone, and
+  each phone's own. By itself a phone calls out from the number pointed at
+  it, if it has one, else the line's; the phone's page says which.
+- **Changes for a phone that's off wait for it.** Saving hotkeys (or anything
+  else a Grandstream is sent) while it's offline says so, and it's sent them
+  the moment it's back; its Setup tab shows "Changes waiting" until then.
+- **Record in the browser.** Every audio upload — announcements, greetings,
+  a phone's message, a person's name clip, jokes, hold music — has a Record
+  button beside "Choose a file". It needs twocans' secure (https) address.
+
+### Changed
+
+- **Development runs the real stack.** `make dev` is `compose.yaml` with
+  `compose.dev.yml` on top: the web image built here, `./backend` mounted
+  live. The old `docker-compose-local.yml` (and the separate dev PHP and nginx
+  images) are gone — it had drifted, and under its own project name would have
+  started an empty database. `./install.sh` and `./twocans` recognise a
+  development setup and keep it one.
+
+### Fixed
+
+- **Short voicemails are kept.** Asterisk threw away any message under 4
+  seconds of speech — "hi, it's Tom, call me back" is about 3. The minimum is
+  now 1 second; a caller who says nothing still leaves nothing, as the silence
+  is trimmed off before it's measured.
+- **The call log** leaves out announcements and test calls (the Test call
+  button, and dialling 600 or 601), and doesn't count them in its totals. A
+  short number nobody answers to reads "Dialled 123 · not a phone number".
+- **"Numbers the kids tried"** no longer lists extensions, twocans' own
+  numbers or short numbers like a blocked speed dial: only numbers a grown-up
+  could add. They're still blocked, and still in the call log.
+- **Phone-width fixes:** the Phone line screen no longer runs off the right
+  edge; a phone's header gives its name the row, with its status and Test call
+  underneath; number pickers show whole numbers; long buttons wrap.
+- `./twocans status` counts only the family's calls, like the call log.
+
 ## [0.1.5] - 2026-09-30
 
 Grandstream desk phones, properly: all four models, hotkeys that work,
@@ -441,7 +501,8 @@ that play through the speaker instead of as a call.
   **Numbers the kids tried** log on the call log, one card per number with the
   same two buttons. Both leave out anyone who has since been added as a contact.
 
-[Unreleased]: https://github.com/tombruton87/TwoCans/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/tombruton87/TwoCans/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/tombruton87/TwoCans/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/tombruton87/TwoCans/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/tombruton87/TwoCans/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/tombruton87/TwoCans/compare/v0.1.2...v0.1.3
