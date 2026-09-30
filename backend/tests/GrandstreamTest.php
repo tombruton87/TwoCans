@@ -33,6 +33,17 @@ return [
         assertContains('<P2441>700</P2441>', $xml);
         assertContains('<P2442></P2442>', $xml);
     }),
+    test('the file is the P-value format (config version 1), with the MAC', function () use ($phone) {
+        // Version 2 means named settings; a phone given P-values under it
+        // fetches the file and quietly ignores every one.
+        $gs = (new GrandstreamProvisioning())->xml($phone('Hall', 'hall-1') + ['mac' => 'C0:74:AD:E5:0E:04'], []);
+        assertContains('<config version="1">', $gs);
+        assertNotContains('<config version="2">', $gs);
+        assertContains('<mac>c074ade50e04</mac>', $gs);
+        $ata = (new GrandstreamProvisioning())->ataXml('ht801', [1 => $phone('Hall', 'hall-1') + ['mac' => 'C074ADE50E04']]);
+        assertContains('<config version="1">', $ata);
+        assertContains('<mac>c074ade50e04</mac>', $ata);
+    }),
     test('the SIP server carries the port, so a box not on 5060 still works', function () {
         assertSame(PjsipConfig::domain() . ':' . PjsipConfig::port('udp'), GrandstreamProvisioning::server());
     }),

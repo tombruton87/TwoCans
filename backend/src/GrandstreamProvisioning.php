@@ -81,11 +81,20 @@ final class GrandstreamProvisioning
         return '    <' . $code . '>' . htmlspecialchars($value, ENT_XML1 | ENT_QUOTES, 'UTF-8') . '</' . $code . ">\n";
     }
 
-    private static function open(): string
+    /**
+     * The file's head. <config version="1"> is the P-value format this file is
+     * written in; version 2 means named settings (<item name="...">), and a
+     * phone given P-values under it fetches the file and ignores all of it.
+     * The MAC is optional, but Grandstream's own files carry it.
+     */
+    private static function open(string $mac = ''): string
     {
+        $mac = GrandstreamProvisioning::normalizeMac($mac);
+
         return '<?xml version="1.0" encoding="UTF-8"?>' . "\n"
             . "<gs_provision version=\"1\">\n"
-            . "  <config version=\"2\">\n";
+            . ($mac !== '' ? '  <mac>' . strtolower($mac) . "</mac>\n" : '')
+            . "  <config version=\"1\">\n";
     }
 
     private static function close(): string
@@ -103,7 +112,8 @@ final class GrandstreamProvisioning
     public function ataXml(string $type, array $bySocket): string
     {
         $sockets = $type === 'ht802' ? [1, 2] : [1];
-        $xml = self::open();
+        $first = $bySocket[1] ?? $bySocket[2] ?? [];
+        $xml = self::open((string) ($first['mac'] ?? ''));
 
         foreach ($sockets as $socket) {
             $codes = self::ATA_PCODES[$socket];
@@ -142,7 +152,7 @@ final class GrandstreamProvisioning
     {
         $p = static fn(string $code, string $value): string => trim(self::p($code, $value));
 
-        $xml = self::open();
+        $xml = self::open((string) ($device['mac'] ?? ''));
 
         // SIP account 1.
         $xml .= '    ' . $p('P271', '1') . "\n";                          // account active

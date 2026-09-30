@@ -28,6 +28,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Grandstream phones and adapters fetched their settings and ignored them.**
+  The file was written as numbered settings (`<P271>`…) but labelled as
+  Grandstream's other, named format (`<config version="2">`), so a GHP621 or an
+  HT801/HT802 never signed in. It's labelled version 1 now, and carries the MAC.
+  The setup steps also say to leave `http://` out of the Config Server Path (the
+  phone refuses it) and to fill in the Firmware Server Path when it's asked for.
+
 - The install log used `sed -u` and `grep --line-buffered`, which BusyBox (as
   on Alpine) lacks, and stopped the installer after its first few lines there.
   It now uses `awk`, which behaves the same everywhere.
