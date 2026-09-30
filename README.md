@@ -1,31 +1,51 @@
-# TwoCans
+# twocans
 
-A parents-only web admin for a self-hosted kids' phone line. Kids use an ordinary
-handset plugged into a Grandstream ATA; you control **who** can call, **when**,
-and review **what happened** — every call recorded and transcribed on your own
-server.
+**A tiny phone company, run by you.** A self-hosted phone line for kids: they call
+from the twocans app on an old phone or tablet, a desk phone, or an ordinary corded
+phone plugged into an adapter — and you decide **who** they can call, **when**, and
+see **what happened**, with every call recorded and transcribed on your own machine.
 
-> Full documentation lives in the [`docs/`](docs/) folder (a hosted site is on its way).
-
-## Status
-
-The phone line works. Guardians, phones, contacts, call log, recordings,
-transcription, voicemail and live listen-in are real, in MariaDB and Asterisk.
-
-## Install
-
-You need a Linux machine your phones can reach — a Raspberry Pi is ideal. The
-installer sets up the rest, Docker included if it isn't there (asking first).
-
-### Easiest — one line
+## Install in one line
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/tombruton87/TwoCans/main/get.sh | bash
 ```
 
+On any Linux machine your phones can reach — a Raspberry Pi is ideal. It installs
+what's missing (Docker included, asking first), asks a few questions, and starts
+twocans. [Read the script first](get.sh) if you like; it's short.
+
+![The installer](docs/screenshots/installer.png)
+
+## What it looks like
+
+![The dashboard](docs/screenshots/dashboard.png)
+
+| | |
+|---|---|
+| ![Getting started](docs/screenshots/getting-started.png) **Getting started** — a checklist after you sign up | ![The call log](docs/screenshots/calllog.png) **Call log** — every call, with its transcript |
+| ![People](docs/screenshots/people.png) **People** — who can call, and when | ![A phone](docs/screenshots/phone.png) **Phones** — each with its own hours and limits |
+| ![Phones](docs/screenshots/phones.png) **The phones on the line** | ![Voicemail](docs/screenshots/voicemail.png) **Voicemail**, transcribed |
+
+On a phone, it's an app you can add to your home screen:
+
+<p>
+  <img src="docs/screenshots/dashboard-phone.png" alt="The dashboard on a phone" width="260">
+  &nbsp;
+  <img src="docs/screenshots/calllog-phone.png" alt="The call log on a phone" width="260">
+</p>
+
+<sub>Screenshots from a demo install — the family, numbers and calls are made up.</sub>
+
+> Full documentation lives in the [`docs/`](docs/) folder.
+
+## Install
+
+### The one-liner, in more detail
+
 It asks where to put twocans (`~/twocans` unless you say), installs git if it's
 missing, fetches twocans and runs its installer. Run it again later and it updates
-instead. [Read it first](get.sh) if you like — it's short. Or do the same by hand:
+instead. Or do the same by hand:
 
 ```bash
 git clone https://github.com/tombruton87/TwoCans.git twocans && cd twocans

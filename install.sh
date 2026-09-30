@@ -133,8 +133,17 @@ if mkdir -p storage/reports 2>/dev/null; then
   if : > "$INSTALL_LOG" 2>/dev/null; then
     chmod 600 "$INSTALL_LOG"
     { echo "twocans install.sh $* — $(date '+%Y-%m-%d %H:%M %Z') — twocans $(cat backend/VERSION 2>/dev/null)"; echo; } >> "$INSTALL_LOG"
-    exec > >(tee >(sed -u -e 's/\x1b\[[0-9;]*[A-Za-z]//g' -e 's/\r/\n/g' \
-      | grep --line-buffered -v '^[[:space:]]*[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]' >> "$INSTALL_LOG")) 2>&1
+    # awk rather than sed -u / grep --line-buffered, which BusyBox (Alpine)
+    # lacks. The spinner frames are matched whole: some awks see bytes, not
+    # characters, and a class of them would also hide lines starting with ✓.
+    exec > >(tee >(awk '{
+        gsub(/\033\[[0-9;]*[A-Za-z]/, "")
+        n = split($0, part, "\r")
+        for (i = 1; i <= n; i++)
+          if (part[i] != "" || n == 1)
+            if (part[i] !~ /^[[:space:]]*(⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇|⠏)/) print part[i]
+        fflush()
+      }' >> "$INSTALL_LOG")) 2>&1
   else
     INSTALL_LOG=""
   fi

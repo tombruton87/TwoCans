@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The README leads with the one-line install, and shows the installer and the
+  app — screenshots from a demo install with a made-up family.
+
 ### Added
 
 - **Images for ARM (a Raspberry Pi)** as well as Intel/AMD: twocans' own web and
@@ -20,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   hand for an existing tag.
 - **Checks on every push and pull request**: the scripts parse, and the whole
   test suite runs in the web image against a fresh MariaDB.
+
+### Fixed
+
+- The install log used `sed -u` and `grep --line-buffered`, which BusyBox (as
+  on Alpine) lacks, and stopped the installer after its first few lines there.
+  It now uses `awk`, which behaves the same everywhere.
 
 ## [0.1.3] - 2026-09-28
 
