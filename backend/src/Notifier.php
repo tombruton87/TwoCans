@@ -211,7 +211,7 @@ final class Notifier
             "SELECT d.name, COUNT(*) AS calls, COALESCE(SUM(c.billsec), 0) AS secs,
                     SUM(c.status = 'blocked') AS blocked
                FROM calls c JOIN devices d ON d.id = c.device_id
-              WHERE c.started_at >= ?
+              WHERE c.started_at >= ? AND " . CallRepository::shownSql('c') . "
               GROUP BY d.id, d.name ORDER BY d.name"
         );
         $st->execute([$since]);

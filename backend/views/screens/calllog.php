@@ -202,7 +202,7 @@ $pageUrl = static fn(int $n): string => url([
           <div class="tc-grow">
             <div class="tc-call-row__name"><?= highlight($c['name'], $term) ?></div>
             <div class="tc-call-row__meta">
-              <?= highlight($c['number'], $term) ?> · <?= e($c['date']) ?> <?= e($c['time']) ?>
+              <?= $c['misdial'] ? 'not a phone number' : highlight($c['number'], $term) ?> · <?= e($c['date']) ?> <?= e($c['time']) ?>
               <?php $on = $showLine && $c['dir'] === 'in' ? TrunkRepository::lineNumberFor($c['dialled'], $lineNumbers) : null; ?>
               <?php if ($on !== null): ?>
                 · <span class="tc-call-row__line">on <?= e($on) ?></span>

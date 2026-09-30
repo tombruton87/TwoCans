@@ -179,7 +179,7 @@ $slot = static function (string $key) use ($greetings, $canEdit): void {
         <label class="tc-btn tc-btn--ghost tc-audio-file">
           <span data-tc-filename><?= $tracks === [] ? 'Add a song' : 'Add another' ?></span>
           <input type="file" name="track" accept="audio/*,.mp3,.m4a,.wav,.ogg,.opus,.flac,.aac"
-                 data-tc-audiofile data-tc-autosave required>
+                 data-tc-audiofile data-tc-rec-max="600" data-tc-autosave required>
         </label>
         <noscript><button class="tc-btn tc-btn--teal" type="submit">Add it</button></noscript>
       </form>

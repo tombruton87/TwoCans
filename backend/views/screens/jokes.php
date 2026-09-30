@@ -84,7 +84,7 @@ $pageUrl = static fn(int $n): string => url([
           <span data-tc-filename>Choose a file</span>
           <input type="file" name="audio"
                  accept="audio/*,.mp3,.m4a,.wav,.ogg,.opus,.flac,.amr,.aac,.3gp"
-                 data-tc-audiofile required>
+                 data-tc-audiofile data-tc-rec-max="90" required>
         </label>
 
         <button class="tc-btn tc-btn--teal" type="submit">Add</button>

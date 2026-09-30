@@ -321,10 +321,10 @@ $onlineCount = count(array_filter($deviceRows, static fn($d) => $d['online']));
             <?= form_fields() ?>
             <input type="hidden" name="action" value="quiet_message">
             <label class="tc-btn tc-btn--ghost tc-audio-file">
-              <span data-tc-filename>Record or choose a file</span>
+              <span data-tc-filename>Choose a file</span>
               <input type="file" name="message"
                      accept="audio/*,.mp3,.m4a,.wav,.ogg,.opus,.flac,.amr,.aac,.3gp"
-                     data-tc-audiofile required>
+                     data-tc-audiofile data-tc-rec-max="30" required>
             </label>
             <button class="tc-btn tc-btn--teal" type="submit">
               <?= $settings['quietMessage'] === '' ? 'Save message' : 'Replace message' ?>

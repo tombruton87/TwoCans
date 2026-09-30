@@ -81,7 +81,7 @@ if (!$trunk['connected']) {
 
 // --------------------------------------------------------------- the day so far
 $pdo = Database::pdo();
-$today = (int) $pdo->query("SELECT COUNT(*) FROM calls WHERE started_at >= CURDATE()")->fetchColumn();
+$today = (int) $pdo->query("SELECT COUNT(*) FROM calls WHERE started_at >= CURDATE() AND " . CallRepository::shownSql())->fetchColumn();
 $unheard = (new VoicemailRepository())->unheardCount();
 $queue = (int) $pdo->query("SELECT COUNT(*) FROM calls WHERE transcript_status IN ('pending','running') AND recording_path IS NOT NULL")->fetchColumn();
 $say('section', 'Today');

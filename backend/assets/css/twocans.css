@@ -2444,7 +2444,7 @@ div:has(> .tc-win-grid #win-custom:checked) > .tc-win-custom { display: block; }
 .tc-joke-title:focus { outline: none; background: var(--tc-card); border-color: var(--tc-teal); border-style: solid; }
 
 /* Two equal columns on a wide screen (the phone line), one on a narrow one. */
-.tc-twocol { display: grid; gap: 18px; max-width: 680px; align-items: start; }
+.tc-twocol { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; max-width: 680px; align-items: start; }
 @media (min-width: 1180px) {
   .tc-twocol { max-width: 1240px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -2729,3 +2729,54 @@ div:has(> .tc-win-grid #win-custom:checked) > .tc-win-custom { display: block; }
 .tc-key-offer { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; border: 2px solid var(--tc-teal-pale); background: var(--tc-teal-bg); }
 .tc-key-offer__icon { width: 40px; height: 40px; border-radius: 11px; background: var(--tc-teal-deep); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 17px; flex: none; }
 .tc-key-offer__title { font: 800 16px var(--tc-display); color: var(--tc-ink); }
+
+/* An announcement playing by itself: its days and time. The days are chips;
+   the whole row fades while "at a set time" is off. */
+.tc-announce__when { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 16px; margin: 8px 0 0 26px; }
+.tc-announce__choice:has(input[name="scheduleOn"]:not(:checked)) + .tc-announce__when { opacity: .45; }
+.tc-announce__time { width: auto; min-width: 120px; }
+.tc-daypick { display: flex; flex-wrap: wrap; gap: 6px; }
+.tc-daypick__day input { position: absolute; opacity: 0; pointer-events: none; }
+.tc-daypick__day span {
+  display: inline-block; min-width: 44px; padding: 7px 8px; text-align: center; cursor: pointer;
+  border: 1.5px solid var(--tc-border-3); border-radius: 999px;
+  font: 800 13px var(--tc-display); color: var(--tc-ink-3); background: var(--tc-card);
+}
+.tc-daypick__day input:checked + span { background: var(--tc-teal-bg); border-color: var(--tc-teal-deep); color: var(--tc-teal-deep); }
+.tc-daypick__day input:focus-visible + span { outline: 2px solid var(--tc-teal-deep); outline-offset: 2px; }
+
+/* Record, beside an audio upload's "choose a file". Red while recording. */
+.tc-rec-btn.is-recording { background: var(--tc-coral); border-color: var(--tc-coral); color: #fff; }
+.tc-rec-btn.is-recording .fa-microphone { animation: tc-rec-pulse 1s ease-in-out infinite; }
+@keyframes tc-rec-pulse { 50% { opacity: .35; } }
+
+/* A phone's header card on a narrow screen: the name gets the row, and its
+   status and Test call go underneath instead of squeezing it. */
+@media (max-width: 560px) {
+  .tc-device-head { flex-wrap: wrap; gap: 14px; padding: 18px; }
+  .tc-device-head > form.tc-grow { flex: 1 1 0; min-width: 0; }
+  .tc-device-head__side {
+    flex: 1 0 100%; flex-direction: row; align-items: center; justify-content: space-between;
+    border-top: 1px dashed var(--tc-border-3); padding-top: 12px;
+  }
+}
+
+/* Number pickers on a narrow screen: the name above, the picker full width,
+   so a whole number shows. A long button label wraps rather than running off. */
+@media (max-width: 560px) {
+  .tc-ring-row { gap: 6px 12px; }
+  .tc-ring-row + .tc-ring-row { margin-top: 8px; }
+  .tc-ring-row__num { min-width: 0; flex: 1 0 100%; }
+  .tc-ring-row__pick { max-width: none; flex: 1 0 100%; }
+  .tc-card .tc-btn { white-space: normal; max-width: 100%; text-align: center; }
+}
+
+/* A number's mailbox, under who it rings. */
+.tc-ring-row--sub { margin-top: -2px; }
+.tc-ring-row--sub .tc-ring-row__num { font-weight: 700; }
+
+/* Which mailbox a message is in, and moving it. */
+.tc-vm-box { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--tc-border-3); }
+.tc-vm-box .tc-row { gap: 8px; align-items: center; }
+.tc-vm-box__label { font: 800 12px var(--tc-body); color: var(--tc-ink-3); white-space: nowrap; }
+.tc-vm-box__pick { width: auto; max-width: 100%; padding-top: 7px; padding-bottom: 7px; font-size: 13px; }

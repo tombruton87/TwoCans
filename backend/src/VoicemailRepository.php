@@ -54,6 +54,9 @@ final class VoicemailRepository
                 (:msg_id, :device_id, :mailbox, :folder, :contact_id, :peer_name, :peer_number,
                  :left_at, :duration, :heard, :audio, NULL, "pending")
              ON DUPLICATE KEY UPDATE
+                -- A message moved to another mailbox keeps its msg_id (see move()).
+                mailbox = VALUES(mailbox),
+                device_id = VALUES(device_id),
                 folder = VALUES(folder),
                 heard = VALUES(heard),
                 audio_path = VALUES(audio_path)'
@@ -284,6 +287,69 @@ final class VoicemailRepository
         }
 
         return true;
+    }
+
+    /**
+     * Move a message to another mailbox — the house's, or a phone's, which it
+     * can then hear by dialling 700. Asterisk does it (VoicemailForward, then
+     * VoicemailRemove), so its numbering and message lights stay right; the
+     * message keeps its msg_id, so its row — transcript and all — follows it.
+     * It arrives unheard, in the new mailbox's INBOX.
+     *
+     * @return string|null what went wrong, or null when moved
+     */
+    public function move(int $id, string $toMailbox): ?string
+    {
+        $row = $this->find($id);
+        if ($row === null) {
+            return 'That message has gone.';
+        }
+        $from = (string) $row['mailbox'];
+        if ($toMailbox === $from) {
+            return null;
+        }
+        $known = [PjsipConfig::HOUSE_MAILBOX => null];
+        foreach ((new DeviceRepository())->all() as $d) {
+            if ((string) $d['extension'] !== '') {
+                $known[(string) $d['extension']] = (int) $d['id'];
+            }
+        }
+        if (!array_key_exists($toMailbox, $known)) {
+            return 'There is no such mailbox.';
+        }
+
+        $where = ['Context' => PjsipConfig::VOICEMAIL_CONTEXT, 'Mailbox' => $from, 'Folder' => (string) $row['folder'], 'ID' => (string) $row['msg_id']];
+        try {
+            $ami = new Ami();
+            $ami->connect();
+            $copied = $ami->send('VoicemailForward', $where + [
+                'ToContext' => PjsipConfig::VOICEMAIL_CONTEXT, 'ToMailbox' => $toMailbox, 'ToFolder' => 'INBOX',
+            ]);
+            if (($copied['response'] ?? '') !== 'Success') {
+                $ami->disconnect();
+
+                return 'Asterisk could not move it: ' . (string) ($copied['message'] ?? 'no reply');
+            }
+            $ami->send('VoicemailRemove', $where);
+            $ami->disconnect();
+        } catch (Throwable $e) {
+            return 'Could not reach the phone system: ' . $e->getMessage();
+        }
+
+        // Follow it now, rather than at the next import: where it is, unheard.
+        $audio = '';
+        foreach ((array) glob($this->contextPath() . '/' . $toMailbox . '/INBOX/msg*.txt') as $meta) {
+            $info = parse_ini_file($meta, false, INI_SCANNER_RAW) ?: [];
+            if ((string) ($info['msg_id'] ?? '') === (string) $row['msg_id']) {
+                $audio = (string) preg_replace('/\.txt$/', '.wav', $meta);
+            }
+        }
+        Database::pdo()->prepare(
+            "UPDATE voicemails SET mailbox = ?, device_id = ?, folder = 'INBOX', heard = 0,
+                    audio_path = IF(? <> '', ?, audio_path) WHERE id = ?"
+        )->execute([$toMailbox, $known[$toMailbox], $audio, $audio, $id]);
+
+        return null;
     }
 
     /** Map a row to the shape the voicemail screen expects. */

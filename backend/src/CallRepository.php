@@ -12,6 +12,23 @@ declare(strict_types=1);
 final class CallRepository
 {
     /**
+     * Calls that aren't the family's calls: an announcement paging a phone,
+     * the Test call button (929), and the test numbers a child can dial (600
+     * the echo, 601 the test message). Kept, like every call, so their
+     * recordings are looked after as usual, but not shown in the log, counted
+     * in its totals, or sent as notifications.
+     */
+    public const NOT_SHOWN = ['announce', '929', '600', '601'];
+
+    /** SQL: the call is one of the family's — see NOT_SHOWN. */
+    public static function shownSql(string $alias = ''): string
+    {
+        $col = ($alias !== '' ? $alias . '.' : '') . 'peer_number';
+
+        return $col . " NOT IN ('" . implode("','", self::NOT_SHOWN) . "')";
+    }
+
+    /**
      * Column order of Asterisk's Master.csv with loguniqueid + loguserfield on.
      * Documented at https://docs.asterisk.org — do not reorder.
      */
@@ -543,6 +560,7 @@ final class CallRepository
         $st = Database::pdo()->prepare(
             'SELECT c.*, d.name AS device_name
                FROM calls c LEFT JOIN devices d ON d.id = c.device_id
+              WHERE ' . self::shownSql('c') . '
               ORDER BY c.started_at DESC, c.id DESC LIMIT :limit'
         );
         $st->bindValue('limit', $limit, PDO::PARAM_INT);
@@ -561,7 +579,7 @@ final class CallRepository
      */
     private function filterSql(array $filters): array
     {
-        $where = ['1 = 1'];
+        $where = ['1 = 1', self::shownSql()];
         $bind = [];
 
         // Free-text search covers who the call was with and what was said —
@@ -645,7 +663,7 @@ final class CallRepository
         }
 
         $st = Database::pdo()->prepare(
-            'SELECT COUNT(*) FROM calls WHERE started_at > :at OR (started_at = :at2 AND id > :id)'
+            'SELECT COUNT(*) FROM calls WHERE (started_at > :at OR (started_at = :at2 AND id > :id)) AND ' . self::shownSql()
         );
         $st->execute(['at' => $started, 'at2' => $started, 'id' => $id]);
 
@@ -674,6 +692,7 @@ final class CallRepository
             'SELECT c.id, c.name, COUNT(*) AS calls
                FROM calls k
                JOIN contacts c ON c.id = k.contact_id
+              WHERE ' . self::shownSql('k') . '
            GROUP BY c.id, c.name
            ORDER BY c.name'
         )->fetchAll();
@@ -693,7 +712,7 @@ final class CallRepository
     public function countToday(string $status): int
     {
         $st = Database::pdo()->prepare(
-            'SELECT COUNT(*) FROM calls WHERE DATE(started_at) = CURDATE() AND status = ?'
+            'SELECT COUNT(*) FROM calls WHERE DATE(started_at) = CURDATE() AND status = ? AND ' . self::shownSql()
         );
         $st->execute([$status]);
 
@@ -709,11 +728,24 @@ final class CallRepository
 
         $seconds = (int) $row['billsec'] > 0 ? (int) $row['billsec'] : (int) $row['duration_secs'];
 
+        // A short number nobody answers to — a mis-dial, or a speed dial that
+        // isn't set — said as what it was, not as an unknown caller.
+        $name = (string) ($row['peer_name'] ?? 'Unknown number');
+        $number = (string) $row['peer_number'];
+        $misdial = ($row['contact_id'] ?? null) === null
+            && in_array($name, ['', 'Unknown number'], true)
+            && preg_match('/^\d{1,6}$/', $number) === 1;
+        if ($misdial) {
+            $name = 'Dialled ' . $number;
+        }
+
         return [
             'id' => (int) $row['id'],
             // Asterisk's id for the call: how a group call finds its legs.
             'uniqueid' => (string) ($row['uniqueid'] ?? ''),
-            'name' => (string) ($row['peer_name'] ?? 'Unknown number'),
+            'name' => $name,
+            // Not a phone number at all: shown as such, instead of the number again.
+            'misdial' => $misdial,
             'initial' => initial((string) ($row['peer_name'] ?? '?')),
             'color' => self::colourFor((string) ($row['peer_name'] ?? '')),
             'number' => (string) $row['peer_number'],

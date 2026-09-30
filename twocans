@@ -33,10 +33,11 @@ GITHUB_REPO=${GITHUB_REPO:-tombruton87/TwoCans}
 
 # ------------------------------------------------------------------ helpers
 
-# The container running the app: the single web one, or the PHP one of a
-# development setup.
-APP=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -xE 'twocans-(web|php)' | head -1 || true)
-DEV_SETUP=false; [[ "$APP" == twocans-php ]] && DEV_SETUP=true
+# The container running the app. A development setup (compose.dev.yml) runs
+# the same one, built here with the code in this folder mounted live.
+APP=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -x 'twocans-web' | head -1 || true)
+DEV_SETUP=false
+[[ -n "$APP" && "$(docker inspect -f '{{.Config.Image}}' "$APP" 2>/dev/null)" == twocans-web:dev ]] && DEV_SETUP=true
 
 need_app() {
   [[ -n "$APP" ]] || die "twocans isn't running. Start it with: ./install.sh"
@@ -128,7 +129,7 @@ cmd_status() {
     "twocans-pager|paging desk phones"
   )
   if $DEV_SETUP; then
-    parts=("twocans-php|web app (development setup)" "twocans-nginx|web server" "${parts[@]}")
+    parts=("twocans-web|web app (development setup — the code in this folder)" "${parts[@]}")
   else
     parts=("twocans-web|web app" "${parts[@]}")
   fi
@@ -193,7 +194,7 @@ cmd_logs() {
   local containers=()
   case "$part" in
     phone|asterisk) containers=(twocans-asterisk) ;;
-    web|app) $DEV_SETUP && containers=(twocans-php twocans-nginx) || containers=(twocans-web) ;;
+    web|app) containers=(twocans-web) ;;
     transcription|transcriber|whisper) containers=(twocans-transcriber twocans-whisper) ;;
     database|db|mariadb) containers=(twocans-mariadb) ;;
     pager|paging) containers=(twocans-pager) ;;
@@ -328,7 +329,7 @@ cmd_update() {
   header "update"
   if $DEV_SETUP; then
     warn "This is a development setup (the code in this folder runs as it is)."
-    note "Update it with git yourself; ./twocans update is for standard installs."
+    note "Update it with git yourself, then: docker compose -f compose.yaml -f compose.dev.yml up -d --build"
     exit 0
   fi
   [[ -d .git ]] || die "This folder isn't a git clone, so it can't update itself. Clone it again from github.com/$GITHUB_REPO"

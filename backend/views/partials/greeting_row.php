@@ -72,7 +72,7 @@ $hiddenFields = static function () use ($hidden): string {
           <span data-tc-filename><?= $src === null ? 'Upload' : 'Replace' ?></span>
           <input type="file" name="<?= e($field) ?>"
                  accept="audio/*,.mp3,.m4a,.wav,.ogg,.opus,.flac,.amr,.aac,.3gp"
-                 data-tc-audiofile data-tc-autosave required>
+                 data-tc-audiofile data-tc-rec-max="<?= (int) $max ?>" data-tc-autosave required>
         </label>
         <noscript><button class="tc-btn tc-btn--teal tc-btn--sm" type="submit">Save</button></noscript>
       </form>

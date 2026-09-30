@@ -9,17 +9,28 @@ that keep it simple, safe and self-hostable are welcome.
 2. `./install.sh` to write `.env` and bring the stack up.
 3. Open the printed URL and complete first-run setup.
 
+## Working on the code
+
+`make dev` runs the same stack a household does (`compose.yaml`), with
+`compose.dev.yml` on top: the web image is built here and `./backend` is
+mounted into it, so a change to a PHP file shows on the next page load — no
+rebuild. The transcriber and pager see the same code. Nothing else differs:
+same containers, volumes and ports, so the pager, the once-a-minute jobs and
+certificates run as they would anywhere. Rebuild (`make dev` again) only after
+changing something under `docker/`. `./install.sh` and `./twocans` recognise a
+development setup and keep it one.
+
 ## Common workflows
 
 ```bash
-# start everything
-make up
+# start everything, from the code in this folder
+make dev
 
 # re-apply schema changes after editing migrations/
 make migrate
 
 # run the PHP test suite
-docker compose exec web php /var/www/html/bin/test.php
+make test
 ```
 
 (see `make help` for the rest)

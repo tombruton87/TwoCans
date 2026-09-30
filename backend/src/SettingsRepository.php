@@ -40,6 +40,8 @@ final class SettingsRepository
         // The joke line. Changeable, because it has to fit around whatever
         // numbers a household has already taught its children.
         'joke_number' => '258',
+        // A speed dial for "your messages", as well as 700; '' is none.
+        'voicemail_speed_dial' => '',
         /*
          * SIP ports. Empty means "use the environment, then the default".
          *
@@ -225,6 +227,42 @@ final class SettingsRepository
         $this->set('joke_number', $number);
     }
 
+    // ------------------------------------------------------------ voicemail
+
+    /** The speed dial for "your messages" (as well as 700), or '' for none. */
+    public function voicemailSpeedDial(): string
+    {
+        $value = trim((string) ($this->all()['voicemail_speed_dial'] ?? ''));
+
+        // Written straight into an extension: digits only, or nothing.
+        return preg_match('/^\d{1,4}$/', $value) === 1 ? $value : '';
+    }
+
+    public function setVoicemailSpeedDial(string $code): void
+    {
+        $this->set('voicemail_speed_dial', $code);
+    }
+
+    /**
+     * Why "your messages" can't have this speed dial — or null if it can. The
+     * same checks as a person's speed dial: nothing a child already dials.
+     */
+    public function voicemailSpeedDialProblem(string $code): ?string
+    {
+        $code = trim($code);
+        if ($code === '') {
+            return null; // none: fine
+        }
+        if (preg_match('/^\d{1,4}$/', $code) !== 1) {
+            return 'Use 1 to 4 digits, like 1.';
+        }
+        if ($code === PjsipConfig::VOICEMAIL_NUMBER || $code === $this->voicemailSpeedDial()) {
+            return null;
+        }
+
+        return (new ContactRepository())->speedDialProblem($code);
+    }
+
     // ---------------------------------------------------------- provisioning
 
     /** The HTTP-basic password a Grandstream phone uses to fetch its config. */
@@ -261,6 +299,10 @@ final class SettingsRepository
 
             return $number . ' is already used by twocans for '
                 . strtolower($fixed[$number]['label'] ?? 'something else') . '.';
+        }
+
+        if ($number === $this->voicemailSpeedDial()) {
+            return $number . ' is the speed dial for your messages.';
         }
 
         $device = Database::pdo()->prepare('SELECT display_name FROM devices WHERE extension = ?');

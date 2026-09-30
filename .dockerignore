@@ -7,7 +7,6 @@
 !.env.example
 .backup/
 storage/
-docker-compose-local.yml
 docker/asterisk/
 docker/nginx/certs/
 docker/nginx/acme/

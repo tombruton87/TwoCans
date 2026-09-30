@@ -695,7 +695,7 @@
 
     var failed = function () {
       showToast("Couldn't save that — try again.");
-      if (name) name.textContent = 'Record or choose a file';
+      if (name) name.textContent = 'Choose a file';
     };
     fetch(form.getAttribute('action') || '/', {
       method: 'POST',
@@ -724,6 +724,7 @@
             if (region.tagName === 'DETAILS') fresh.open = region.open;
             region.replaceWith(fresh);
             bindPlayers(fresh);
+            addRecordButtons(fresh);
           });
       })
       .catch(failed)
@@ -898,6 +899,88 @@
       }
     });
   }
+
+  /* Record straight into any audio upload — an announcement, a greeting, a
+     phone's message, a joke, hold music. A Record button goes beside each
+     "choose a file" button; what's recorded is put into that same file input,
+     so the form sends and saves it exactly like a chosen file (straight away,
+     where the form saves on choosing). Browsers only allow the microphone on
+     a secure page (https://, or localhost), so elsewhere the button says so. */
+  var canUseMic = function () {
+    return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia
+      && window.MediaRecorder && window.DataTransfer && window.isSecureContext);
+  };
+  var micType = function () {
+    var types = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus', 'audio/webm'];
+    for (var i = 0; i < types.length; i++) {
+      if (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(types[i])) return types[i];
+    }
+    return '';
+  };
+  var clock = function (secs) { return Math.floor(secs / 60) + ':' + String(secs % 60).padStart(2, '0'); };
+
+  function addRecordButtons(root) {
+    root.querySelectorAll('input[type=file][data-tc-audiofile]:not([multiple])').forEach(function (input) {
+      var label = input.closest('label');
+      // The self-service page has a recorder of its own.
+      if (!label || input.dataset.tcRec || input.closest('[data-tc-rec-box]')) return;
+      input.dataset.tcRec = '1';
+
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'tc-btn tc-btn--ghost tc-rec-btn' + (label.classList.contains('tc-btn--sm') ? ' tc-btn--sm' : '');
+      btn.innerHTML = '<i class="fa-solid fa-microphone" aria-hidden="true"></i> <span>Record</span>';
+      label.insertAdjacentElement('afterend', btn);
+      var text = btn.querySelector('span');
+      var max = Number(input.getAttribute('data-tc-rec-max')) || 60;
+      var recorder = null, timer = null, secs = 0;
+
+      var stop = function () { if (recorder && recorder.state !== 'inactive') recorder.stop(); };
+
+      btn.addEventListener('click', function () {
+        if (recorder && recorder.state === 'recording') { stop(); return; }
+        if (!canUseMic()) {
+          showToast("Recording here needs twocans' secure address (https://…) — or choose a file instead.");
+          return;
+        }
+        navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+          var type = micType();
+          var chunks = [];
+          recorder = type ? new MediaRecorder(stream, { mimeType: type }) : new MediaRecorder(stream);
+          recorder.addEventListener('dataavailable', function (e) { if (e.data && e.data.size) chunks.push(e.data); });
+          recorder.addEventListener('stop', function () {
+            clearInterval(timer);
+            stream.getTracks().forEach(function (t) { t.stop(); });
+            btn.classList.remove('is-recording');
+            text.textContent = 'Record again';
+            var mime = (recorder.mimeType || type || 'audio/webm').split(';')[0];
+            var blob = new Blob(chunks, { type: mime });
+            if (!blob.size || secs < 1) { showToast('Nothing was recorded — try again.'); return; }
+            var ext = mime.indexOf('mp4') !== -1 ? 'm4a' : (mime.indexOf('ogg') !== -1 ? 'ogg' : 'webm');
+            var dt = new DataTransfer();
+            dt.items.add(new File([blob], 'recording.' + ext, { type: mime }));
+            input.files = dt.files;
+            // As if a file had been chosen: forms that save on choosing, save.
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+            var name = label.querySelector('[data-tc-filename]');
+            if (name && !(input.form && input.form.dataset.tcSending)) name.textContent = 'Your recording (' + clock(secs) + ')';
+          });
+          secs = 0;
+          recorder.start();
+          btn.classList.add('is-recording');
+          text.textContent = 'Stop · 0:00';
+          timer = setInterval(function () {
+            secs += 1;
+            if (secs >= max) { stop(); return; }
+            text.textContent = 'Stop · ' + clock(secs);
+          }, 1000);
+        }).catch(function () {
+          showToast("We couldn't use the microphone — allow it when the browser asks, or choose a file.");
+        });
+      });
+    });
+  }
+  addRecordButtons(document);
 
   /* "Take a photo" on a computer. A phone's browser opens its camera for the
      capture input by itself; a computer's ignores capture and shows a file

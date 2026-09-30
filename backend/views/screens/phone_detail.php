@@ -272,6 +272,29 @@ $tabUrl = static fn(string $t): string => url(['screen' => 'phones', 'device' =>
           </label>
           <noscript><button class="tc-btn tc-btn--teal" type="submit">Save limits</button></noscript>
         </form>
+
+        <div class="tc-card__intro tc-card__intro--sub">
+          <h3 class="tc-card__subtitle">Rings before voicemail</h3>
+          <p class="tc-card__hint">
+            How long it rings before the caller is offered a message. When a call
+            rings several phones, it goes to voicemail once the longest of them stops.
+          </p>
+        </div>
+        <form method="post" action="/" class="tc-row tc-row--wrap" data-tc-ajax>
+          <?= form_fields() ?>
+          <input type="hidden" name="action" value="device_rings">
+          <input type="hidden" name="id" value="<?= e($d['id']) ?>">
+          <label class="tc-label tc-label--sm">Rings
+            <select class="tc-input" name="rings" data-tc-autosave <?= $canEdit ? '' : 'disabled' ?>>
+              <?php foreach (DeviceRepository::RING_CHOICES as $n): ?>
+                <option value="<?= $n ?>"<?= $d['rings'] === $n ? ' selected' : '' ?>>
+                  <?= $n ?> rings — about <?= $n * DeviceRepository::RING_SECONDS ?> seconds<?= $n === DeviceRepository::DEFAULT_RINGS ? ' (standard)' : '' ?>
+                </option>
+              <?php endforeach; ?>
+            </select>
+          </label>
+          <noscript><button class="tc-btn tc-btn--teal" type="submit">Save</button></noscript>
+        </form>
       </section>
 
       <?php endif; ?>
@@ -330,10 +353,10 @@ $tabUrl = static fn(string $t): string => url(['screen' => 'phones', 'device' =>
             <input type="hidden" name="action" value="device_refusal_message">
             <input type="hidden" name="id" value="<?= e((string) $d['id']) ?>">
             <label class="tc-btn tc-btn--ghost tc-audio-file">
-              <span data-tc-filename>Record or choose a file</span>
+              <span data-tc-filename>Choose a file</span>
               <input type="file" name="message"
                      accept="audio/*,.mp3,.m4a,.wav,.ogg,.opus,.flac,.amr,.aac,.3gp"
-                     data-tc-audiofile required>
+                     data-tc-audiofile data-tc-rec-max="30" required>
             </label>
             <button class="tc-btn tc-btn--teal" type="submit">
               <?= $d['refusalAudio'] === '' ? 'Save message' : 'Replace message' ?>
@@ -559,7 +582,10 @@ $tabUrl = static fn(string $t): string => url(['screen' => 'phones', 'device' =>
             </p>
           </div>
           <div class="tc-device__fetched">
-            <?php if ($d['settingsFetched'] !== null): ?>
+            <?php if ($d['settingsPending']): ?>
+              <i class="fa-solid fa-hourglass-half" aria-hidden="true"></i>
+              <b>Changes waiting</b> — it's offline, and gets them the moment it's back.
+            <?php elseif ($d['settingsFetched'] !== null): ?>
               <i class="fa-solid fa-circle-check" aria-hidden="true"></i>
               Settings fetched <b><?= e($d['settingsFetched']) ?></b>
             <?php else: ?>
@@ -652,6 +678,26 @@ $tabUrl = static fn(string $t): string => url(['screen' => 'phones', 'device' =>
               </span>
             </span>
           </div>
+
+          <?php
+          // What the people it rings see: see TrunkRepository::outgoingNumberFor().
+          $line = (new TrunkRepository())->get();
+          ?>
+          <?php if ($line['connected'] && $line['numbers'] !== []): ?>
+            <?php $callsOut = (new TrunkRepository())->outgoingNumberFor((int) $d['id']) ?? $line['outgoing']; ?>
+            <div class="tc-dial">
+              <span class="tc-dial__num"><i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></span>
+              <span class="tc-grow">
+                <span class="tc-dial__label">Calls out as <?= e($callsOut) ?></span>
+                <span class="tc-dial__sub">
+                  What the people it rings see, and ring back.
+                  <?php if (count($line['numbers']) > 1): ?>
+                    <a class="tc-link" href="<?= e(url(['screen' => 'trunk'])) ?>#calls-out">Change it</a>
+                  <?php endif; ?>
+                </span>
+              </span>
+            </div>
+          <?php endif; ?>
 
           <?php foreach (PjsipConfig::testNumbers() as $number => $test): ?>
             <div class="tc-dial">

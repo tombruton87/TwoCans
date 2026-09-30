@@ -16,6 +16,22 @@ declare(strict_types=1);
  */
 final class CallRequestRepository
 {
+    /**
+     * Only a real phone number can be asked for: one a grown-up could add.
+     * An extension, a service number or a short mis-dial — 123, 201 — is
+     * blocked like any other, but there is nobody to add, so it isn't listed.
+     * Seven digits, as ContactRepository::toE164 counts a real number.
+     */
+    private const MIN_DIGITS = 7;
+
+    /** SQL: the row's number is long enough to be a real one. */
+    private const REAL_NUMBER = "CHAR_LENGTH(REGEXP_REPLACE(number_e164, '[^0-9]', '')) >= 7";
+
+    public static function isRealNumber(string $number): bool
+    {
+        return strlen(preg_replace('/\D/', '', $number) ?? '') >= self::MIN_DIGITS;
+    }
+
     /** Where the dialplan leaves "who were you calling?" recordings. */
     public function spoolPath(): string
     {
@@ -63,6 +79,9 @@ final class CallRequestRepository
 
         $added = 0;
         foreach ($rows as $row) {
+            if (!self::isRealNumber((string) $row['peer_number'])) {
+                continue;
+            }
             $insert->execute([
                 'number' => (string) $row['peer_number'],
                 'device' => $row['device_id'] === null ? null : (int) $row['device_id'],
@@ -105,7 +124,7 @@ final class CallRequestRepository
     public function pending(): array
     {
         return Database::pdo()->query(
-            "SELECT * FROM call_requests WHERE resolution IS NULL ORDER BY last_asked_at DESC"
+            "SELECT * FROM call_requests WHERE resolution IS NULL AND " . self::REAL_NUMBER . " ORDER BY last_asked_at DESC"
         )->fetchAll();
     }
 
@@ -118,14 +137,14 @@ final class CallRequestRepository
     public function all(): array
     {
         return Database::pdo()->query(
-            'SELECT * FROM call_requests ORDER BY COALESCE(last_asked_at, requested_at) DESC'
+            'SELECT * FROM call_requests WHERE ' . self::REAL_NUMBER . ' ORDER BY COALESCE(last_asked_at, requested_at) DESC'
         )->fetchAll();
     }
 
     public function countPending(): int
     {
         return (int) Database::pdo()
-            ->query("SELECT COUNT(*) FROM call_requests WHERE resolution IS NULL")
+            ->query("SELECT COUNT(*) FROM call_requests WHERE resolution IS NULL AND " . self::REAL_NUMBER)
             ->fetchColumn();
     }
 

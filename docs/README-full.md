@@ -363,13 +363,14 @@ backend/                     app source (baked into twocans-web at build time)
                              transcribe (the worker), sip-register-test
 
 docker/
-  web/                       nginx + PHP-FPM in one container (the web server)
-  nginx/default.conf         only index.php executes; src/ and views/ are denied
-  php/                       Dockerfile, php.ini, www.conf — legacy worker image (unused by compose.yaml)
+  web/                       nginx + PHP-FPM in one container (the web server);
+                             nginx.conf: only index.php executes, src/ and views/ are denied
   whisper/                   faster-whisper image, ~720MB, no GPU needed
   asterisk/etc/              hand-written config; generated/ is written at runtime
 
 compose.yaml                 all paths relative — clone this repo anywhere
+compose.build.yml            build the images here instead of pulling them
+compose.dev.yml              development: the code in this folder, live (make dev)
 install.sh                   checks, .env, first run
 .env                         every machine-specific value (not in git)
 ```

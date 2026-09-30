@@ -160,10 +160,10 @@ if (empty($c['isGroup'])) {
           <?php endif; ?>
           <div class="tc-row tc-row--wrap">
             <label class="tc-btn tc-btn--ghost tc-audio-file">
-              <span data-tc-filename>Record or choose a file</span>
+              <span data-tc-filename>Choose a file</span>
               <input type="file" name="greeting" form="contact-group-prompt-form"
                      accept="audio/*,.mp3,.m4a,.wav,.ogg,.opus,.flac,.amr,.aac,.3gp"
-                     data-tc-audiofile required>
+                     data-tc-audiofile data-tc-rec-max="20" required>
             </label>
             <button class="tc-btn tc-btn--teal" type="submit" form="contact-group-prompt-form">
               <?= $c['groupPrompt'] === '' ? 'Save greeting' : 'Replace greeting' ?>
@@ -201,10 +201,10 @@ if (empty($c['isGroup'])) {
           <?php endif; ?>
           <div class="tc-row tc-row--wrap">
             <label class="tc-btn tc-btn--ghost tc-audio-file">
-              <span data-tc-filename>Record or choose a file</span>
+              <span data-tc-filename>Choose a file</span>
               <input type="file" name="clip" form="contact-announce-form"
                      accept="audio/*,.mp3,.m4a,.wav,.ogg,.opus,.flac,.amr,.aac,.3gp"
-                     data-tc-audiofile required>
+                     data-tc-audiofile data-tc-rec-max="8" required>
             </label>
             <button class="tc-btn tc-btn--teal" type="submit" form="contact-announce-form">
               <?= $c['announce'] === '' ? 'Save' : 'Replace' ?>

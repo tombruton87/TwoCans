@@ -70,4 +70,17 @@ return [
             assertSame([], array_filter($found->unassigned(), static fn(array $f): bool => $f['mac'] === '000B82ABCDEF'));
         });
     }),
+    test('changes for an offline phone wait for it, and fetching them clears the wait', function () use ($fresh) {
+        $fresh(function () {
+            $devices = new DeviceRepository();
+            $phone = $devices->create('Test landing', 'ghp621', 'udp');
+            $sent = GrandstreamProvisioning::notify(DeviceRepository::toView($devices->find((int) $phone['id'])));
+            assertFalse($sent['ok']);
+            assertTrue($sent['pending'] ?? false);
+            assertTrue(DeviceRepository::toView($devices->find((int) $phone['id']))['settingsPending']);
+            assertFalse(in_array('Test landing', GrandstreamProvisioning::sendPending(), true), 'not sent while offline');
+            $devices->touchSettingsFetched((int) $phone['id']);
+            assertFalse(DeviceRepository::toView($devices->find((int) $phone['id']))['settingsPending']);
+        });
+    }),
 ];

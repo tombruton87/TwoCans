@@ -26,7 +26,7 @@ $low = $store->isLowCredit();
           <div class="tc-card__hint" style="font-size:13px">
             <?php if (count($trunk['numbers']) > 1): ?>
               Your line's numbers · <?= e(implode(' · ', $trunk['numbers'])) ?>
-              <span class="tc-micro">(<?= e($trunk['number']) ?> is the caller ID for outgoing calls)</span>
+              <span class="tc-micro">(<?= e($trunk['outgoing']) ?> is what calls out show)</span>
             <?php else: ?>
               Your line's number · <?= e($trunk['number']) ?>
             <?php endif; ?>
@@ -113,9 +113,11 @@ $low = $store->isLowCredit();
       <div class="tc-card__hint" style="font-size:13px">
         Each number rings every phone that takes incoming calls, unless you point
         it at one — handy when a number belongs to one child rather than the house.
+        A number that rings one phone takes messages in that phone's mailbox, so
+        they can hear them by dialling <?= e(PjsipConfig::VOICEMAIL_NUMBER) ?>; any other,
+        in the house's. Either can be changed.
         A phone with a number of its own also calls out from it, so the people
-        it rings see that number; every other phone calls out from
-        <?= e($trunk['number']) ?>.
+        it rings see that number — see <b>Calls out from</b> below.
       </div>
 
       <div class="tc-divider tc-divider--fine" style="margin:14px 0"></div>
@@ -147,8 +149,8 @@ $low = $store->isLowCredit();
               <input type="hidden" name="number" value="<?= e($number) ?>">
               <label class="tc-ring-row__num" for="ring-<?= e(ltrim($number, '+')) ?>">
                 <?= e($number) ?>
-                <?php if ($number === $trunk['number'] && count($trunk['numbers']) > 1): ?>
-                  <span class="tc-micro">caller ID</span>
+                <?php if ($number === $trunk['outgoing'] && count($trunk['numbers']) > 1): ?>
+                  <span class="tc-micro">calls out</span>
                 <?php endif; ?>
               </label>
               <select class="tc-input tc-input--white tc-ring-row__pick" name="device"
@@ -162,10 +164,101 @@ $low = $store->isLowCredit();
               </select>
               <noscript><button class="tc-btn tc-btn--teal" type="submit">Save</button></noscript>
             </form>
+            <?php
+            // Where a message left on this number goes — see TrunkRepository::mailboxFor().
+            $mb = (new TrunkRepository())->mailboxFor($number, $trunk);
+            $mbTarget = $mb['auto'] ? '' : ($mb['deviceId'] === null ? 'house' : (string) $mb['deviceId']);
+            $mbAutoName = $mb['auto'] && $mb['deviceId'] !== null
+                ? (array_values(array_filter($ringRows, static fn(array $d): bool => (int) $d['id'] === $mb['deviceId']))[0]['name'] ?? 'its phone')
+                : 'the house';
+            ?>
+            <form method="post" action="/" class="tc-ring-row tc-ring-row--sub" data-tc-ajax>
+              <?= form_fields() ?>
+              <input type="hidden" name="action" value="trunk_number_mailbox">
+              <input type="hidden" name="number" value="<?= e($number) ?>">
+              <label class="tc-ring-row__num" for="mbox-<?= e(ltrim($number, '+')) ?>">
+                <span class="tc-micro">messages go to</span>
+              </label>
+              <select class="tc-input tc-input--white tc-ring-row__pick" name="target"
+                      id="mbox-<?= e(ltrim($number, '+')) ?>" data-tc-autosave>
+                <option value=""<?= $mbTarget === '' ? ' selected' : '' ?>>
+                  <?= e($mbAutoName === 'the house' ? "The house's mailbox" : $mbAutoName . "'s mailbox") ?> — automatic
+                </option>
+                <option value="house"<?= $mbTarget === 'house' ? ' selected' : '' ?>>The house's mailbox</option>
+                <?php foreach ($ringRows as $d): ?>
+                  <option value="<?= (int) $d['id'] ?>"<?= $mbTarget === (string) $d['id'] ? ' selected' : '' ?>><?= e($d['name']) ?>'s mailbox</option>
+                <?php endforeach; ?>
+              </select>
+              <noscript><button class="tc-btn tc-btn--teal" type="submit">Save</button></noscript>
+            </form>
           <?php endforeach; ?>
         </div>
       <?php endif; ?>
     </section>
+
+    <?php
+    /*
+     * What calls go out from: the number the person rung sees. The line's
+     * choice, for every phone; then each phone's, which by itself is the
+     * number pointed at it, if any — see TrunkRepository::outgoingNumberFor().
+     */
+    $trunkRepo = new TrunkRepository();
+    $canSet = Auth::can('billing');
+    ?>
+    <?php if (count($trunk['numbers']) > 1): ?>
+    <section class="tc-card tc-card--lg" id="calls-out" data-tc-ajax-region>
+      <div class="tc-trunk-name" style="margin-bottom:6px">
+        <h2>Calls out from</h2>
+      </div>
+      <div class="tc-card__hint" style="font-size:13px">
+        The number the people the kids ring see — and ring back. A phone with a
+        number pointed at it calls out from that one by itself; you can pick
+        another for any phone.
+      </div>
+
+      <div class="tc-divider tc-divider--fine" style="margin:14px 0"></div>
+
+      <form method="post" action="/" class="tc-ring-row" data-tc-ajax>
+        <?= form_fields() ?>
+        <input type="hidden" name="action" value="trunk_outgoing">
+        <label class="tc-ring-row__num" for="out-line"><b>The line</b>
+          <span class="tc-micro">every phone without its own</span></label>
+        <select class="tc-input tc-input--white tc-ring-row__pick" name="number" id="out-line"
+                data-tc-autosave <?= $canSet ? '' : 'disabled' ?>>
+          <?php foreach ($trunk['numbers'] as $n): ?>
+            <option value="<?= e($n) ?>"<?= $n === $trunk['outgoing'] ? ' selected' : '' ?>><?= e($n) ?></option>
+          <?php endforeach; ?>
+        </select>
+        <noscript><button class="tc-btn tc-btn--teal" type="submit">Save</button></noscript>
+      </form>
+
+      <?php foreach ($ringRows as $d): ?>
+        <?php
+        $own = $trunkRepo->ownNumber((int) $d['id'], $trunk);
+        $auto = $own ?? $trunk['outgoing'];
+        ?>
+        <form method="post" action="/" class="tc-ring-row" data-tc-ajax>
+          <?= form_fields() ?>
+          <input type="hidden" name="action" value="device_outgoing">
+          <input type="hidden" name="id" value="<?= (int) $d['id'] ?>">
+          <label class="tc-ring-row__num" for="out-<?= (int) $d['id'] ?>"><?= e($d['name']) ?></label>
+          <select class="tc-input tc-input--white tc-ring-row__pick" name="number" id="out-<?= (int) $d['id'] ?>"
+                  data-tc-autosave <?= $canSet ? '' : 'disabled' ?>>
+            <option value=""<?= $d['outgoingNumber'] === '' ? ' selected' : '' ?>>
+              <?= e($auto) ?> — <?= $own !== null ? 'its own number' : "the line's" ?>
+            </option>
+            <?php foreach ($trunk['numbers'] as $n): ?>
+              <option value="<?= e($n) ?>"<?= $d['outgoingNumber'] === $n ? ' selected' : '' ?>><?= e($n) ?></option>
+            <?php endforeach; ?>
+          </select>
+          <noscript><button class="tc-btn tc-btn--teal" type="submit">Save</button></noscript>
+        </form>
+      <?php endforeach; ?>
+      <?php if (!$canSet): ?>
+        <span class="tc-micro">Only the Owner can change the numbers calls go out from.</span>
+      <?php endif; ?>
+    </section>
+    <?php endif; ?>
 
   <?php else: ?>
     <div class="tc-trunk-empty">

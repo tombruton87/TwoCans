@@ -52,6 +52,18 @@ final class DeviceRepository
             'family' => 'desk', 'keys' => 6, 'body' => 'black', 'faceplate' => 'card'],
     ];
 
+    /**
+     * One ring, in seconds: the desk phones' own ring (two seconds on, four
+     * off), so "four rings" is what a child in the room would count.
+     */
+    public const RING_SECONDS = 6;
+
+    /** How many rings a phone may be set to before voicemail — the choices offered. */
+    public const RING_CHOICES = [2, 3, 4, 5, 6, 8, 10];
+
+    /** Rings before voicemail when a phone hasn't been set: the old 30 seconds. */
+    public const DEFAULT_RINGS = 5;
+
     /** The kinds of phone, in the order they're offered, with what each is for. */
     public const FAMILIES = [
         'app' => ['label' => 'An app on a phone or tablet', 'sub' => 'Linphone — free, on any phone or tablet you already have', 'icon' => 'fa-mobile-screen'],
@@ -152,11 +164,24 @@ final class DeviceRepository
     }
 
     /** Which socket of its adapter this phone is (HT802 only has a 2). */
-    /** It has just fetched its settings file. */
+    /** How many rings before voicemail; null for the default. */
+    public function setRings(int $id, ?int $rings): void
+    {
+        $seconds = $rings !== null && in_array($rings, self::RING_CHOICES, true) ? $rings * self::RING_SECONDS : null;
+        Database::pdo()->prepare('UPDATE devices SET ring_seconds = ? WHERE id = ?')->execute([$seconds, $id]);
+    }
+
+    /** Settings changed while it was offline, or not: see GrandstreamProvisioning::sendPending. */
+    public function setSettingsPending(int $id, bool $pending): void
+    {
+        Database::pdo()->prepare('UPDATE devices SET settings_pending = ? WHERE id = ?')->execute([$pending ? 1 : 0, $id]);
+    }
+
+    /** It has just fetched its settings file — so nothing is waiting for it any more. */
     public function touchSettingsFetched(int $id): void
     {
         // PHP's clock, as humanTime() reads it with, not the database's.
-        Database::pdo()->prepare('UPDATE devices SET settings_fetched_at = ? WHERE id = ?')->execute([date('Y-m-d H:i:s'), $id]);
+        Database::pdo()->prepare('UPDATE devices SET settings_fetched_at = ?, settings_pending = 0 WHERE id = ?')->execute([date('Y-m-d H:i:s'), $id]);
     }
 
     /** Whether a desk phone can hear multicast pages — see Pager. */
@@ -381,6 +406,7 @@ final class DeviceRepository
               WHERE sip_username = :user'
         );
 
+        $cameBack = [];
         foreach ($this->all() as $device) {
             $username = (string) $device['sip_username'];
             $isOnline = $onlineByUsername[$username] ?? false;
@@ -392,6 +418,16 @@ final class DeviceRepository
                 'seen2' => $isOnline ? 1 : 0,
                 'user' => $username,
             ]);
+
+            if ($isOnline && !(bool) $device['online'] && (bool) ($device['settings_pending'] ?? false)) {
+                $cameBack[] = (int) $device['id'];
+            }
+        }
+
+        // Back online with settings waiting for it: send them now, rather than
+        // at the next minute's check.
+        if ($cameBack !== []) {
+            GrandstreamProvisioning::sendPending();
         }
     }
 
@@ -423,6 +459,12 @@ final class DeviceRepository
             'available' => self::TYPES[$type]['available'] ?? false,
             // Fetched its settings from home, so it hears multicast pages — see Pager.
             'pagingMulticast' => (bool) ($row['paging_multicast'] ?? false),
+            'settingsPending' => (bool) ($row['settings_pending'] ?? false),
+            // How long it rings before voicemail: seconds, and the rings that is.
+            'ringSeconds' => (int) ($row['ring_seconds'] ?? 0) ?: self::DEFAULT_RINGS * self::RING_SECONDS,
+            'rings' => intdiv((int) ($row['ring_seconds'] ?? 0) ?: self::DEFAULT_RINGS * self::RING_SECONDS, self::RING_SECONDS),
+            // Its own choice of the line's numbers to call out from; '' is automatic.
+            'outgoingNumber' => (string) ($row['outgoing_number'] ?? ''),
             'settingsFetched' => ($row['settings_fetched_at'] ?? null) === null
                 ? null
                 : self::humanTime((string) $row['settings_fetched_at']),

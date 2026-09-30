@@ -5,14 +5,46 @@
  */
 $rows = array_map([VoicemailRepository::class, 'toView'], $voicemails->all());
 $canDelete = Auth::can('voicemail');
+$vmSpeedDial = (new SettingsRepository())->voicemailSpeedDial();
+
+// Every mailbox, by its number: the house's, and each phone's (its extension).
+$mailboxes = [PjsipConfig::HOUSE_MAILBOX => "The house's mailbox"];
+foreach ((new DeviceRepository())->all() as $d) {
+    if ((string) $d['extension'] !== '' && DeviceRepository::toView($d)['available']) {
+        $mailboxes[(string) $d['extension']] = $d['name'] . "'s mailbox";
+    }
+}
 ?>
 <div class="tc-stack tc-stack--tight tc-vm-page">
   <div class="tc-info-banner">
     <span class="tc-info-banner__icon tc-info-banner__icon--sun">✉</span>
     Missed callers can leave a message. We transcribe each one so you can read it
-    at a glance — or dial <b><?= e(PjsipConfig::VOICEMAIL_NUMBER) ?></b> from the
-    phone itself to listen.
+    at a glance — or dial <b><?= e(PjsipConfig::VOICEMAIL_NUMBER) ?></b><?= $vmSpeedDial !== '' ? ' (or <b>' . e($vmSpeedDial) . '</b>)' : '' ?>
+    from the phone itself to listen. How long each phone rings first is on its
+    page, under Rules.
   </div>
+
+  <?php if (Auth::can('rules')): ?>
+    <section class="tc-card" id="vm-speed-dial" data-tc-ajax-region>
+      <div class="tc-card__intro">
+        <h2 class="tc-card__title">A speed dial for messages</h2>
+        <p class="tc-card__hint">
+          <?= e(PjsipConfig::VOICEMAIL_NUMBER) ?> always plays a phone's messages. Give it a
+          shorter one too — like <b>1</b> — that's easier for a child to remember.
+          It can also go on a desk phone's hotkey.
+        </p>
+      </div>
+      <form method="post" action="/" class="tc-row tc-row--wrap" data-tc-ajax>
+        <?= form_fields() ?>
+        <input type="hidden" name="action" value="voicemail_speed_dial">
+        <label class="tc-label tc-label--sm">Speed dial
+          <input class="tc-input" type="text" name="code" value="<?= e($vmSpeedDial) ?>"
+                 inputmode="numeric" pattern="[0-9]{0,4}" maxlength="4" placeholder="none" style="max-width:120px">
+        </label>
+        <button class="tc-btn tc-btn--teal" type="submit">Save</button>
+      </form>
+    </section>
+  <?php endif; ?>
 
   <?php if ($rows === []): ?>
     <div class="tc-card" style="text-align:center;padding:34px 22px">
@@ -27,7 +59,7 @@ $canDelete = Auth::can('voicemail');
   <?php /* Two messages a row on a wide screen: each is mostly its transcript. */ ?>
   <div class="tc-vm-grid">
   <?php foreach ($rows as $v): ?>
-    <article class="tc-card tc-card--flat">
+    <article class="tc-card tc-card--flat" id="vm-<?= (int) $v['id'] ?>" data-tc-ajax-region>
       <div class="tc-vm-row">
         <?php /* Same control as the call log, so playing audio looks the same
                  wherever it appears in the app. */ ?>
@@ -90,6 +122,30 @@ $canDelete = Auth::can('voicemail');
       <?php if ($v['transcript'] !== ''): ?>
         <div class="tc-transcript">“<?= e($v['transcript']) ?>”</div>
       <?php endif; ?>
+
+      <?php /* Which mailbox it's in, and moving it — to a phone, whose owner
+               then hears it by dialling 700. */ ?>
+      <div class="tc-vm-box">
+        <?php if ($canDelete && count($mailboxes) > 1): ?>
+          <form method="post" action="/" class="tc-row" data-tc-ajax>
+            <?= form_fields() ?>
+            <input type="hidden" name="action" value="vm_move">
+            <input type="hidden" name="id" value="<?= (int) $v['id'] ?>">
+            <label class="tc-vm-box__label" for="vm-to-<?= (int) $v['id'] ?>"><i class="fa-solid fa-inbox" aria-hidden="true"></i> In</label>
+            <select class="tc-input tc-vm-box__pick" name="to" id="vm-to-<?= (int) $v['id'] ?>" data-tc-autosave>
+              <?php foreach ($mailboxes as $box => $label): ?>
+                <option value="<?= e((string) $box) ?>"<?= (string) $box === $v['mailbox'] ? ' selected' : '' ?>><?= e($label) ?></option>
+              <?php endforeach; ?>
+              <?php if (!isset($mailboxes[$v['mailbox']])): ?>
+                <option value="<?= e($v['mailbox']) ?>" selected>Mailbox <?= e($v['mailbox']) ?></option>
+              <?php endif; ?>
+            </select>
+            <noscript><button class="tc-btn tc-btn--ghost tc-btn--sm" type="submit">Move</button></noscript>
+          </form>
+        <?php else: ?>
+          <span class="tc-vm-box__label"><i class="fa-solid fa-inbox" aria-hidden="true"></i> In <?= e($mailboxes[$v['mailbox']] ?? 'mailbox ' . $v['mailbox']) ?></span>
+        <?php endif; ?>
+      </div>
     </article>
   <?php endforeach; ?>
   </div>

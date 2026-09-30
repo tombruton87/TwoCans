@@ -24,8 +24,11 @@ final class TrunkRepository
             'connected' => (bool) ($row['connected'] ?? false),
             'provider' => $provider,
             'region' => Twilio::normalizeRegion((string) ($row['region'] ?? 'us1')),
-            // The main number: caller ID for every outgoing call.
+            // The main number: the first the line was connected with.
             'number' => (string) ($row['number_e164'] ?? ''),
+            // What calls go out from, unless a phone has its own — see
+            // outgoingNumberFor(). The main number unless another is chosen.
+            'outgoing' => self::onLine((string) ($row['outgoing_number'] ?? ''), $row) ?: (string) ($row['number_e164'] ?? ''),
             // Every number that rings the house, main one first — see
             // migration 033.
             'numbers' => array_values(array_filter(array_merge(
@@ -91,13 +94,28 @@ final class TrunkRepository
     }
 
     /**
-     * The number a phone calls out from: the first of the line's numbers that
-     * is pointed at it, so a number that belongs to one child is also what
-     * the people they ring see. Null means the line's main number.
+     * The number a phone calls out from. Its own choice if it has one; else,
+     * automatically, the first of the line's numbers pointed at it — so a
+     * number that belongs to one child is also what the people they ring see.
+     * Null means the line's (see get()['outgoing']).
      */
     public function outgoingNumberFor(int $deviceId): ?string
     {
         $trunk = $this->get();
+        $st = Database::pdo()->prepare('SELECT outgoing_number FROM devices WHERE id = ?');
+        $st->execute([$deviceId]);
+        $chosen = (string) ($st->fetchColumn() ?: '');
+        if ($chosen !== '' && in_array($chosen, $trunk['numbers'], true)) {
+            return $chosen;
+        }
+
+        return $this->ownNumber($deviceId, $trunk);
+    }
+
+    /** The first of the line's numbers pointed at this phone, or null. */
+    public function ownNumber(int $deviceId, ?array $trunk = null): ?string
+    {
+        $trunk ??= $this->get();
         foreach ($trunk['numbers'] as $number) {
             if (($trunk['rings'][$number] ?? null) === $deviceId) {
                 return $number;
@@ -105,6 +123,79 @@ final class TrunkRepository
         }
 
         return null;
+    }
+
+    /** What the line calls out from; '' for its main number. Not one of its numbers: ignored. */
+    public function setOutgoing(string $number): void
+    {
+        $number = in_array($number, $this->get()['numbers'], true) ? $number : '';
+        Database::pdo()->prepare('UPDATE trunk SET outgoing_number = ? WHERE id = ?')
+            ->execute([$number !== '' ? $number : null, self::ID]);
+    }
+
+    /** What one phone calls out from; '' for automatic. Not one of the line's numbers: ignored. */
+    public function setDeviceOutgoing(int $deviceId, string $number): void
+    {
+        $number = in_array($number, $this->get()['numbers'], true) ? $number : '';
+        Database::pdo()->prepare('UPDATE devices SET outgoing_number = ? WHERE id = ?')
+            ->execute([$number !== '' ? $number : null, $deviceId]);
+    }
+
+    /**
+     * Where messages left on one of the line's numbers go: the house mailbox,
+     * or a phone's (its extension). Automatic unless chosen: the phone the
+     * number rings, if it rings just one, else the house.
+     *
+     * @return array{mailbox:string,deviceId:?int,auto:bool}
+     */
+    public function mailboxFor(string $number, ?array $trunk = null): array
+    {
+        $trunk ??= $this->get();
+        $st = Database::pdo()->prepare('SELECT target FROM trunk_number_mailboxes WHERE number_e164 = ?');
+        $st->execute([$number]);
+        $target = (string) ($st->fetchColumn() ?: '');
+
+        $house = ['mailbox' => PjsipConfig::HOUSE_MAILBOX, 'deviceId' => null];
+        $phone = static function (int $id): ?array {
+            $row = (new DeviceRepository())->find($id);
+
+            return $row === null || (string) $row['extension'] === '' ? null : ['mailbox' => (string) $row['extension'], 'deviceId' => $id];
+        };
+
+        if ($target === 'house') {
+            return $house + ['auto' => false];
+        }
+        if ($target !== '' && ($chosen = $phone((int) $target)) !== null) {
+            return $chosen + ['auto' => false];
+        }
+        $rings = $trunk['rings'][$number] ?? null;
+
+        return (($rings !== null ? $phone($rings) : null) ?? $house) + ['auto' => true];
+    }
+
+    /** Where one number's messages go: '' automatic, 'house', or a phone's id. */
+    public function setMailbox(string $number, string $target): void
+    {
+        $pdo = Database::pdo();
+        if ($target === '' || !in_array($number, $this->get()['numbers'], true)) {
+            $pdo->prepare('DELETE FROM trunk_number_mailboxes WHERE number_e164 = ?')->execute([$number]);
+
+            return;
+        }
+        $pdo->prepare('INSERT INTO trunk_number_mailboxes (number_e164, target) VALUES (?, ?)
+                       ON DUPLICATE KEY UPDATE target = VALUES(target)')
+            ->execute([$number, $target === 'house' ? 'house' : (string) (int) $target]);
+    }
+
+    /** $number if it is one of the line's (in this trunk row), else ''. */
+    private static function onLine(string $number, array $row): string
+    {
+        if ($number === '') {
+            return '';
+        }
+        $numbers = array_merge([(string) ($row['number_e164'] ?? '')], preg_split('/\s+/', trim((string) ($row['extra_numbers'] ?? ''))) ?: []);
+
+        return in_array($number, $numbers, true) ? $number : '';
     }
 
     /** @return array<string,int> number => the one phone it rings */

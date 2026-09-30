@@ -6,7 +6,7 @@
 COMPOSE := docker compose
 -include .env
 
-.PHONY: help install update build up down restart logs status migrate password passwords reset-owner backup backups clean
+.PHONY: help install update build dev test up down restart logs status migrate password passwords reset-owner backup backups clean
 
 help: ## List available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-11s\033[0m %s\n", $$1, $$2}'
@@ -19,6 +19,12 @@ update: ## Update to the latest version, keeping your settings
 
 build: ## Build the twocans images from source and start the stack
 	$(COMPOSE) -f compose.yaml -f compose.build.yml up -d --build
+
+dev: ## Development: the real stack, with the code in this folder live
+	$(COMPOSE) -f compose.yaml -f compose.dev.yml up -d --build
+
+test: ## Run the PHP test suite
+	$(COMPOSE) exec web php /var/www/html/bin/test.php
 
 up: ## Start the whole stack (keeps your data)
 	$(COMPOSE) up -d

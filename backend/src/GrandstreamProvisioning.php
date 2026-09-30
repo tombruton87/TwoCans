@@ -48,7 +48,7 @@ final class GrandstreamProvisioning
      * through Asterisk. See docker/asterisk/etc/pjsip_notify.conf.
      *
      * @param array $device DeviceRepository::toView() shape
-     * @return array{ok:bool,error:?string}
+     * @return array{ok:bool,error:?string,pending?:bool}
      */
     public static function notify(array $device, bool $reboot = false): array
     {
@@ -56,7 +56,12 @@ final class GrandstreamProvisioning
             return ['ok' => false, 'error' => 'Only a Grandstream can be sent its settings.'];
         }
         if (!($device['online'] ?? false)) {
-            return ['ok' => false, 'error' => $device['name'] . " isn't online, so it can't be reached — it'll fetch them when it next starts."];
+            // Waiting for it: sent the moment it's back — see sendPending().
+            if (!$reboot) {
+                (new DeviceRepository())->setSettingsPending((int) $device['id'], true);
+            }
+
+            return ['ok' => false, 'pending' => true, 'error' => $device['name'] . " is offline — it'll be sent them the moment it's back."];
         }
         try {
             $ami = new Ami();
@@ -80,6 +85,31 @@ final class GrandstreamProvisioning
         return ($reply['response'] ?? '') === 'Success'
             ? ['ok' => true, 'error' => null]
             : ['ok' => false, 'error' => (string) ($reply['message'] ?? 'The phone system could not send it.')];
+    }
+
+    /**
+     * Send settings to every phone that was offline when they changed and is
+     * back now. Run each minute (bin/minute.php), after the registrations are
+     * brought up to date. A phone that fetches them clears its own flag.
+     *
+     * @return array<int,string> the phones sent to, by name
+     */
+    public static function sendPending(): array
+    {
+        $sent = [];
+        $devices = new DeviceRepository();
+        foreach ($devices->all() as $row) {
+            $d = DeviceRepository::toView($row);
+            if (!$d['settingsPending'] || !$d['online']) {
+                continue;
+            }
+            if (self::notify($d)['ok']) {
+                $devices->setSettingsPending($d['id'], false);
+                $sent[] = $d['name'];
+            }
+        }
+
+        return $sent;
     }
 
     /** Normalise a pasted MAC to 12 uppercase hex chars, or '' when it cannot be one. */

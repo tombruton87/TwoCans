@@ -454,6 +454,51 @@ switch ($action) {
         }
         break;
 
+    case 'device_rings':
+        $phone = $devices->find((int) $id);
+        if ($phone === null) {
+            break;
+        }
+        $rings = (int) ($_POST['rings'] ?? 0);
+        $devices->setRings((int) $id, $rings === DeviceRepository::DEFAULT_RINGS ? null : $rings);
+        // How long each phone rings is written into the dialplan.
+        (new PjsipConfig($devices))->apply();
+        $now = DeviceRepository::toView($devices->find((int) $id));
+        flash($phone['name'] . ' rings ' . $now['rings'] . ' times before voicemail ✓');
+        break;
+
+    case 'vm_move':
+        $to = (string) ($_POST['to'] ?? '');
+        $problem = (new VoicemailRepository())->move((int) $id, $to);
+        if ($problem !== null) {
+            flash($problem);
+            break;
+        }
+        $phone = $to === PjsipConfig::HOUSE_MAILBOX ? null : $devices->all();
+        $name = "the house's mailbox";
+        foreach ($phone ?? [] as $d) {
+            if ((string) $d['extension'] === $to) {
+                $name = $d['name'] . "'s mailbox — they can hear it by dialling " . PjsipConfig::VOICEMAIL_NUMBER;
+            }
+        }
+        flash('Moved to ' . $name . ' ✓');
+        break;
+
+    case 'voicemail_speed_dial':
+        $settings = new SettingsRepository();
+        $wanted = trim((string) ($_POST['code'] ?? ''));
+        if (($problem = $settings->voicemailSpeedDialProblem($wanted)) !== null) {
+            flash($problem);
+            break;
+        }
+        $settings->setVoicemailSpeedDial($wanted === PjsipConfig::VOICEMAIL_NUMBER ? '' : $wanted);
+        // It's an extension in the generated dialplan.
+        (new PjsipConfig($devices))->apply();
+        flash($wanted === '' || $wanted === PjsipConfig::VOICEMAIL_NUMBER
+            ? 'No speed dial — messages are on ' . PjsipConfig::VOICEMAIL_NUMBER
+            : 'Dial ' . $wanted . ' for messages ✓ (' . PjsipConfig::VOICEMAIL_NUMBER . ' still works)');
+        break;
+
     case 'joke_number':
         $settings = new SettingsRepository();
         $wanted = trim((string) ($_POST['number'] ?? ''));
@@ -1416,6 +1461,46 @@ switch ($action) {
      * Which phone the line's number rings. Empty means all of them, which is
      * how a line behaves until someone narrows it.
      */
+    case 'trunk_number_mailbox':
+        $trunkRepo = new TrunkRepository();
+        $number = (string) ($_POST['number'] ?? '');
+        if (!in_array($number, $trunkRepo->get()['numbers'], true)) {
+            flash('That number is no longer on the line.');
+            break;
+        }
+        $target = (string) ($_POST['target'] ?? '');
+        if ($target !== '' && $target !== 'house' && $devices->find((int) $target) === null) {
+            flash('That phone is no longer on the line.');
+            break;
+        }
+        $trunkRepo->setMailbox($number, $target);
+        // The mailbox for each number is written into the incoming dialplan.
+        (new PjsipConfig($devices))->apply();
+        $now = $trunkRepo->mailboxFor($number);
+        flash('Messages on ' . $number . ' go to ' . ($now['deviceId'] === null ? "the house's mailbox" : $devices->find($now['deviceId'])['name'] . "'s mailbox") . ' ✓');
+        break;
+
+    case 'trunk_outgoing':
+        // What the line calls out from, for every phone without its own.
+        $trunkRepo = new TrunkRepository();
+        $trunkRepo->setOutgoing((string) ($_POST['number'] ?? ''));
+        // The caller ID is set in the generated dialplan.
+        (new PjsipConfig($devices))->apply();
+        flash('Calls go out from ' . $trunkRepo->get()['outgoing'] . ' ✓');
+        break;
+
+    case 'device_outgoing':
+        $phone = $devices->find((int) $id);
+        if ($phone === null) {
+            break;
+        }
+        $trunkRepo = new TrunkRepository();
+        $trunkRepo->setDeviceOutgoing((int) $id, (string) ($_POST['number'] ?? ''));
+        // Each phone's own is on its endpoint (TC_OUTNUM).
+        (new PjsipConfig($devices))->apply();
+        flash($phone['name'] . ' calls out from ' . ($trunkRepo->outgoingNumberFor((int) $id) ?? $trunkRepo->get()['outgoing']) . ' ✓');
+        break;
+
     case 'trunk_ring_device':
         $wanted = trim((string) ($_POST['device'] ?? ''));
         $chosen = null;

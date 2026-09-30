@@ -47,6 +47,9 @@ $base = ($https ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localho
             <?= $a['mode'] === 'auto' ? 'Phones pick up by themselves' : 'Phones ring' ?>
             · <?= $toSome ? count($a['devices']) . ' phone' . (count($a['devices']) === 1 ? '' : 's') : 'every phone' ?>
             <?= $a['audio'] !== '' ? '· ' . e(fmt_duration($a['seconds'])) : '· no recording yet' ?>
+            <?php if ($a['scheduleDays'] !== []): ?>
+              · <i class="fa-regular fa-clock" aria-hidden="true"></i> <?= e(AnnouncementRepository::describeSchedule($a['scheduleDays'], $a['scheduleTime'])) ?>
+            <?php endif; ?>
           </span>
         </span>
         <span class="tc-link tc-announce__toggle">Edit</span>
@@ -120,6 +123,30 @@ $base = ($https ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localho
             </div>
           </fieldset>
 
+          <fieldset class="tc-announce__set">
+            <legend class="tc-card__subtitle">Play it by itself</legend>
+            <?php $scheduled = $a['scheduleDays'] !== []; ?>
+            <label class="tc-announce__choice">
+              <input type="checkbox" name="scheduleOn" value="1" <?= $scheduled ? 'checked' : '' ?>>
+              <span>At a set time — “bath time in ten minutes”, every school night.</span>
+            </label>
+            <div class="tc-announce__when">
+              <div class="tc-daypick" role="group" aria-label="Days">
+                <?php foreach ([1 => 'Mon', 2 => 'Tue', 3 => 'Wed', 4 => 'Thu', 5 => 'Fri', 6 => 'Sat', 7 => 'Sun'] as $n => $day): ?>
+                  <label class="tc-daypick__day">
+                    <input type="checkbox" name="scheduleDays[]" value="<?= $n ?>"
+                           <?= in_array($n, $scheduled ? $a['scheduleDays'] : [1, 2, 3, 4, 7], true) ? 'checked' : '' ?>>
+                    <span><?= $day ?></span>
+                  </label>
+                <?php endforeach; ?>
+              </div>
+              <label class="tc-label tc-label--sm">At
+                <input class="tc-input tc-announce__time" type="time" name="scheduleTime"
+                       value="<?= e($a['scheduleTime'] !== '' ? $a['scheduleTime'] : '18:50') ?>">
+              </label>
+            </div>
+          </fieldset>
+
           <button class="tc-btn tc-btn--teal" type="submit">Save</button>
         </form>
 
@@ -142,10 +169,10 @@ $base = ($https ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localho
           <input type="hidden" name="action" value="announce_audio">
           <input type="hidden" name="id" value="<?= (int) $a['id'] ?>">
           <label class="tc-btn tc-btn--ghost tc-audio-file">
-            <span data-tc-filename><?= $a['audio'] === '' ? 'Record or choose a file' : 'Replace the recording' ?></span>
+            <span data-tc-filename><?= $a['audio'] === '' ? 'Choose a file' : 'Replace the recording' ?></span>
             <input type="file" name="message"
                    accept="audio/*,.mp3,.m4a,.wav,.ogg,.opus,.flac,.amr,.aac,.3gp"
-                   data-tc-audiofile data-tc-autosave required>
+                   data-tc-audiofile data-tc-rec-max="60" data-tc-autosave required>
           </label>
           <noscript><button class="tc-btn tc-btn--teal" type="submit">Save message</button></noscript>
         </form>

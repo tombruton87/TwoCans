@@ -86,11 +86,97 @@ final class AnnouncementRepository
             ? (string) json_encode($picked)
             : null;
 
+        // Playing by itself at a set time: days and a time, or neither.
+        $days = '';
+        $time = null;
+        if (!empty($input['scheduleOn'])) {
+            $picked = array_values(array_unique(array_filter(
+                array_map('intval', (array) ($input['scheduleDays'] ?? [])),
+                static fn(int $d): bool => $d >= 1 && $d <= 7
+            )));
+            sort($picked);
+            if ($picked === []) {
+                return 'Pick the days for “' . $label . '” to play by itself.';
+            }
+            if (!preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', (string) ($input['scheduleTime'] ?? ''))) {
+                return 'Pick the time for “' . $label . '” to play by itself.';
+            }
+            $days = implode(',', $picked);
+            $time = $input['scheduleTime'] . ':00';
+        }
+
         Database::pdo()->prepare(
-            'UPDATE announcements SET label = ?, emoji = ?, mode = ?, device_ids = ?, repeat_play = ? WHERE id = ?'
-        )->execute([$label, $emoji, $mode, $devices, !empty($input['repeat']) ? 1 : 0, $id]);
+            'UPDATE announcements SET label = ?, emoji = ?, mode = ?, device_ids = ?, repeat_play = ?,
+                    schedule_days = ?, schedule_time = ? WHERE id = ?'
+        )->execute([$label, $emoji, $mode, $devices, !empty($input['repeat']) ? 1 : 0, $days, $time, $id]);
 
         return null;
+    }
+
+    /**
+     * Play whatever is due: an announcement set to play by itself, on one of
+     * its days, within five minutes of its time, not already played for it.
+     * Run each minute (bin/minute.php); the five minutes cover a slow minute,
+     * and a twocans that was off at the time doesn't play it late.
+     *
+     * @return array<int,string> what was played, or why not, one line each
+     */
+    public function runSchedule(?DateTimeImmutable $now = null): array
+    {
+        $now ??= new DateTimeImmutable();
+        $out = [];
+        foreach ($this->all() as $a) {
+            $due = self::dueAt($a, $now);
+            if ($due === null) {
+                continue;
+            }
+            // Marked first: a page that fails isn't retried every minute.
+            Database::pdo()->prepare('UPDATE announcements SET last_scheduled_at = ? WHERE id = ?')
+                ->execute([$due->format('Y-m-d H:i:s'), $a['id']]);
+            $sent = $this->send($a['id']);
+            $out[] = $a['label'] . ': ' . ($sent['ok'] ? 'played on ' . $sent['phones'] . ' phone(s)' : (string) $sent['error']);
+        }
+
+        return $out;
+    }
+
+    /** When this announcement should play now, or null if it shouldn't. */
+    public static function dueAt(array $a, DateTimeImmutable $now): ?DateTimeImmutable
+    {
+        if ($a['scheduleDays'] === [] || $a['scheduleTime'] === '' || !in_array((int) $now->format('N'), $a['scheduleDays'], true)) {
+            return null;
+        }
+        $at = new DateTimeImmutable($now->format('Y-m-d') . ' ' . $a['scheduleTime'] . ':00', $now->getTimezone());
+        $late = $now->getTimestamp() - $at->getTimestamp();
+        if ($late < 0 || $late >= 300) {
+            return null;
+        }
+        if ($a['lastScheduledAt'] !== null && strtotime($a['lastScheduledAt']) >= $at->getTimestamp()) {
+            return null;
+        }
+
+        return $at;
+    }
+
+    /** "school nights at 18:50", "every day at 07:30", "Sat and Sun at 09:00". */
+    public static function describeSchedule(array $days, string $time): string
+    {
+        if ($days === [] || $time === '') {
+            return '';
+        }
+        $names = [1 => 'Mon', 2 => 'Tue', 3 => 'Wed', 4 => 'Thu', 5 => 'Fri', 6 => 'Sat', 7 => 'Sun'];
+        $when = match ($days) {
+            [1, 2, 3, 4, 5, 6, 7] => 'every day',
+            [1, 2, 3, 4, 5] => 'weekdays',
+            [7, 1, 2, 3, 4], [1, 2, 3, 4, 7] => 'school nights',
+            [6, 7] => 'weekends',
+            default => count($days) === 1
+                ? 'every ' . date('l', strtotime('Sunday +' . $days[0] . ' days'))
+                : implode(', ', array_map(static fn(int $d): string => $names[$d], array_slice($days, 0, -1)))
+                    . ' and ' . $names[$days[count($days) - 1]],
+        };
+
+        return $when . ' at ' . $time;
     }
 
     public function setAudio(int $id, ?string $file, int $seconds = 0): void
@@ -269,6 +355,10 @@ final class AnnouncementRepository
             'repeat' => (bool) $row['repeat_play'],
             'token' => (string) $row['token'],
             'lastSentAt' => $row['last_sent_at'] ?? null,
+            // Playing by itself: ISO weekdays and HH:MM, or none — see runSchedule().
+            'scheduleDays' => array_values(array_map('intval', array_filter(explode(',', (string) ($row['schedule_days'] ?? ''))))),
+            'scheduleTime' => substr((string) ($row['schedule_time'] ?? ''), 0, 5),
+            'lastScheduledAt' => $row['last_scheduled_at'] ?? null,
         ];
     }
 }

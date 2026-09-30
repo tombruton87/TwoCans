@@ -30,6 +30,8 @@ final class Permissions
         'announce_token' => 'rules',
         'retention_set' => 'rules',
         'joke_number' => 'rules',
+        'voicemail_speed_dial' => 'rules',
+        'device_rings' => 'devices',
         // The message bedtime plays belongs to the house rather than to one
         // phone, so it sits with the other rules too.
         'quiet_message' => 'rules',
@@ -100,6 +102,7 @@ final class Permissions
         'screening_allow' => 'contacts',
         'screening_junk' => 'contacts',
         'vm_delete' => 'voicemail',
+        'vm_move' => 'voicemail',
         // Jokes are part of what the line does, so they sit with the other rules:
         // an Admin may manage them, a Viewer may not.
         'joke_add' => 'rules',
@@ -118,6 +121,9 @@ final class Permissions
         'trunk_connect' => 'billing',
         'trunk_topup' => 'billing',
         'trunk_ring_device' => 'billing',
+        'trunk_outgoing' => 'billing',
+        'trunk_number_mailbox' => 'billing',
+        'device_outgoing' => 'billing',
         'trunk_edit' => 'billing',
         // Dynamic DNS holds an API token that can rewrite every record in a domain
         // the household owns, so it sits with billing: Owner only.

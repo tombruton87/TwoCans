@@ -481,6 +481,24 @@ final class PjsipConfig
     public const JOKE_CONTEXT = 'twocans-jokes';
 
     /** Where the joke line answers — chosen by the household, 258 by default. */
+    /** Dialplan: ring for at least this long — RINGSECS keeps the longest of the phones rung. */
+    private static function ringFor(int $seconds): string
+    {
+        return " same => n,Set(RINGSECS=\${IF(\$[\${RINGSECS} < {$seconds}]?{$seconds}:\${RINGSECS})})\n";
+    }
+
+    /** The speed dial for "your messages", as a service number — or nothing. */
+    private static function voicemailSpeedDialEntry(): array
+    {
+        try {
+            $code = (new SettingsRepository())->voicemailSpeedDial();
+        } catch (Throwable) {
+            return [];
+        }
+
+        return $code === '' ? [] : [$code => ['label' => 'Your messages', 'sub' => 'The quick way to your messages — the same as ' . self::VOICEMAIL_NUMBER]];
+    }
+
     public static function jokeNumber(): string
     {
         return (new SettingsRepository())->jokeNumber();
@@ -723,7 +741,8 @@ final class PjsipConfig
 
     /**
      * What an outgoing call presents as its number: the calling phone's own
-     * line number when it has one, else the line's main number. Worked out on
+     * choice (or its own number) when it has one, else the line's outgoing
+     * number — see TrunkRepository::outgoingNumberFor(). Worked out on
      * the channel, since the same dialplan serves every phone.
      */
     public static function callerIdNumber(string $mainNumber): string
@@ -758,6 +777,7 @@ final class PjsipConfig
     {
         return [
             self::VOICEMAIL_NUMBER => ['label' => 'Your messages', 'sub' => 'Listen to voicemail left on this phone'],
+        ] + self::voicemailSpeedDialEntry() + [
             self::jokeNumber() => ['label' => 'The joke line', 'sub' => 'Rings up a joke, picked at random from the ones you have added'],
             '600' => ['label' => 'Echo test', 'sub' => 'Hear your own voice back — checks the microphone and speaker'],
             '601' => ['label' => 'Test message', 'sub' => 'Plays a welcome message, like a real incoming call — your own greeting if you record one'],
@@ -833,7 +853,8 @@ final class PjsipConfig
         $contacts = (new ContactRepository())->all();
         $trunk = (new TrunkRepository())->get();
         $trunkConnected = (bool) $trunk['connected'];
-        $trunkNumber = $trunkConnected ? (string) $trunk['number'] : '';
+        // What a call out shows, unless the phone has its own (TC_OUTNUM).
+        $trunkNumber = $trunkConnected ? (string) $trunk['outgoing'] : '';
         $settings = new SettingsRepository();
         $quietHours = $settings->quietHours();
         $quietRange = $settings->quietTimeRange();
@@ -1244,7 +1265,7 @@ final class PjsipConfig
     private function renderDialoutContext(): string
     {
         $trunk = (new TrunkRepository())->get();
-        $number = (string) $trunk['number'];
+        $number = (string) $trunk['outgoing'];
         $cc = ContactRepository::countryCode();
 
         $out = "\n[" . self::DIALOUT_CONTEXT . "]\n";
@@ -1321,13 +1342,13 @@ final class PjsipConfig
         $out .= "maxmsg = 100\n";
         $out .= "maxsecs = 120\n";
         /*
-         * maxsilence must be BELOW minsecs, or a caller who says nothing still
-         * leaves a message as long as the silence timeout — Asterisk warns
-         * about exactly this. With 3 and 4, silence stops the recording after
-         * three seconds and is then too short to keep, while a real message
-         * survives a normal pause for thought.
+         * Silence stops the recording after three seconds (a real message
+         * survives a pause for thought), and Asterisk trims that silence off
+         * before measuring — so a caller who says nothing measures nothing and
+         * is thrown away. The minimum only has to catch that: at 4 seconds it
+         * also threw away real ones, "hi, it's Tom, call me" being about 3.
          */
-        $out .= "minsecs = 4\n";
+        $out .= "minsecs = 1\n";
         $out .= "maxsilence = 3\n";
         $out .= "silencethreshold = 128\n";
         $out .= "review = yes\n";
@@ -1720,6 +1741,8 @@ final class PjsipConfig
         $out .= "; REFUSAL is that phone's recording; REFUSAL_ANY is the first phone\n";
         $out .= "; with any recording at all, which speaks when nothing here can ring.\n";
         $out .= " same => n,Set(TARGETS=)\n";
+        // How long to ring: the longest of the phones rung — see ringFor().
+        $out .= " same => n,Set(RINGSECS=0)\n";
         // Phones in adult mode ring for everyone, whenever — see migration 041.
         $out .= " same => n,Set(ADULTS=)\n";
         $out .= " same => n,Set(REFUSAL=)\n";
@@ -1729,12 +1752,24 @@ final class PjsipConfig
         // is that phone's id for the number this call came in on, or empty to
         // ring them all. Matched on the last nine digits, the way contacts
         // are, so it holds however the provider spells the number it sends.
-        $rings = (new TrunkRepository())->get()['rings'];
+        $trunkRepo = new TrunkRepository();
+        $trunkNow = $trunkRepo->get();
+        $rings = $trunkNow['rings'];
         $out .= " same => n,Set(ONLY=)\n";
         foreach ($rings as $number => $deviceId) {
             $tail = substr(preg_replace('/\D/', '', (string) $number) ?? '', -9);
             if ($tail !== '') {
                 $out .= " same => n,ExecIf(\$[\"\${DID:-9}\" = \"{$tail}\"]?Set(ONLY={$deviceId}))\n";
+            }
+        }
+        // Where a message left on this number goes: the house's mailbox, or
+        // the phone it belongs to — see TrunkRepository::mailboxFor().
+        $out .= " same => n,Set(MBOX={$house})\n";
+        foreach ($trunkNow['numbers'] as $number) {
+            $box = $trunkRepo->mailboxFor((string) $number, $trunkNow)['mailbox'];
+            $tail = substr(preg_replace('/\D/', '', (string) $number) ?? '', -9);
+            if ($tail !== '' && $box !== $house) {
+                $out .= " same => n,ExecIf(\$[\"\${DID:-9}\" = \"{$tail}\"]?Set(MBOX={$box}))\n";
             }
         }
 
@@ -1765,6 +1800,7 @@ final class PjsipConfig
                     $out .= " same => n,GotoIf(\$[\"\${ONLY}\" != \"\" & \"\${ONLY}\" != \"{$d['id']}\"]?off{$label})\n";
                 }
                 $out .= " same => n,Set(ADULTS=\${ADULTS}&PJSIP/{$d['sipUsername']})\n";
+                $out .= self::ringFor($d['ringSeconds']);
                 $out .= " same => n(off{$label}),NoOp({$d['name']} is in adult mode)\n";
                 continue;
             }
@@ -1790,6 +1826,7 @@ final class PjsipConfig
 
             $out .= self::renderDeviceHours($label, Schedule::conditions($d['hours']), $anyAlways);
             $out .= " same => n(on{$label}),Set(TARGETS=\${TARGETS}&PJSIP/{$d['sipUsername']})\n";
+            $out .= self::ringFor($d['ringSeconds']);
             $out .= self::renderRefusalPick('REFUSAL', $sound);
             $out .= " same => n(off{$label}),NoOp({$d['name']} considered)\n";
         }
@@ -1837,7 +1874,8 @@ final class PjsipConfig
         // renderLimitsContext(). The flags let SOS and always-through callers
         // past them. The last one is the caller's name spoken, for a phone
         // that says who's calling.
-        $out .= " same => n,Dial(\${TARGETS:1},30,U(" . self::ANSWERED_CONTEXT . "^\${CALLER_SOS}\${CALLER_ALWAYS}^\${UNIQUEID}^\${CALLER_ANNOUNCE}))\n";
+        // Rung for as long as the longest-ringing phone is set to, then voicemail.
+        $out .= " same => n,Dial(\${TARGETS:1},\${IF(\$[\${RINGSECS} > 0]?\${RINGSECS}:30)},U(" . self::ANSWERED_CONTEXT . "^\${CALLER_SOS}\${CALLER_ALWAYS}^\${UNIQUEID}^\${CALLER_ANNOUNCE}))\n";
         $out .= " same => n,Goto(quiet)\n";
 
         $out .= "\n; Nobody answered. Straight to the house mailbox: the phones rang and\n";
@@ -1848,9 +1886,9 @@ final class PjsipConfig
         $vmGreeting = $greetings->custom('voicemail');
         if ($vmGreeting !== null) {
             $out .= " same => n(quiet),Playback({$vmGreeting})\n";
-            $out .= " same => n,VoiceMail({$house}@{$vm},s)\n";
+            $out .= " same => n,VoiceMail(\${MBOX}@{$vm},s)\n";
         } else {
-            $out .= " same => n(quiet),VoiceMail({$house}@{$vm},u)\n";
+            $out .= " same => n(quiet),VoiceMail(\${MBOX}@{$vm},u)\n";
         }
         $out .= " same => n,Hangup()\n";
         $out .= self::renderJokeFallback();
@@ -1925,6 +1963,11 @@ final class PjsipConfig
         $out .= " same => n,Wait(1)\n";
         $out .= " same => n,VoiceMailMain(\${CALLERID(num)}@{$vmContext},s)\n";
         $out .= " same => n,Hangup()\n\n";
+        $vmSpeedDial = (new SettingsRepository())->voicemailSpeedDial();
+        if ($vmSpeedDial !== '') {
+            $out .= "; {$vmSpeedDial} — the household's speed dial for {$vmNumber}.\n";
+            $out .= "exten => {$vmSpeedDial},1,Goto({$vmNumber},1)\n\n";
+        }
 
         $out .= "; Phone-to-phone within the house.\n";
 
@@ -1942,8 +1985,8 @@ final class PjsipConfig
             // and voicemail prompts don't end up in the file.
             // Not when either phone is in adult mode.
             $out .= $d['adult'] ? " same => n,NoOp({$d['name']} is in adult mode: not recorded)\n" : self::renderRecord();
-            // 30s to answer, then give up rather than ringing forever.
-            $out .= " same => n,Dial(PJSIP/{$d['sipUsername']},30)\n";
+            // Its own number of rings to answer, then its mailbox.
+            $out .= " same => n,Dial(PJSIP/{$d['sipUsername']},{$d['ringSeconds']})\n";
             // Nobody picked up (or the phone was busy) — offer to take a
             // message instead of just dropping the call.
             $out .= " same => n,Goto(vm-\${DIALSTATUS})\n";
@@ -2199,7 +2242,7 @@ final class PjsipConfig
     private function renderTrunkDialplan(array $trunk): string
     {
         $out = $this->header('Outbound dialplan');
-        $number = $trunk['number'];
+        $number = $trunk['outgoing'];
 
         $out .= "\n";
         $out .= "[twocans-outbound]\n";

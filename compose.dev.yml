@@ -1,0 +1,45 @@
+# ---------------------------------------------------------------------------
+# Development: the real install (compose.yaml), with twocans' own code live
+# from this folder instead of baked into the image.
+#
+#   docker compose -f compose.yaml -f compose.dev.yml up -d --build
+#   # or:  make dev
+#
+# Everything else is exactly what a household runs — the same containers,
+# names, volumes and ports — so the pager, the once-a-minute jobs (settings
+# waiting for a phone, scheduled announcements, notifications, dynamic DNS)
+# and certificates all run here as they do there, with nothing started by hand.
+#
+# The web image is built locally (tagged twocans-web:dev, never pushed) and
+# ./backend is mounted over the code inside it: edit a PHP file, reload the
+# page. The transcriber and pager run the same image and see the same code.
+# ---------------------------------------------------------------------------
+
+services:
+  web:
+    image: twocans-web:dev
+    build:
+      context: .
+      dockerfile: docker/web/Dockerfile
+      args:
+        UID: ${HOST_UID:-1000}
+        GID: ${HOST_GID:-1000}
+    volumes:
+      - ./backend:/var/www/html
+
+  transcriber:
+    image: twocans-web:dev
+    volumes:
+      - ./backend:/var/www/html:ro
+
+  pager:
+    image: twocans-web:dev
+    volumes:
+      - ./backend:/var/www/html:ro
+
+  # Built here too (the image already on this machine is reused); nothing
+  # of twocans' own code is in it.
+  whisper:
+    image: twocans-whisper
+    build:
+      context: ./docker/whisper

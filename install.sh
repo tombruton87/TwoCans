@@ -271,6 +271,14 @@ fi
 COMPOSE=(docker compose)
 $BUILD_LOCALLY && COMPOSE=(docker compose -f compose.yaml -f compose.build.yml)
 
+# A development setup (compose.dev.yml: the code in this folder, live) stays
+# one: built here, never swapped for the published images.
+if [[ "$(docker inspect -f '{{.Config.Image}}' twocans-web 2>/dev/null || true)" == twocans-web:dev ]]; then
+  COMPOSE=(docker compose -f compose.yaml -f compose.dev.yml)
+  BUILD_LOCALLY=true
+  note "development setup (compose.dev.yml) — building from this folder"
+fi
+
 # A firewall's rules are root's to read. Use sudo if it needs no password;
 # otherwise ask first — it's read-only, but it may ask for yours.
 SUDO_OK=false
