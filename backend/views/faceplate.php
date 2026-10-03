@@ -51,7 +51,7 @@ $choice = static fn(string $name, string $value): string => $options[$name] === 
 <?php require __DIR__ . '/partials/head.php'; ?>
 <style>
   @page { size: auto; margin: 0; }
-  body { background: #E9E2D6; margin: 0; }
+  body { background: var(--tc-bg-wash); margin: 0; }
   .fp-bar { max-width: 900px; margin: 0 auto; padding: 20px 16px 8px; }
   .fp-bar h1 { font: 800 24px var(--tc-display); color: var(--tc-ink); margin: 0 0 4px; }
   .fp-options { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: end; margin: 14px 0 10px; }

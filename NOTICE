@@ -15,3 +15,15 @@ part of this repository. The tracks are by Paul Shuler (Macroform), Manolo
 Camp and Reno Project, distributed under the Creative Commons
 Attribution-ShareAlike 3.0 licence — see the CREDITS and LICENSE files that
 come with them.
+
+Contact sheet artwork: the pictures in backend/assets/sheets/ (dinosaur,
+princess and racing-car) were made for TwoCans with Higgsfield's image
+generation and are distributed as part of this product.
+
+Games voice: the recordings in storage/defaults/quiz/ were made
+for TwoCans with Higgsfield's text-to-speech and are distributed as part of
+this product.
+
+Santa's voice: the recordings in storage/defaults/christmas/ were made for
+TwoCans with Higgsfield's text-to-speech and are distributed as part of this
+product.

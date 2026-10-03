@@ -1015,6 +1015,37 @@ Hotkeys are one-touch speed dials: on the phone's detail page, pick which
 contact (or service number, like voicemail `700`) each physical key dials. A key
 can only ever be given a number a child is allowed to reach.
 
+## Other provisioned phones
+
+Every kind twocans sets up fetches its settings over the same HTTP basic auth
+(username `twocans`, password on the phone's page), and each has its own
+**Phone settings** tab — only the settings that hardware has:
+
+- **Grandstream HT801 / HT802** adapters —
+  `http://<LAN>:8083/grandstream/cfg{MAC}.xml`. Settings per socket, including
+  pulse dialling for a rotary phone.
+- **Cisco SPA112 / SPA122 / ATA 191 / ATA 192** adapters (the ATA 19x on
+  Multiplatform firmware, "-3PW") — the Profile Rule is
+  `[--uid twocans --pwd <password>]http://<LAN>:8083/cisco/$MA.xml`. Two
+  touch-tone phones (neither can hear a rotary dial); caller ID, gains and the
+  dialling wait are the adapter's, shared by both. An SPA122's web page is on
+  its own LAN: plug a computer into its Ethernet port and open `192.168.15.1`.
+- **Fanvil GA10** adapter (**untested**) — Static Provisioning Server
+  `http://<LAN>:8083/fanvil`, configuration file name left empty; it fetches
+  `<mac>.cfg`. Its settings are a best guess from Fanvil's newer phones.
+- **Poly VVX** desk phones — Provisioning Server (type HTTP)
+  `http://<LAN>:8083/polycom`; it fetches `<mac>.cfg`, `twocans-<mac>.cfg`
+  and `<mac>-directory.xml` (its speed-dial keys).
+- **Yealink** cordless bases — **W60B** (up to 8 handsets), **W70B** (10)
+  and **W52P** (5) — and **T31G / T33G / T42U / T43U / T44U / T46U / T48U / T53W / T54W / T57W / T58W**
+  desk phones: Server
+  URL `http://<LAN>:8083/yealink/`. Each handset on a base is a phone of its
+  own; a desk phone's line keys after its first are speed dials.
+
+The line itself (impedance, caller ID style, ring frequency) follows the
+household's country. A box that asks for its settings before it's been added
+shows up under "Found on your network" when adding a phone.
+
 ### Remote phonebook
 
 The allowlist is also published as a remote phonebook for IP phones, in two

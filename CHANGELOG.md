@@ -7,6 +7,302 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Yealink desk phones: T31G, T33G, T42U/T42S, T43U, T44U/T44W, T46U,
+  T48U/T48S, T53W, T54W, T57W and T58W** (untested). Point the
+  phone at twocans (the Setup tab has the steps) and it fetches its line,
+  its message key ringing 700, the household's time and phonebook, and its
+  speed-dial keys — the line keys after its own, named on its screen.
+  Announcements are answered by themselves, and "Pick up to ring a
+  grown-up" works. Its Phone settings: how loud it rings (fixed, so it can't
+  be turned down to nothing — or left to the phone), call waiting, Do Not
+  Disturb and call forwarding on the phone, its phonebook, key tones,
+  whether the screen stays lit, a clock screen saver on the colour ones,
+  and calls to an IP address.
+
+- **A wallpaper of your own on a Yealink colour screen** (T33G, T44U,
+  T46U, T48U/T48S, T54W, T57W and T58W) — a family photo, a pet, a favourite drawing. Upload it on the
+  phone's Phone settings tab: it's cropped to fill that screen exactly,
+  stripped of where it was taken, and sent to the phone, whose key labels
+  go part see-through over it. "Back to its own wallpaper" puts the
+  built-in one back and deletes the picture. The phone fetches it behind
+  the same password as its settings, and can fetch nothing but a phone's
+  wallpaper that way.
+
+- **More Yealink cordless bases: the W70B (up to 10 handsets) and the older
+  W52P (up to 5)** (untested), set up like the W60B, each with the settings
+  it has. Adding a Yealink now picks the base, not the handset.
+
+- **Yealink cordless phones: W56H handsets on a W60B base.** Each handset
+  is a phone of its own in twocans — up to eight on one base — and the base
+  fetches everything from twocans: each handset's line, its name on screen,
+  its message key, the household's time zone, and a phonebook of everyone it
+  can call. Point the base at twocans once (the steps are on the phone's
+  Setup tab); a base that asks before it's added shows up under "Found on
+  your network". Handsets only answer an announcement by themselves when one
+  is alone on its base, so they're rung like a call.
+
+- **Yealink handsets answer announcements by themselves** (W60B and W70B,
+  firmware V85): with a beep first, silently, or ringing to be answered —
+  each handset its own choice. So the walkie-talkie works to one too.
+
+- **A ringtone for each Yealink handset, and a fixed ring volume** (W60B and
+  W70B). Pick one of the handset's own rings on its Phone settings tab —
+  each handset can have its own — and twocans asks for it on every call to
+  it. The ring volume can be fixed for the base, so it can't be turned down
+  to nothing.
+
+- **Phone settings for every kind of phone, from what it can do.** A W56H
+  gets its own: lift off the charger to answer, hang up on the charger,
+  call waiting, how an intercom from another handset is answered, key and
+  battery tones, its lights, whether the screen stays lit, a big clock when
+  idle, 12- or 24-hour time, wallpaper and colours, and calls straight to its
+  IP address. Most belong to the base, so changing one changes it on every
+  handset there — the page says which don't. Desk phones keep theirs.
+  HT801 and HT802 adapters get theirs too, for the corded phone in each
+  socket: how loud callers sound and how loud it's heard, caller ID for a
+  phone with a screen, its message lamp, a tone when it's left off the hook,
+  call waiting, whether tapping the hook puts a call on hold, the adapter's
+  own star codes (off, so *78 can't quietly turn on Do Not Disturb), and
+  "Pick up to ring a grown-up". The line itself — impedance, caller ID style
+  and ring — now matches your country, so a UK corded phone shows who's
+  calling. SSH, the *** keypad menu, firmware checks and who may change its
+  settings are the adapter's, shared by both sockets.
+
+- **Rotary phones on an HT801 or HT802.** Tick "It's a rotary phone" on its
+  Phone settings tab and the adapter hears the dial's clicks as numbers (by
+  your country's standard), waiting a little longer after the last one —
+  there's no # on a dial to say "that's all". The wait can be set for any
+  corded phone. Its contact sheet leaves out the lines a dial can't use —
+  messages, games, times tables and the kitchen timer all need keys pressed
+  during the call — and says so.
+
+- **Poly (Polycom) VVX desk phones** — the 150, 201, 250, 300/310, 350,
+  400/410, 450, 500/501 and 600/601. Point the phone's provisioning server
+  at twocans (the Setup tab has the steps) and it fetches everything: its
+  line, its message key ringing 700, the household's time, and its
+  speed-dial keys — the line keys after its own, chosen on its Speed-dial
+  keys tab and named on its screen. Announcements are answered by
+  themselves. Its Phone settings: call waiting, the speakerphone, Do Not
+  Disturb and call forwarding on the phone (off), keeping the earpiece
+  volume between calls, how bright the idle screen is, a screen saver,
+  calls to internet addresses, and editing its contacts on the phone.
+
+- **Fanvil GA10 adapters**, for one corded phone — **untested**. Fanvil
+  hasn't published the GA10's own settings template, so its settings follow
+  the format and names of Fanvil's newer phones: its line, the household's
+  time, "Pick up to ring a grown-up", and Phone settings for call waiting,
+  transfer and three-way calls with the hook, Do Not Disturb on the adapter,
+  the wait after the last number, how loud callers sound and are heard,
+  calls to an IP address, Telnet and firmware upgrades. Its caller ID style
+  and line impedance are left as the adapter has them. It's marked
+  "Untested" when adding it and on its page, with a link to report how it
+  goes.
+
+- **An "Untested" mark** for any model twocans sets up from its maker's
+  documentation alone, until someone confirms it on a real one — for now the
+  Yealink desk phones and W70B and W52P bases, the Cisco SPA112, SPA122,
+  ATA 191 and ATA 192, the Poly VVX phones and the Fanvil GA10. (The Yealink
+  W60B has been tried on a real one, and isn't marked.) It shows on the model and its maker when
+  adding a phone, and on the phone's page, which says what that means and
+  where to report how it goes.
+
+- **Cisco SPA112, SPA122, ATA 191 and ATA 192 adapters**, for two corded
+  phones, each a phone of its own. (The SPA122 has a router built in: its web
+  page is reached by plugging a computer into its Ethernet port, and the
+  Setup tab says so. An ATA 191 or 192 must be the Multiplatform "-3PW"
+  version; the Enterprise one only talks to Cisco's own call manager.)
+  Type one line into the adapter (its Profile Rule — the Setup tab has it)
+  and it fetches everything else from twocans: both lines, the household's
+  time, caller ID and line settings for your country, and its own Phone
+  settings — call waiting, hold on a tap of the hook, how long it waits
+  after the last number, how loud callers sound and are heard, its message
+  lamp, its star codes (off, so *72 can't forward a child's calls), and
+  "Pick up to ring a grown-up". They need touch-tone phones: neither can
+  hear a rotary dial.
+
+- **The installer works on more Linux, and says what to do when it can't.**
+  It installs Docker the way that suits the machine — Docker's own script on
+  Ubuntu, Debian, Raspberry Pi OS and Fedora; Docker's own packages on Linux
+  Mint, Pop!_OS, Rocky and AlmaLinux; the distribution's own on Arch,
+  Manjaro, openSUSE, Alpine and Kali — and offers to install any missing
+  tools with the right package names. It starts services on OpenRC as well
+  as systemd, runs as root where there's no sudo (a Proxmox container, say),
+  and explains a 32-bit Raspberry Pi rather than just refusing it. Every
+  stop now says what went wrong, what to do, step by step, and where to get
+  help; a step that fails explains what its output usually means (no disk
+  space, Docker Hub's download limit, no internet…); and anything unexpected
+  says so, instead of stopping without a word.
+
+- **Diagnostics for every phone**, to send to whoever's helping when one
+  won't come online or a setting won't take — on its Setup tab, as a
+  download or to read first. One text file: what twocans knows about it,
+  how it's signed in (and what it says it is), what it's asked twocans for
+  lately, its chosen settings, and the exact settings file it's handed.
+  Passwords and keys are taken out, and names, phone numbers, email, MAC
+  and IP addresses each get a stand-in — the same each time — so it can go
+  on a GitHub issue.
+
+- **"Look for phones" finds every brand twocans sets up** — Grandstream,
+  Yealink, Poly, Cisco and Fanvil — by the maker's registered MAC prefixes
+  (from the IEEE registry), and reads each one's model off its own web page.
+  One that won't say its model can still be added: twocans offers its
+  maker's models, with its MAC filled in. A Cisco is only listed when it
+  says it's one of its adapters, so the router doesn't turn up.
+
+- **Adding a phone starts with who makes it** — an app, Grandstream, Poly,
+  Cisco, Fanvil or Yealink — then the model.
+
+- **The house's messages on 701**, for phones allowed to hear them — a
+  grown-up's, say — switched on for each phone under Rules. Off for every
+  phone to begin with: a message left for the house may not be for a child.
+
+- **Games, on 4263 (G-A-M-E).** A menu of games played on the keypad:
+  times tables, sums (up to 10 or 20), number bonds ("what goes with 7 to
+  make 10?"), guess my number (1 to 100 — "higher!", "lower!") and animal
+  riddles. A cheer for a right answer, the answer for a wrong one, and a
+  score at the end. 246 goes straight to times tables. The Games page says
+  how each phone is getting on, and sets the numbers, the tables in a mix,
+  what sums and bonds go up to, and how many questions a game.
+
+- **The radio, on 7234 (R-A-D-I-O).** Upload songs — up to 20 at a time —
+  and dialling it plays them one after another, shuffled, until it's hung
+  up; each call carries on where the last stopped. # skips to the next song,
+  5 pauses, 6 and 4 go forward and back. Shuffled, or in your own order —
+  drag a song by its handle (or use the arrow keys) to change it. Rename
+  songs, switch them off, or delete them, from the menu's The radio page.
+  Stations: up to five playlists, offered from a menu ("Press 1 for… party
+  songs", in your own voice), or straight away on a phone with a favourite;
+  ★ goes back to the menu. At bedtime it can play only the songs marked
+  calm, or be off, and a sleep timer says night night after a while.
+
+- **Sleeps till Christmas, on 1225.** Santa counts down: "Ho ho ho! Hello
+  there, it's Santa! There are 57 sleeps until Christmas!" One more sleep on
+  Christmas Eve, and on Christmas Day, his message — Santa's own, or one a
+  grown-up records or uploads, with the children's names in it. And, if it's
+  switched on, Santa rings the children's phones on Christmas morning at the
+  time you choose. On the Games page.
+
+- **Desk phones made for a child's room.** On each one's page: how loud it
+  rings (locked there, so it can't be turned to nothing), and "pick up to
+  ring a grown-up" — lift the handset, press nothing, and after a few seconds
+  it rings who you chose. The page says when its handset has been left off
+  the hook, and when it last started up, which the phone now tells twocans.
+  And on every desk phone: no light when idle and a steady one for a new
+  message, no start-up beep, no call waiting; Mute no longer quietly turns
+  on Do Not Disturb; calls not meant for it, or made straight to its IP
+  address, are refused; SSH and the keypad's settings menu are off; and it
+  only ever takes settings from twocans, with no surprise firmware. Each of
+  these is a switch on the phone's new Phone settings tab — what's best for
+  a child's phone to begin with, changed for one phone if it suits — along
+  with how long it waits before its "put me back" tone when left off the hook.
+
+- **Notifications on your phone and computer** (Web Push), even with twocans
+  closed — no email needed. On the Notifications page, "Notify me on this
+  device": an emergency number dialled (it stays on screen), a message from
+  someone not on the list, a number a child tried, a phone gone offline or
+  its handset left off the hook, credit running low. Tap one to open the
+  page it's about. Each device can be sent a test, or removed. Encrypted for
+  each device, signed with this box's own key (RFC 8291 and 8292). On an
+  iPhone, add twocans to the Home Screen first.
+
+- **Silly voices, on 7455 (S-I-L-L).** Say something after the beep and hear
+  it back as a chipmunk, then a giant. Nothing's kept.
+
+- **Walkie-talkie, on 9255 (W-A-L-K).** Pair a phone with another on its
+  page; dialling it — or a hotkey for it — makes that phone answer by itself
+  on speaker, with a beep, to talk both ways. Never into a call, not at
+  bedtime, and not to a paused phone. Both, with the timer and the clock, on
+  the menu's Handy lines page.
+
+- **A kitchen timer, on 2463 (C-H-I-M-E).** Dial it, type the minutes and
+  #, hang up — and the phone rings when they're up: "Ding ding! Your timer's
+  finished!" On time to the second. One a phone; 0# cancels it.
+
+- **"What time is it?", on 8463 (T-I-M-E).** The time the way children learn
+  it — "ten past six", "quarter to seven" — and, when bedtime's under two
+  hours away, how long till then. Both on the menu's Timer & clock page,
+  which lists the timers running, with Cancel.
+
+- **Pause a phone** for homework or tidy-up time — 30 minutes, an hour, two,
+  or until the morning — from the top of its page. Paused, it doesn't ring
+  or call out and the fun lines are off; 999 and its messages still work.
+  It turns itself back on, or Resume now.
+
+- **This week**: each child's phone's week on the line — calls made and
+  answered, talk time, missed calls and messages, who they talked to most,
+  their busiest day, games played, and numbers they tried that aren't
+  allowed — with the weeks before a click away. In the sidebar, and on the
+  dashboard.
+
+- **Keepsakes.** Press the star on a voicemail to keep it for good: a copy
+  that stays whatever happens to the message — deleted on the phone, or
+  cleared by retention. Give each a name, play it back, and download a
+  year's as a zip, with what each one says. Kept copies are in backups.
+
+- **Listening to a room**, like a baby monitor. A grown-up's phone rings a
+  child's desk phone, which answers by itself on speaker, one way — from
+  the phone page, or by dialling 88 and its extension. It beeps as it picks
+  up and shows "Listening in" on its screen, never breaks into a call, and
+  every listen is noted on the phone's page. Off unless switched on for
+  both phones, and it takes the permission to listen in.
+
+- **A printable contact sheet** for the fridge, or beside a phone with no
+  screen: everyone a child can call, with their photo and what to dial —
+  speed dials first — then the twocans lines to dial, each one ticked on or
+  off: messages, the joke line, games, times tables, the radio, the time, the
+  kitchen timer, silly voices, the walkie-talkie (on a paired phone's sheet),
+  the Christmas countdown and the emergency number. With lots ticked, the
+  picture shrinks so it still fits one page. Dinosaur, princess, racing-car or
+  plain, on A4 or A5.
+  Printed for one phone, it also says which key rings whom. From the
+  Contacts screen, or a phone's page.
+
+- **An update notice.** The System page says which version is running and
+  whether a newer one is out — with how to update and what's new — and the
+  menu's System entry shows "new". twocans asks GitHub twice a day; the
+  System page can turn that off.
+
+### Changed
+
+- **A phone's Setup tab**: its numbers to dial — a long list now — sit side
+  by side below the rest, not stretched down one column. And a MAC address
+  box takes it however it's typed or pasted, and shows it as 00:0B:82:C1:23:45.
+
+- **Uploads show how they're going.** A bar while a file goes up, then a
+  wheel while the audio's prepared, and the form can't be pressed twice
+  meanwhile; leaving the page mid-upload asks first. Every upload now saves
+  without a full page load — jokes, greetings, the bedtime message and
+  restoring a backup included.
+
+- **Easier to read.** An accessibility pass with axe: text, links, teal
+  buttons, chips and badges now meet WCAG AA contrast (4.5:1) — the greys and
+  teal a shade deeper, the same warm look. Coral buttons keep their coral
+  with dark lettering instead of white. The backup file picker has a label,
+  and a Record button says when it's recording.
+- Deleting a voicemail goes through Asterisk, like moving one, so the
+  mailbox's numbering and the phone's message light stay right.
+
+### Fixed
+
+- A Yealink on newer firmware (a W60B on 77.85, for one) never got its
+  settings: it asks for a boot file first (<mac>.boot), which twocans didn't
+  serve, and was handed the sign-in page instead. twocans now serves boot
+  files, and anything else asked of a provisioning address gets "not found"
+  rather than the sign-in page.
+
+- An HT802's second socket now gets # as its "dial now" key and the same
+  wait after the last number as the first; only socket 1 was ever sent them.
+
+- **A desk phone's voicemail button** now plays its messages (it dials 700).
+  It did nothing before, because the phone was never told the number.
+
+- **Staying signed in.** The web app signed a grown-up out after 24 minutes
+  without a page load, whenever the browser closed, and every time the web
+  container restarted or updated. Now it's a month from the last visit, and
+  sign-ins outlive restarts and updates (they're kept in storage/sessions).
+
 ## [0.1.6] - 2026-09-30
 
 Voicemail that goes where it should, announcements on a timetable, a choice of

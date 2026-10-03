@@ -40,6 +40,38 @@ final class SettingsRepository
         // The joke line. Changeable, because it has to fit around whatever
         // numbers a household has already taught its children.
         'joke_number' => '258',
+        // The times tables quiz: its number, the tables in a mix (a child can
+        // also pick one), and the questions a game.
+        'quiz_number' => '246',
+        'quiz_tables' => '2,3,4,5,6,7,8,9,10,11,12',
+        'quiz_questions' => '10',
+        // The games line (G-A-M-E), and what its sums and number bonds go up to.
+        'games_number' => '4263',
+        'sums_max' => '10',
+        'bonds_to' => '10',
+        // How many sleeps until Christmas (12-25), and Santa's Christmas Day
+        // message when the household records its own. Santa ringing the
+        // children's phones on Christmas morning is off unless it's switched
+        // on; santa_rang_year stops him ringing twice.
+        // The radio's number (R-A-D-I-O) — see Radio.
+        'radio_number' => '7234',
+        // "What time is it?" (T-I-M-E) and the kitchen timer (C-H-I-M-E).
+        'clock_number' => '8463',
+        'timer_number' => '2463',
+        // The silly voice line (S-I-L-L) and the walkie-talkie (W-A-L-K).
+        'silly_number' => '7455',
+        'walkie_number' => '9255',
+        // Played in a shuffled order, or in the household's own.
+        'radio_shuffle' => '1',
+        // At bedtime: as normal, calm songs only, or off; and the sleep timer.
+        'radio_bedtime' => 'normal',
+        'radio_sleep_minutes' => '0',
+        'sleeps_number' => '1225',
+        'santa_message' => '',
+        'santa_message_seconds' => '0',
+        'santa_ring' => '0',
+        'santa_ring_time' => '08:00',
+        'santa_rang_year' => '',
         // A speed dial for "your messages", as well as 700; '' is none.
         'voicemail_speed_dial' => '',
         /*
@@ -227,6 +259,326 @@ final class SettingsRepository
         $this->set('joke_number', $number);
     }
 
+    // ------------------------------------------------------- times tables
+
+    public function quizNumber(): string
+    {
+        $value = trim((string) ($this->all()['quiz_number'] ?? ''));
+
+        // Written straight into an extension, like the joke line's.
+        return preg_match('/^\d{2,4}$/', $value) === 1 ? $value : '246';
+    }
+
+    public function setQuizNumber(string $number): void
+    {
+        $this->set('quiz_number', $number);
+    }
+
+    /** The tables in a mix, 2 to 12 — every one when none are chosen. @return array<int,int> */
+    public function quizTables(): array
+    {
+        $tables = array_values(array_unique(array_filter(
+            array_map('intval', explode(',', (string) ($this->all()['quiz_tables'] ?? ''))),
+            static fn(int $n): bool => $n >= 2 && $n <= 12
+        )));
+        sort($tables);
+
+        return $tables === [] ? range(2, 12) : $tables;
+    }
+
+    /** @param array<int,int|string> $tables */
+    public function setQuizTables(array $tables): void
+    {
+        $tables = array_filter(array_map('intval', $tables), static fn(int $n): bool => $n >= 2 && $n <= 12);
+        sort($tables);
+        $this->set('quiz_tables', implode(',', array_unique($tables)));
+    }
+
+    public const QUIZ_LENGTHS = [5, 10, 20];
+
+    public function quizQuestions(): int
+    {
+        $n = (int) ($this->all()['quiz_questions'] ?? 10);
+
+        return in_array($n, self::QUIZ_LENGTHS, true) ? $n : 10;
+    }
+
+    public function setQuizQuestions(int $n): void
+    {
+        $this->set('quiz_questions', (string) (in_array($n, self::QUIZ_LENGTHS, true) ? $n : 10));
+    }
+
+    public function gamesNumber(): string
+    {
+        $value = trim((string) ($this->all()['games_number'] ?? ''));
+
+        return preg_match('/^\d{2,4}$/', $value) === 1 ? $value : '4263';
+    }
+
+    public function setGamesNumber(string $number): void
+    {
+        $this->set('games_number', $number);
+    }
+
+    public const SUMS_LIMITS = [10, 20];
+
+    /** Sums go up to this: 10 or 20. */
+    public function sumsMax(): int
+    {
+        $n = (int) ($this->all()['sums_max'] ?? 10);
+
+        return in_array($n, self::SUMS_LIMITS, true) ? $n : 10;
+    }
+
+    public function setSumsMax(int $n): void
+    {
+        $this->set('sums_max', (string) (in_array($n, self::SUMS_LIMITS, true) ? $n : 10));
+    }
+
+    /** Number bonds make these: 10, 20, or both. @return array<int,int> */
+    public function bondsTo(): array
+    {
+        $to = array_values(array_intersect([10, 20], array_map('intval', explode(',', (string) ($this->all()['bonds_to'] ?? '10')))));
+
+        return $to === [] ? [10] : $to;
+    }
+
+    /** @param array<int,int|string> $to */
+    public function setBondsTo(array $to): void
+    {
+        $to = array_values(array_intersect([10, 20], array_map('intval', $to)));
+        $this->set('bonds_to', implode(',', $to === [] ? [10] : $to));
+    }
+
+    // -------------------------------------------------------------- Christmas
+
+    public function sleepsNumber(): string
+    {
+        $value = trim((string) ($this->all()['sleeps_number'] ?? ''));
+
+        return preg_match('/^\d{2,4}$/', $value) === 1 ? $value : '1225';
+    }
+
+    public function setSleepsNumber(string $number): void
+    {
+        $this->set('sleeps_number', $number);
+    }
+
+    public function radioNumber(): string
+    {
+        $value = trim((string) ($this->all()['radio_number'] ?? ''));
+
+        return preg_match('/^\d{2,4}$/', $value) === 1 ? $value : '7234';
+    }
+
+    public function setRadioNumber(string $number): void
+    {
+        $this->set('radio_number', $number);
+    }
+
+    public function radioShuffle(): bool
+    {
+        return ($this->all()['radio_shuffle'] ?? '1') !== '0';
+    }
+
+    public function setRadioShuffle(bool $on): void
+    {
+        $this->set('radio_shuffle', $on ? '1' : '0');
+    }
+
+    /** What the radio does at bedtime — a key of Radio::BEDTIME. */
+    public function radioBedtime(): string
+    {
+        $value = (string) ($this->all()['radio_bedtime'] ?? 'normal');
+
+        return isset(Radio::BEDTIME[$value]) ? $value : 'normal';
+    }
+
+    /** Minutes the radio plays for at bedtime before it says night night; 0 for no timer. */
+    public function radioSleepMinutes(): int
+    {
+        $n = (int) ($this->all()['radio_sleep_minutes'] ?? 0);
+
+        return in_array($n, Radio::SLEEP_MINUTES, true) ? $n : 0;
+    }
+
+    public function setRadioBedtime(string $mode, int $minutes): void
+    {
+        $this->set('radio_bedtime', isset(Radio::BEDTIME[$mode]) ? $mode : 'normal');
+        $this->set('radio_sleep_minutes', (string) (in_array($minutes, Radio::SLEEP_MINUTES, true) ? $minutes : 0));
+    }
+
+    public function clockNumber(): string
+    {
+        $value = trim((string) ($this->all()['clock_number'] ?? ''));
+
+        return preg_match('/^\d{2,4}$/', $value) === 1 ? $value : '8463';
+    }
+
+    public function timerNumber(): string
+    {
+        $value = trim((string) ($this->all()['timer_number'] ?? ''));
+
+        return preg_match('/^\d{2,4}$/', $value) === 1 ? $value : '2463';
+    }
+
+    public function setClockNumber(string $number): void
+    {
+        $this->set('clock_number', $number);
+    }
+
+    public function setTimerNumber(string $number): void
+    {
+        $this->set('timer_number', $number);
+    }
+
+    public function sillyNumber(): string
+    {
+        $value = trim((string) ($this->all()['silly_number'] ?? ''));
+
+        return preg_match('/^\d{2,4}$/', $value) === 1 ? $value : '7455';
+    }
+
+    public function walkieNumber(): string
+    {
+        $value = trim((string) ($this->all()['walkie_number'] ?? ''));
+
+        return preg_match('/^\d{2,4}$/', $value) === 1 ? $value : '9255';
+    }
+
+    public function setSillyNumber(string $number): void
+    {
+        $this->set('silly_number', $number);
+    }
+
+    public function setWalkieNumber(string $number): void
+    {
+        $this->set('walkie_number', $number);
+    }
+
+    public function sillyNumberProblem(string $number): ?string
+    {
+        return $this->serviceLineProblem(trim($number), 'silly');
+    }
+
+    public function walkieNumberProblem(string $number): ?string
+    {
+        return $this->serviceLineProblem(trim($number), 'walkie');
+    }
+
+    public function clockNumberProblem(string $number): ?string
+    {
+        return $this->serviceLineProblem(trim($number), 'clock');
+    }
+
+    public function timerNumberProblem(string $number): ?string
+    {
+        return $this->serviceLineProblem(trim($number), 'timer');
+    }
+
+    /** Why the radio can't move here — or null if it can. */
+    public function radioNumberProblem(string $number): ?string
+    {
+        return $this->serviceLineProblem(trim($number), 'radio');
+    }
+
+    /** Why the Christmas countdown can't move here — or null if it can. */
+    public function sleepsNumberProblem(string $number): ?string
+    {
+        return $this->serviceLineProblem(trim($number), 'sleeps');
+    }
+
+    /** The household's own Santa message (a SantaStore name), or null for the built-in one. */
+    public function santaMessage(): ?string
+    {
+        $name = trim((string) ($this->all()['santa_message'] ?? ''));
+
+        return $name === '' ? null : $name;
+    }
+
+    public function santaMessageSeconds(): int
+    {
+        return max(0, (int) ($this->all()['santa_message_seconds'] ?? 0));
+    }
+
+    public function setSantaMessage(?string $file, int $seconds = 0): void
+    {
+        $this->set('santa_message', (string) $file);
+        $this->set('santa_message_seconds', $file === null ? '0' : (string) max(0, $seconds));
+    }
+
+    public function santaRings(): bool
+    {
+        return ($this->all()['santa_ring'] ?? '0') === '1';
+    }
+
+    /** When Santa rings on Christmas morning, HH:MM. */
+    public function santaRingTime(): string
+    {
+        $value = (string) ($this->all()['santa_ring_time'] ?? '');
+
+        return preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $value) === 1 ? $value : '08:00';
+    }
+
+    public function setSantaRing(bool $on, string $time): void
+    {
+        $this->set('santa_ring', $on ? '1' : '0');
+        if (preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $time) === 1) {
+            $this->set('santa_ring_time', $time);
+        }
+    }
+
+    public function santaRangYear(): string
+    {
+        return (string) ($this->all()['santa_rang_year'] ?? '');
+    }
+
+    public function setSantaRangYear(string $year): void
+    {
+        $this->set('santa_rang_year', $year);
+    }
+
+    /** Why the quiz can't move here — or null if it can. The joke line's checks. */
+    public function quizNumberProblem(string $number): ?string
+    {
+        return $this->serviceLineProblem(trim($number), 'quiz');
+    }
+
+    /** Why the games line can't move here — or null if it can. */
+    public function gamesNumberProblem(string $number): ?string
+    {
+        return $this->serviceLineProblem(trim($number), 'games');
+    }
+
+    /**
+     * The joke line, the quiz and the games line: none may be on another's
+     * number, nor on anything else a child dials (lineNumberProblem()).
+     */
+    private function serviceLineProblem(string $number, string $line): ?string
+    {
+        $lines = [
+            'joke' => [$this->jokeNumber(), 'the joke line'],
+            'quiz' => [$this->quizNumber(), 'the times tables quiz'],
+            'games' => [$this->gamesNumber(), 'the games line'],
+            'sleeps' => [$this->sleepsNumber(), 'the Christmas countdown'],
+            'radio' => [$this->radioNumber(), 'the radio'],
+            'clock' => [$this->clockNumber(), '"what time is it?"'],
+            'timer' => [$this->timerNumber(), 'the kitchen timer'],
+            'silly' => [$this->sillyNumber(), 'the silly voice line'],
+            'walkie' => [$this->walkieNumber(), 'the walkie-talkie'],
+        ];
+        if ($number === $lines[$line][0]) {
+            return null;
+        }
+        foreach ($lines as $key => [$taken, $label]) {
+            if ($key !== $line && $number === $taken) {
+                return $number . ' is ' . $label . '.';
+            }
+        }
+
+        return $this->lineNumberProblem($number);
+    }
+
     // ------------------------------------------------------------ voicemail
 
     /** The speed dial for "your messages" (as well as 700), or '' for none. */
@@ -287,7 +639,23 @@ final class SettingsRepository
     public function jokeNumberProblem(string $number): ?string
     {
         $number = trim($number);
+        // Not its own number: unlike the others, saving the joke line's number
+        // unchanged has always been checked like a new one.
+        foreach ([[$this->quizNumber(), 'the times tables quiz'], [$this->gamesNumber(), 'the games line'],
+                  [$this->sleepsNumber(), 'the Christmas countdown'], [$this->radioNumber(), 'the radio'],
+                  [$this->clockNumber(), '"what time is it?"'], [$this->timerNumber(), 'the kitchen timer'],
+                  [$this->sillyNumber(), 'the silly voice line'], [$this->walkieNumber(), 'the walkie-talkie']] as [$taken, $label]) {
+            if ($number === $taken) {
+                return $number . ' is ' . $label . '.';
+            }
+        }
 
+        return $this->lineNumberProblem($number);
+    }
+
+    /** What the joke line and the quiz can't be on — see jokeNumberProblem(). */
+    private function lineNumberProblem(string $number): ?string
+    {
         if (preg_match('/^\d{2,4}$/', $number) !== 1) {
             return 'Use 2 to 4 digits, like 258.';
         }

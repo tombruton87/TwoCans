@@ -10,11 +10,14 @@ $canEditRules = Auth::can('rules');
 
 $items = [
     ['screen' => 'dashboard', 'label' => 'Dashboard',  'icon' => 'dash'],
+    ['screen' => 'week',      'label' => 'This week',  'icon' => 'week'],
     ['screen' => 'phones',    'label' => 'Phones',     'icon' => 'phones'],
     ['screen' => 'contacts',  'label' => 'Contacts',   'icon' => 'contacts'],
     ['screen' => 'calllog',   'label' => 'Call log',   'icon' => 'log'],
     ['screen' => 'voicemail', 'label' => 'Voicemail',  'icon' => 'voice', 'badge' => $unheard],
     ['screen' => 'jokes',     'label' => 'Joke line',  'icon' => 'joke'],
+    ['screen' => 'quiz',      'label' => 'Games',      'icon' => 'quiz'],
+    ['screen' => 'keepsakes', 'label' => 'Keepsakes',  'icon' => 'keepsakes'],
 ];
 ?>
 <aside class="tc-sidebar">

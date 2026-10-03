@@ -12,6 +12,9 @@ declare(strict_types=1);
  */
 final class Auth
 {
+    /** How long a grown-up stays signed in without visiting — see bootstrap.php. */
+    public const SESSION_DAYS = 30;
+
     /**
      * OWASP-recommended argon2id parameters (19 MiB, t=2, p=1).
      *

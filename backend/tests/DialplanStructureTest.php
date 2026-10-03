@@ -182,7 +182,7 @@ return [
     }),
     test("the incoming Dial hands the caller's name to the phone that answers", function () use ($load) {
         [, $files] = $load();
-        assertContains('^${CALLER_ANNOUNCE}))', $files['dialplan-devices.conf']);
+        assertContains('^${CALLER_ANNOUNCE})b(' . PjsipConfig::RINGTONE_CONTEXT . '^s^1))', $files['dialplan-devices.conf']);
     }),
     test('every caller lookup sets the name clip, so one caller\'s can\'t carry over', function () use ($load) {
         [$plan] = $load();

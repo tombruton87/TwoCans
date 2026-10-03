@@ -15,7 +15,7 @@ final class Presenter
         'custom' => ['label' => 'Custom hours', 'sub' => 'You set the window', 'mod' => 'sky'],
     ];
 
-    public const SCREENS = ['dashboard', 'phones', 'contacts', 'calllog', 'voicemail', 'jokes', 'guardians', 'trunk', 'dialplan', 'system', 'notifications', 'greetings', 'announcements', 'homeassistant', 'start'];
+    public const SCREENS = ['dashboard', 'phones', 'contacts', 'calllog', 'voicemail', 'jokes', 'guardians', 'trunk', 'dialplan', 'system', 'notifications', 'greetings', 'announcements', 'homeassistant', 'start', 'keepsakes', 'quiz', 'christmas', 'radio', 'week', 'helpers'];
 
     /** Header title + subtitle per screen. */
     public const TITLES = [
@@ -36,6 +36,12 @@ final class Presenter
         'announcements' => ['Announcements', 'Buttons that page the phones with a message.'],
         'homeassistant' => ['Home Assistant', 'Your line, its phones and its calls, in Home Assistant.'],
         'start' => ['Getting started', 'A few steps to a line the family can use.'],
+        'keepsakes' => ['Keepsakes', 'Messages worth keeping for good.'],
+        'quiz' => ['Games', 'Times tables, sums and more, on the keypad of any phone.'],
+        'helpers' => ['Handy lines', 'A kitchen timer, the time, silly voices and walkie-talkies.'],
+        'week' => ['The week', "Each child's week on the line: who they talked to, and what they got up to."],
+        'radio' => ['The radio', 'Songs you choose, on a number any phone can dial.'],
+        'christmas' => ['Sleeps till Christmas', 'Santa counts down the sleeps, and calls on the day.'],
     ];
 
     /** Symbols for the ISO 4217 codes a provider is likely to report. */
@@ -114,9 +120,11 @@ final class Presenter
             $d['lastSeenText'] = 'Waiting for the app to sign in';
         }
 
-        $d['ruleSummary'] = !empty($d['adult'])
+        $d['ruleSummary'] = !empty($d['pausedUntil'])
+            ? 'Paused until ' . date('g:ia', (int) $d['pausedUntil'])
+            : (!empty($d['adult'])
             ? 'Adult mode — no restrictions'
-            : ($d['allowOut'] ? 'Can call out' : 'No outgoing') . ' · ' . Schedule::describe($d['hours'] ?? []);
+            : ($d['allowOut'] ? 'Can call out' : 'No outgoing') . ' · ' . Schedule::describe($d['hours'] ?? []));
 
         return $d;
     }
@@ -161,7 +169,7 @@ final class Presenter
 
         $c['meta'] = $dirLabel . ' · ' . $c['date'] . ' ' . $c['time'] . ($c['dur'] !== '—' ? ' · ' . $c['dur'] : '');
 
-        // "laptop2 called" / "Rang laptop2": which phone, and which way, in the
+        // "Kitchen called" / "Rang Kitchen": which phone, and which way, in the
         // words a parent would use. Falls back to the direction alone.
         $phone = (string) ($c['deviceName'] ?? '');
         $c['via'] = $phone === ''

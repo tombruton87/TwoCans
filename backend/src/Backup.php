@@ -17,6 +17,8 @@ final class Backup
         // A parent reading out the "nobody can take your call" message: a
         // minute of their time that nobody wants to record twice.
         'refusals' => '/var/lib/twocans/refusals',
+        // Voicemails kept for good: the whole point is that they're never lost.
+        'keepsakes' => '/var/lib/twocans/keepsakes',
         'recordings' => '/var/spool/asterisk/monitor',
         'voicemail' => '/var/spool/asterisk/voicemail',
         'asks' => '/var/spool/asterisk/asks',

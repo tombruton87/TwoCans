@@ -33,10 +33,65 @@ ok()      { echo "  ${green}✓${off} $*"; }
 warn()    { echo "  ${yellow}!${off} $*"; }
 bad()     { echo "  ${red}✗${off} $*"; }
 note()    { echo "    ${dim}$*${off}"; }
-die()     { bad "$*" >&2; exit 1; }
+die()     { bad "$*" >&2; help_footer >&2; exit 1; }
+
+# Where to turn when it can't be fixed here.
+ISSUES_URL="https://github.com/tombruton87/TwoCans/issues"
+help_footer() {
+  echo
+  echo "    ${dim}Stuck? ${off}./twocans report${dim} makes a report with private details taken out —${off}"
+  echo "    ${dim}attach it to an issue at ${off}${ISSUES_URL}"
+  [[ -n "${INSTALL_LOG:-}" ]] && echo "    ${dim}A record of this run is in ${INSTALL_LOG}${off}"
+  echo
+}
+
+# Stop, kindly: what went wrong, then what to do about it, step by step.
+#   fail "Docker isn't running." "Start it: sudo systemctl start docker" "Run ./install.sh again"
+fail() {
+  local problem=$1; shift
+  {
+    echo
+    bad "${bold}${problem}${off}"
+    if (( $# > 0 )); then
+      echo
+      echo "    What to do:"
+      local i=1 step
+      for step in "$@"; do
+        echo "      ${bold}${i}.${off} ${step}"
+        ((i++))
+      done
+    fi
+    help_footer
+  } >&2
+  exit 1
+}
+
+# Anything that stops the script that it didn't expect: say so plainly, with
+# what to try, rather than stopping without a word. Only in the script itself
+# — a check inside $(…) that fails is the script's to handle.
+STEP=""
+unexpected_stop() {
+  local status=$1 line=$2 command=$3
+  # Only where a failure stops the script (set -e), and only in the script itself.
+  [[ $- == *e* ]] && (( BASH_SUBSHELL == 0 )) || return 0
+  trap - ERR
+  {
+    echo
+    bad "${bold}Something unexpected stopped this${STEP:+, during "$STEP"}.${off}"
+    note "(line $line: ${command:0:120} — exit $status)"
+    echo
+    echo "    What to do:"
+    echo "      ${bold}1.${off} Run it again — it picks up where it left off, and nothing's left half-done"
+    echo "      ${bold}2.${off} If it stops in the same place, see the record of this run below"
+    help_footer
+  } >&2
+}
+trap 'unexpected_stop $? $LINENO "$BASH_COMMAND"' ERR
+set -E
 
 # ── Section ─────────────────────────────────── in teal, ruled to one width.
 section() {
+  STEP=$*
   local title="── $* " rule=""
   while (( ${#title} + ${#rule} < 64 )); do rule+="─"; done
   echo
@@ -157,10 +212,44 @@ quietly() {
     "$@" > "$LOG" 2>&1 || status=$?
   fi
   if (( status != 0 )); then
-    bad "$what failed:"
-    tail -20 "$LOG" | sed 's/^/    /'
+    trap - ERR
+    echo
+    bad "${bold}${what} didn't work.${off}"
+    echo "    ${dim}The last of what it said:${off}"
+    tail -15 "$LOG" | sed 's/^/      /'
+    explain_failure "$LOG"
+    help_footer
     exit 1
   fi
+}
+
+# What a failed step's output usually means, in plain words, and what to do.
+explain_failure() {
+  local log=$1 say=() 
+  if grep -qiE 'no space left on device' "$log"; then
+    say=("This machine is out of disk space." "Free some up — 'docker system prune' removes Docker's old leftovers" "Check with: df -h")
+  elif grep -qiE 'toomanyrequests|rate limit' "$log"; then
+    say=("Docker Hub is limiting downloads from your internet connection for now." "Wait an hour or so" "Or sign in to a free Docker Hub account: docker login")
+  elif grep -qiE 'no matching manifest|exec format error|platform .* does not match' "$log"; then
+    say=("The images don't match this machine's processor." "twocans needs a 64-bit system — on a Raspberry Pi, the 64-bit Raspberry Pi OS")
+  elif grep -qiE 'temporary failure in name resolution|could not resolve|no such host|dial tcp|i/o timeout|network is unreachable|tls handshake timeout|connection refused|connection reset' "$log"; then
+    say=("It couldn't reach the internet." "Check this machine is online: ping -c1 github.com" "If you use a proxy or VPN, check it lets Docker through")
+  elif grep -qiE 'permission denied.*docker\.sock|got permission denied' "$log"; then
+    say=("You don't have permission to use Docker." "Add yourself: sudo usermod -aG docker $(id -un)" "Log out and back in")
+  elif grep -qiE 'address already in use|port is already allocated' "$log"; then
+    say=("A port twocans needs is in use by something else." "Run ./install.sh --check to see which")
+  elif grep -qiE 'unable to locate package|no package .* available|target not found|not found in any repositories' "$log"; then
+    say=("Your package manager doesn't have what was needed." "Update its list of packages and try again" "Or install Docker by hand: https://docs.docker.com/engine/install/")
+  elif grep -qiE 'unsupported distribution|is not supported' "$log"; then
+    say=("Docker's install script doesn't know this Linux." "Install Docker by hand: https://docs.docker.com/engine/install/" "Then run ./install.sh again")
+  fi
+  (( ${#say[@]} )) || return 0
+  echo
+  echo "    ${bold}What this usually means:${off} ${say[0]}"
+  echo "    What to do:"
+  local i
+  for ((i = 1; i < ${#say[@]}; i++)); do echo "      ${bold}${i}.${off} ${say[i]}"; done
+  echo "      ${bold}${#say[@]}.${off} Then run it again"
 }
 
 # Wait (with the spinner) until a check passes, or give up after $2 seconds.

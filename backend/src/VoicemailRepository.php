@@ -253,10 +253,10 @@ final class VoicemailRepository
     }
 
     /**
-     * Delete a message: the spool files first, then the row.
-     *
-     * Asterisk keeps several files per message (the audio, the metadata, and
-     * any recorded greeting formats), all sharing a basename.
+     * Delete a message. Asterisk removes it (VoicemailRemove), so it closes
+     * the gap in the mailbox's numbering and the phone's message light is
+     * right; the files are only removed here if Asterisk can't be reached, or
+     * no longer knows the message — say, one whose files are half gone.
      */
     public function remove(int $id): bool
     {
@@ -265,26 +265,33 @@ final class VoicemailRepository
             return false;
         }
 
-        $audio = (string) $row['audio_path'];
-        $base = preg_replace('/\.[a-z0-9]+$/i', '', $audio);
+        $removed = false;
+        try {
+            $ami = new Ami();
+            $ami->connect();
+            $reply = $ami->send('VoicemailRemove', [
+                'Context' => PjsipConfig::VOICEMAIL_CONTEXT,
+                'Mailbox' => (string) $row['mailbox'],
+                'Folder' => (string) $row['folder'],
+                'ID' => (string) $row['msg_id'],
+            ]);
+            $removed = ($reply['response'] ?? '') === 'Success';
+            $ami->disconnect();
+        } catch (Throwable) {
+            // Asterisk is down: remove the files ourselves, below.
+        }
 
-        if ($base !== null && str_starts_with($base, $this->spoolPath() . '/')) {
-            foreach ((array) glob($base . '.*') as $file) {
-                @unlink($file);
+        if (!$removed) {
+            $audio = (string) $row['audio_path'];
+            $base = preg_replace('/\.[a-z0-9]+$/i', '', $audio);
+            if ($base !== null && str_starts_with($base, $this->spoolPath() . '/')) {
+                foreach ((array) glob($base . '.*') as $file) {
+                    @unlink($file);
+                }
             }
         }
 
         Database::pdo()->prepare('DELETE FROM voicemails WHERE id = ?')->execute([$id]);
-
-        // Tell Asterisk to re-count, so the phone's message light clears.
-        try {
-            $ami = new Ami();
-            $ami->connect();
-            $ami->command('voicemail reload');
-            $ami->disconnect();
-        } catch (Throwable) {
-            // Not fatal — the count corrects itself on the next check.
-        }
 
         return true;
     }
@@ -362,6 +369,7 @@ final class VoicemailRepository
 
         return [
             'id' => (int) $row['id'],
+            'msgId' => (string) ($row['msg_id'] ?? ''),
             'name' => $name,
             'initial' => initial($name),
             'color' => self::colourFor($name),

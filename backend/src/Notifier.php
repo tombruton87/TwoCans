@@ -2,8 +2,12 @@
 declare(strict_types=1);
 
 /**
- * Turns household events into an email (via Mailgun) and a heartbeat (for
+ * Turns household events into an email (via Mailgun), a notification on the
+ * grown-ups' phones and computers (Web Push — see Push), and a heartbeat (for
  * Uptime Kuma). Runs once a minute; each event is reported only once.
+ *
+ * Notifications on a device need nothing set up but the device itself: they
+ * go out whenever a grown-up has asked for them, email or not.
  */
 final class Notifier
 {
@@ -12,10 +16,15 @@ final class Notifier
     {
         $repo = new NotificationRepository();
         $config = $repo->get();
+        $push = new Push();
+        $pushing = $push->all() !== [];
 
-        if (!$config['enabled']) {
+        if (!$config['enabled'] && !$pushing) {
             return ['ran' => false, 'sections' => 0, 'emailed' => 0, 'error' => null];
         }
+        // Email and the heartbeat are for when notifications are switched on;
+        // a device that asked to be told is told regardless.
+        $emailing = $config['enabled'];
 
         $firstRun = $config['lastRunAt'] === null;
         $error = null;
@@ -28,15 +37,15 @@ final class Notifier
         // Heartbeat first: it must fire even when there is nothing to email,
         // because the *absence* of heartbeats is how Uptime Kuma learns the box
         // is down.
-        if ($config['kumaUrl'] !== '') {
+        if ($emailing && $config['kumaUrl'] !== '') {
             $hb = UptimeKuma::heartbeat($config['kumaUrl']);
             if (!$hb['ok']) {
                 $error = $hb['error'] ?? 'Uptime Kuma heartbeat failed';
             }
         }
 
-        $mailer = static function () use ($repo, $config): ?Mailgun {
-            return $config['mailgunConfigured']
+        $mailer = static function () use ($repo, $config, $emailing): ?Mailgun {
+            return $emailing && $config['mailgunConfigured']
                 ? new Mailgun($repo->apiKey() ?? '', $config['region'], $config['domain'])
                 : null;
         };
@@ -45,6 +54,9 @@ final class Notifier
         // nobody will skim past.
         if ($config['notifyEmergency']) {
             $lines = $this->emergencyCalls();
+            if ($lines !== [] && $pushing) {
+                $push->send('Emergency number dialled', implode("\n", $lines), url(['screen' => 'calllog']), true);
+            }
             if ($lines !== [] && ($mail = $mailer()) !== null) {
                 $res = $mail->send($config['from'], $config['to'], 'twocans — EMERGENCY number dialled',
                     $this->renderEmail([['title' => 'A phone dialled an emergency number', 'lines' => $lines]]));
@@ -74,14 +86,24 @@ final class Notifier
             $sections = array_merge($sections, $this->newAsks($repo, $firstRun));
         }
         if ($config['notifyOffline']) {
-            $sections = array_merge($sections, $this->newOffline($repo));
+            $sections = array_merge($sections, $this->newOffline($repo), $this->leftOffHook());
         }
         if ($config['notifyLowCredit']) {
             $sections = array_merge($sections, $this->lowCredit($repo));
         }
 
+        // Each on its own notification, opening the page it's about.
+        if ($pushing) {
+            foreach ($sections as $section) {
+                $lines = array_slice($section['lines'], 0, 3);
+                $more = count($section['lines']) - count($lines);
+                $push->send($section['title'], implode("\n", $lines) . ($more > 0 ? "\n…and {$more} more" : ''),
+                    $section['url'] ?? url(['screen' => 'dashboard']), false, null, $section['tag'] ?? 'twocans');
+            }
+        }
+
         $emailed = 0;
-        if ($sections !== [] && $config['mailgunConfigured']) {
+        if ($emailing && $sections !== [] && $config['mailgunConfigured']) {
             try {
                 $mail = new Mailgun($repo->apiKey() ?? '', $config['region'], $config['domain']);
                 $subject = 'twocans — ' . count($sections) . ' thing' . (count($sections) === 1 ? '' : 's') . ' need your attention';
@@ -142,7 +164,7 @@ final class Notifier
 
         $lines = [];
         foreach ($output as $line) {
-            // "/tc_emergency/1790511012.63                      : laptop2-daff|999|1790511012"
+            // "/tc_emergency/1790511012.63                      : kitchen-1a2b|999|1790511012"
             if (!preg_match('#^/' . preg_quote(PjsipConfig::EMERGENCY_FAMILY, '#') . '/(\S+)\s*:\s*(.*)$#', trim((string) $line), $m)) {
                 continue;
             }
@@ -185,7 +207,8 @@ final class Notifier
             $lines[] = (string) $row['peer_number'] . ($said !== '' ? ' — “' . $said . '”' : ' — no transcript yet');
         }
 
-        return [['title' => 'Somebody not on the list left a message', 'lines' => $lines]];
+        return [['title' => 'Somebody not on the list left a message', 'lines' => $lines,
+            'url' => url(['screen' => 'voicemail']), 'tag' => 'message']];
     }
 
     /** Sunday from 6pm, once a week. */
@@ -290,7 +313,8 @@ final class Notifier
         }
         $repo->setLastAskId($max);
 
-        return [['title' => 'Someone asked to call a number that is not on the list', 'lines' => $lines]];
+        return [['title' => 'Someone asked to call a number that is not on the list', 'lines' => $lines,
+            'url' => url(['screen' => 'dashboard']), 'tag' => 'ask']];
     }
 
     /** @return array<int,array{title:string,lines:array<int,string>}> */
@@ -321,7 +345,34 @@ final class Notifier
 
         $repo->setLastOnline($next);
 
-        return $lines === [] ? [] : [['title' => 'A phone went offline', 'lines' => $lines]];
+        return $lines === [] ? [] : [['title' => 'A phone went offline', 'lines' => $lines,
+            'url' => url(['screen' => 'phones']), 'tag' => 'offline']];
+    }
+
+    /**
+     * Desk phones whose handset has been off the hook a while with nobody on
+     * a call — so calls to them can't get through. Told once, until it's put
+     * back (DeviceRepository::phoneEvent clears it).
+     *
+     * @return array<int,array{title:string,lines:array<int,string>,url:string,tag:string}>
+     */
+    private function leftOffHook(): array
+    {
+        $busy = array_column((new LiveCalls())->active(), 'deviceId');
+        $out = [];
+        foreach ((new DeviceRepository())->all() as $row) {
+            $d = DeviceRepository::toView($row);
+            if ($d['offhookSince'] === null || (int) ($row['offhook_notified'] ?? 0) === 1
+                || time() - $d['offhookSince'] < 300 || in_array($d['id'], $busy, true)) {
+                continue;
+            }
+            Database::pdo()->prepare('UPDATE devices SET offhook_notified = 1 WHERE id = ?')->execute([$d['id']]);
+            $out[] = ['title' => $d['name'] . "'s handset is off the hook",
+                'lines' => ['Since ' . date('g:ia', $d['offhookSince']) . " — calls to it can't get through until it's put back."],
+                'url' => url(['screen' => 'phones', 'device' => (string) $d['id']]), 'tag' => 'offhook-' . $d['id']];
+        }
+
+        return $out;
     }
 
     /** @return array<int,array{title:string,lines:array<int,string>}> */
@@ -333,7 +384,8 @@ final class Notifier
         if ($low && !$alerted) {
             $repo->setLowCreditAlerted(true);
 
-            return [['title' => 'Call credit is running low', 'lines' => ['Top up so calls do not get cut off']]];
+            return [['title' => 'Call credit is running low', 'lines' => ['Top up so calls do not get cut off'],
+                'url' => url(['screen' => 'trunk']), 'tag' => 'credit']];
         }
         if (!$low && $alerted) {
             $repo->setLowCreditAlerted(false);   // credit recovered; arm the next alert

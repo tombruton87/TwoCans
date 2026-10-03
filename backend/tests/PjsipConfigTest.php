@@ -42,7 +42,7 @@ return [
         assertTrue(str_ends_with(PjsipConfig::registrarUri('tls'), ':' . PjsipConfig::port('tls') . ';transport=tls'));
     }),
     test('fixed service numbers never move', function () {
-        assertSame(['700', '600', '601', '500'], PjsipConfig::FIXED_SERVICE_NUMBERS);
+        assertSame(['700', '701', '600', '601', '500'], PjsipConfig::FIXED_SERVICE_NUMBERS);
     }),
     test('windowCondition is null for anytime', function () {
         assertNull(PjsipConfig::windowCondition(['call_window' => 'anytime']));

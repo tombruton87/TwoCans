@@ -7,8 +7,60 @@
 $repo = new NotificationRepository();
 $config = $repo->get();
 $canEdit = Auth::can('notifications');
+$me = (int) Auth::user()['id'];
+$myDevices = (new Push())->all($me);
 ?>
 <div class="tc-stack tc-narrow">
+
+  <?php /* Notifications on a grown-up's own phone or computer — Web Push. This
+           browser subscribes itself (twocans.js, data-tc-push); the ones already
+           on are listed, to test or stop. See Push and WebPush. */ ?>
+  <section class="tc-card tc-push" id="push-devices" data-tc-ajax-region
+           data-tc-push="<?= e((new WebPush())->publicKey()) ?>">
+    <h2 class="tc-card__title"><i class="fa-solid fa-bell" aria-hidden="true"></i> On your phone and computer</h2>
+    <p class="tc-card__hint">
+      A notification on this device, even with twocans closed: an emergency number dialled, a message from someone
+      not on the list, a number a child tried, a phone gone offline or its handset left off the hook. Tap one to open
+      the page it's about. No email needed.
+    </p>
+    <div class="tc-row tc-row--wrap">
+      <button class="tc-btn tc-btn--teal" type="button" data-tc-push-on hidden>
+        <i class="fa-solid fa-bell" aria-hidden="true"></i> Notify me on this device
+      </button>
+      <span class="tc-card__hint" data-tc-push-status role="status"></span>
+    </div>
+    <form method="post" action="/" data-tc-push-form hidden>
+      <?= form_fields() ?>
+      <input type="hidden" name="action" value="push_subscribe">
+    </form>
+    <?php if ($myDevices !== []): ?>
+      <ul class="tc-push__devices">
+        <?php foreach ($myDevices as $p): ?>
+          <li data-tc-push-endpoint="<?= e((string) $p['endpoint']) ?>">
+            <i class="fa-solid fa-mobile-screen" aria-hidden="true"></i>
+            <span class="tc-grow"><b><?= e((string) $p['label']) ?></b>
+              <span class="tc-card__hint">· on since <?= e(date('j M', (int) strtotime((string) $p['created_at']))) ?></span></span>
+            <form method="post" action="/" data-tc-ajax>
+              <?= form_fields() ?>
+              <input type="hidden" name="action" value="push_test">
+              <input type="hidden" name="id" value="<?= (int) $p['id'] ?>">
+              <button class="tc-btn tc-btn--ghost tc-btn--sm" type="submit">Send a test</button>
+            </form>
+            <form method="post" action="/" data-tc-ajax>
+              <?= form_fields() ?>
+              <input type="hidden" name="action" value="push_remove">
+              <input type="hidden" name="id" value="<?= (int) $p['id'] ?>">
+              <button class="tc-btn--icon tc-btn--icon-danger" type="submit" aria-label="Stop notifying <?= e((string) $p['label']) ?>">×</button>
+            </form>
+          </li>
+        <?php endforeach; ?>
+      </ul>
+    <?php endif; ?>
+    <p class="tc-card__hint tc-push__iphone">
+      On an iPhone or iPad: open twocans in Safari, tap Share → <b>Add to Home Screen</b>, then open it from there and
+      turn notifications on.
+    </p>
+  </section>
 
   <section class="tc-card">
     <div class="tc-card__head">

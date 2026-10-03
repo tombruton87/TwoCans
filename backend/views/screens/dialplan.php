@@ -89,7 +89,7 @@ $rows = array_map([DialplanRuleRepository::class, 'toView'], $rules->all());
         <span style="font:800 11px var(--tc-body);padding:5px 10px;border-radius:999px;
           <?= $r['action'] === 'allow'
               ? 'background:var(--tc-teal-bg);color:var(--tc-teal-deep);'
-              : 'background:var(--tc-coral-bg);color:var(--tc-coral);' ?>">
+              : 'background:var(--tc-coral-bg);color:var(--tc-coral-ink);' ?>">
           <?= $r['action'] === 'allow' ? 'Allowed' : 'Blocked' ?>
         </span>
 

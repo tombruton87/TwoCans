@@ -272,6 +272,27 @@ final class PjsipConfig
             $outVar = $outNumber === null ? '' : "\n; Calls out from its own number on the line.\nset_var = " . self::OUT_NUMBER_VAR . "={$outNumber}";
             // Who it is, and its call limits in seconds — see renderLimitsContext().
             $outVar .= "\nset_var = TC_DEV={$d['id']}";
+            $partner = $this->walkiePartner($d, $rows);
+            if ($partner !== null) {
+                // Who it walkie-talkies to — see renderWalkie().
+                $outVar .= "\nset_var = TC_WALKIE={$partner}";
+            }
+            if ($d['pausedUntil'] !== null) {
+                // Paused: the fun lines are off too — see renderPausedGate().
+                $outVar .= "\nset_var = TC_PAUSED=1";
+            }
+            if ($d['houseMessages']) {
+                // May hear the house's mailbox on 701.
+                $outVar .= "\nset_var = TC_HOUSEVM=1";
+            }
+            if ($d['radioStation'] !== null && isset($this->radioStationKeys()[$d['radioStation']])) {
+                // Its favourite radio station — see renderRadio().
+                $outVar .= "\nset_var = TC_RADIOST={$d['radioStation']}";
+            }
+            if ($d['canRoomListen']) {
+                // May listen to a room — see renderRoomListen().
+                $outVar .= "\nset_var = TC_ROOMLISTEN=1";
+            }
             if ($d['announceCaller']) {
                 // Says who's calling when picked up — see ANSWERED_CONTEXT.
                 $outVar .= "\nset_var = TC_ANNOUNCE=1";
@@ -286,7 +307,7 @@ final class PjsipConfig
                 if ($d['dailyMinutes'] !== null) {
                     $outVar .= "\nset_var = TC_DAILY=" . ($d['dailyMinutes'] * 60);
                 }
-                if (!$d['allowOut']) {
+                if (!$d['allowOut'] || $d['pausedUntil'] !== null) {
                     $outVar .= "\nset_var = TC_NOOUT=1";
                 }
             }
@@ -470,6 +491,55 @@ final class PjsipConfig
     public const VOICEMAIL_CONTEXT = 'twocans';
     public const VOICEMAIL_NUMBER = '700';
 
+    /** The house's mailbox, for the phones allowed to hear it (TC_HOUSEVM). */
+    public const HOUSE_MESSAGES_NUMBER = '701';
+
+    /**
+     * Listening to a room: dial 88 and the room phone's extension (88203).
+     * Only from a phone allowed to listen (TC_ROOMLISTEN), and only to a
+     * phone whose room may be listened to — see migration 058.
+     */
+    public const ROOM_LISTEN_PREFIX = '88';
+
+    /** AstDB family where each listen is noted, for the phone's page. */
+    public const ROOM_LISTEN_FAMILY = 'tc_roomlisten';
+
+    /** The times tables quiz: its games, noted as they're played, and its contexts. */
+    public const QUIZ_FAMILY = 'tc_quiz';
+    public const QUIZ_CONTEXT = 'twocans-quiz';
+    public const GAMES_CONTEXT = 'twocans-games';
+
+    /** How many sleeps until Christmas, and the numbers in Santa's voice — see Christmas. */
+    public const CHRISTMAS_CONTEXT = 'twocans-christmas';
+    public const CHRISTMAS_SAY_CONTEXT = 'twocans-christmas-say';
+
+    /** "What time is it?" and the kitchen timer — see Clock and Timers. */
+    public const CLOCK_CONTEXT = 'twocans-clock';
+    public const TIMER_CONTEXT = 'twocans-timer';
+
+    /** The silly voice line, and the walkie-talkie. */
+    public const SILLY_CONTEXT = 'twocans-silly';
+    public const WALKIE_CONTEXT = 'twocans-walkie';
+
+    /** Where a timer's call file is written before it's moved into the spool (the same volume, so the move is whole). */
+    private const TIMER_STAGING = '/var/spool/asterisk/tc-timers';
+
+    /** The radio, and its songs in their shuffled order — see Radio. */
+    public const RADIO_CONTEXT = 'twocans-radio';
+
+    /** Each game's own context; times tables is the quiz's. */
+    public const GAME_CONTEXTS = [
+        'times' => self::QUIZ_CONTEXT,
+        'sums' => 'twocans-sums',
+        'bonds' => 'twocans-bonds',
+        'guess' => 'twocans-guess',
+        'riddles' => 'twocans-riddles',
+    ];
+    public const QUIZ_SAY_CONTEXT = 'twocans-quiz-say';
+
+    /** The quiz's voice: numbers, questions and cheers — see storage/defaults/README.md. */
+    public const QUIZ_SOUNDS = self::DEFAULTS_DIR . '/quiz';
+
     /**
      * The context the service numbers answer in — 600 echo, 500 record, the
      * joke line. The endpoints' own `context =` line spells it out because a
@@ -502,6 +572,46 @@ final class PjsipConfig
     public static function jokeNumber(): string
     {
         return (new SettingsRepository())->jokeNumber();
+    }
+
+    public static function quizNumber(): string
+    {
+        return (new SettingsRepository())->quizNumber();
+    }
+
+    public static function gamesNumber(): string
+    {
+        return (new SettingsRepository())->gamesNumber();
+    }
+
+    public static function sleepsNumber(): string
+    {
+        return (new SettingsRepository())->sleepsNumber();
+    }
+
+    public static function radioNumber(): string
+    {
+        return (new SettingsRepository())->radioNumber();
+    }
+
+    public static function clockNumber(): string
+    {
+        return (new SettingsRepository())->clockNumber();
+    }
+
+    public static function timerNumber(): string
+    {
+        return (new SettingsRepository())->timerNumber();
+    }
+
+    public static function sillyNumber(): string
+    {
+        return (new SettingsRepository())->sillyNumber();
+    }
+
+    public static function walkieNumber(): string
+    {
+        return (new SettingsRepository())->walkieNumber();
     }
 
     /** Group calls: where members are originated to, and the room they meet in. */
@@ -553,6 +663,29 @@ final class PjsipConfig
         return $out;
     }
 
+    /** Where a paused phone is told it's having a rest — see DeviceRepository::pause(). */
+    public const PAUSED_CONTEXT = 'twocans-paused';
+
+    /** The first step of a fun line (jokes, games, radio…): a paused phone (TC_PAUSED) is turned away. */
+    private static function renderPausedGate(): string
+    {
+        return " same => n,GotoIf(\$[\"\${TC_PAUSED}\" = \"1\"]?" . self::PAUSED_CONTEXT . ",s,1)\n";
+    }
+
+    private function renderPausedContext(): string
+    {
+        $out = "\n[" . self::PAUSED_CONTEXT . "]\n";
+        $out .= "; The phone's paused for a while. Emergency numbers and its own\n";
+        $out .= "; messages never come through here.\n";
+        $out .= "exten => s,1,NoOp(twocans: this phone is paused)\n";
+        $out .= " same => n,Answer()\n";
+        $out .= " same => n,Wait(1)\n";
+        $out .= " same => n,Playback(" . (new Greetings())->prompt('not_allowed') . ")\n";
+        $out .= " same => n,Hangup()\n";
+
+        return $out;
+    }
+
     /** Announcements page the phones through here — see AnnouncementRepository. */
     public const PAGE_CONTEXT = 'twocans-page';
 
@@ -588,10 +721,39 @@ final class PjsipConfig
             $out .= "; (no phones to page yet)\n";
         }
 
+        $out .= $this->renderRoomListenTargets($rows);
+
         // Run on the phone's leg before it rings (Dial's b()).
         $out .= "exten => intercom,1,Set(PJSIP_HEADER(add,Call-Info)=<sip:twocans>\\;answer-after=0)\n";
         $out .= " same => n,Set(PJSIP_HEADER(add,Alert-Info)=<http://twocans>\\;info=alert-autoanswer\\;delay=0)\n";
         $out .= " same => n,Return()\n";
+
+        return $out;
+    }
+
+    /** Where a phone's chosen ringtone is asked for, on its leg before it rings. */
+    public const RINGTONE_CONTEXT = 'twocans-ringtone';
+
+    /**
+     * Run on each phone's leg before it rings (Dial's b()): a phone with a
+     * ringtone chosen for it — a Yealink handset, by its Phone settings — is
+     * asked to play it, with Alert-Info "ringtone-N" (its own RingN.wav).
+     * Phones with none are left to ring as they do.
+     */
+    private function renderRingtoneContext(array $rows): string
+    {
+        $out = "\n[" . self::RINGTONE_CONTEXT . "]\n";
+        $out .= "exten => s,1,GotoIf(\$[\${DIALPLAN_EXISTS(" . self::RINGTONE_CONTEXT . ",\${CHANNEL(endpoint)},1)}]?\${CHANNEL(endpoint)},1)\n";
+        $out .= " same => n,Return()\n";
+        foreach ($rows as $row) {
+            $d = DeviceRepository::toView($row);
+            $tone = isset(PhoneSettings::catalog($d['type'])['ringtone']) ? PhoneSettings::for($d)['ringtone'] : 'handset';
+            if ($d['sipUsername'] === '' || $tone === 'handset') {
+                continue;
+            }
+            $out .= "exten => {$d['sipUsername']},1,Set(PJSIP_HEADER(add,Alert-Info)=<http://twocans>\\;info=ringtone-" . (int) $tone . ")\n";
+            $out .= " same => n,Return()\n";
+        }
 
         return $out;
     }
@@ -777,8 +939,17 @@ final class PjsipConfig
     {
         return [
             self::VOICEMAIL_NUMBER => ['label' => 'Your messages', 'sub' => 'Listen to voicemail left on this phone'],
+            self::HOUSE_MESSAGES_NUMBER => ['label' => "The house's messages", 'sub' => "Listen to the house's mailbox — only on phones allowed to"],
         ] + self::voicemailSpeedDialEntry() + [
             self::jokeNumber() => ['label' => 'The joke line', 'sub' => 'Rings up a joke, picked at random from the ones you have added'],
+            self::quizNumber() => ['label' => 'Times tables quiz', 'sub' => 'Ten questions, answered on the keypad, with a score at the end'],
+            self::gamesNumber() => ['label' => 'The games line', 'sub' => 'Times tables, sums, number bonds, guess my number and animal riddles'],
+            self::clockNumber() => ['label' => 'What time is it?', 'sub' => "The time, and how long till bedtime when it's close"],
+            self::timerNumber() => ['label' => 'Kitchen timer', 'sub' => 'Type the minutes, hang up, and it rings when they’re up'],
+            self::sillyNumber() => ['label' => 'Silly voices', 'sub' => 'Say something, and hear it back as a chipmunk and a giant'],
+            self::walkieNumber() => ['label' => 'Walkie-talkie', 'sub' => 'Talk to the phone it’s paired with, on its speaker'],
+            self::radioNumber() => ['label' => 'The radio', 'sub' => 'Songs you have added, one after another — # skips to the next'],
+            self::sleepsNumber() => ['label' => 'Sleeps till Christmas', 'sub' => 'Santa counts down the sleeps — and on Christmas Day, his message'],
             '600' => ['label' => 'Echo test', 'sub' => 'Hear your own voice back — checks the microphone and speaker'],
             '601' => ['label' => 'Test message', 'sub' => 'Plays a welcome message, like a real incoming call — your own greeting if you record one'],
             '500' => ['label' => 'Record the greeting', 'sub' => 'Speak after the beep, then hang up'],
@@ -786,7 +957,7 @@ final class PjsipConfig
     }
 
     /** The ones that never move — everything except the joke line. */
-    public const FIXED_SERVICE_NUMBERS = ['700', '600', '601', '500'];
+    public const FIXED_SERVICE_NUMBERS = ['700', '701', '600', '601', '500'];
 
     /** twocans' built-in sounds, committed in storage/defaults — as Asterisk sees them. */
     public const DEFAULTS_DIR = '/var/lib/twocans/defaults';
@@ -1805,7 +1976,8 @@ final class PjsipConfig
                 continue;
             }
 
-            if (!$d['allowIn']) {
+            // Its Incoming switch off, or paused for a while.
+            if (!$d['allowIn'] || $d['pausedUntil'] !== null) {
                 continue;
             }
             $ringable++;
@@ -1875,7 +2047,8 @@ final class PjsipConfig
         // past them. The last one is the caller's name spoken, for a phone
         // that says who's calling.
         // Rung for as long as the longest-ringing phone is set to, then voicemail.
-        $out .= " same => n,Dial(\${TARGETS:1},\${IF(\$[\${RINGSECS} > 0]?\${RINGSECS}:30)},U(" . self::ANSWERED_CONTEXT . "^\${CALLER_SOS}\${CALLER_ALWAYS}^\${UNIQUEID}^\${CALLER_ANNOUNCE}))\n";
+        // b(): each phone's leg asks for its chosen ringtone, if it has one.
+        $out .= " same => n,Dial(\${TARGETS:1},\${IF(\$[\${RINGSECS} > 0]?\${RINGSECS}:30)},U(" . self::ANSWERED_CONTEXT . "^\${CALLER_SOS}\${CALLER_ALWAYS}^\${UNIQUEID}^\${CALLER_ANNOUNCE})b(" . self::RINGTONE_CONTEXT . "^s^1))\n";
         $out .= " same => n,Goto(quiet)\n";
 
         $out .= "\n; Nobody answered. Straight to the house mailbox: the phones rang and\n";
@@ -1951,6 +2124,7 @@ final class PjsipConfig
         $out .= " same => n,Hangup()\n\n";
 
         $out .= $this->renderJokeLine();
+        $out .= $this->renderQuizLine();
 
         $vmContext = self::VOICEMAIL_CONTEXT;
         $vmNumber = self::VOICEMAIL_NUMBER;
@@ -1963,6 +2137,22 @@ final class PjsipConfig
         $out .= " same => n,Wait(1)\n";
         $out .= " same => n,VoiceMailMain(\${CALLERID(num)}@{$vmContext},s)\n";
         $out .= " same => n,Hangup()\n\n";
+        $houseNumber = self::HOUSE_MESSAGES_NUMBER;
+        $houseBox = self::HOUSE_MAILBOX;
+        $out .= "; {$houseNumber} — the house's mailbox, for the phones allowed to hear it\n";
+        $out .= "; (TC_HOUSEVM, set on their endpoints). A message left for the house\n";
+        $out .= "; may be for a grown-up, so a child's phone hears only its own.\n";
+        $out .= "exten => {$houseNumber},1,NoOp(twocans: the house's messages for \${CALLERID(num)})\n";
+        $out .= " same => n,Answer()\n";
+        $out .= " same => n,Wait(1)\n";
+        $out .= " same => n,GotoIf(\$[\"\${TC_HOUSEVM}\" = \"1\"]?listen)\n";
+        $out .= " same => n,Playback(invalid)\n";
+        $out .= " same => n,Hangup()\n";
+        $out .= " same => n(listen),VoiceMailMain({$houseBox}@{$vmContext},s)\n";
+        $out .= " same => n,Hangup()\n\n";
+
+        $out .= $this->renderRoomListen($rows);
+
         $vmSpeedDial = (new SettingsRepository())->voicemailSpeedDial();
         if ($vmSpeedDial !== '') {
             $out .= "; {$vmSpeedDial} — the household's speed dial for {$vmNumber}.\n";
@@ -1986,7 +2176,7 @@ final class PjsipConfig
             // Not when either phone is in adult mode.
             $out .= $d['adult'] ? " same => n,NoOp({$d['name']} is in adult mode: not recorded)\n" : self::renderRecord();
             // Its own number of rings to answer, then its mailbox.
-            $out .= " same => n,Dial(PJSIP/{$d['sipUsername']},{$d['ringSeconds']})\n";
+            $out .= " same => n,Dial(PJSIP/{$d['sipUsername']},{$d['ringSeconds']},b(" . self::RINGTONE_CONTEXT . "^s^1))\n";
             // Nobody picked up (or the phone was busy) — offer to take a
             // message instead of just dropping the call.
             $out .= " same => n,Goto(vm-\${DIALSTATUS})\n";
@@ -2014,14 +2204,854 @@ final class PjsipConfig
         // Last, because these open contexts of their own — see the methods.
         $out .= $this->renderConfContext();
         $out .= $this->renderJokeContext();
+        $out .= $this->renderQuizContext();
+        $out .= $this->renderChristmas();
+        $out .= $this->renderRadio();
+        $out .= $this->renderClock();
+        $out .= $this->renderTimer();
+        $out .= $this->renderSilly();
+        $out .= $this->renderWalkie($rows);
         $out .= $this->renderDialoutContext();
         $out .= $this->renderBlockedContext();
         $out .= $this->renderLimitsContext();
         $out .= $this->renderMemberContext();
         $out .= $this->renderPageContext($rows);
+        $out .= $this->renderRingtoneContext($rows);
         $out .= $this->renderNoOutContext();
+        $out .= $this->renderPausedContext();
 
         return $out;
+    }
+
+    /**
+     * 88 and a room phone's extension, from a phone allowed to listen. Every
+     * other phone is told the number isn't one it can dial.
+     */
+    private function renderRoomListen(array $rows): string
+    {
+        $out = '';
+        foreach ($rows as $row) {
+            $d = DeviceRepository::toView($row);
+            if (!$d['roomListen'] || $d['sipUsername'] === '' || $d['extension'] === '' || !$d['available']) {
+                continue;
+            }
+            $number = self::ROOM_LISTEN_PREFIX . $d['extension'];
+            $out .= "; {$number} — listen to the room {$d['name']} is in, from a phone allowed to.\n";
+            $out .= "exten => {$number},1,GotoIf(\$[\"\${TC_ROOMLISTEN}\" = \"1\"]?" . self::PAGE_CONTEXT . ",l{$d['id']},1)\n";
+            $out .= " same => n,Answer()\n";
+            $out .= " same => n,Playback(" . self::BLOCKED_MESSAGE . ")\n";
+            $out .= " same => n,Hangup()\n\n";
+        }
+
+        return $out;
+    }
+
+    /**
+     * l<id>: ring a room's phone and have it answer by itself, one way.
+     *
+     * Reached from 88<extension> on a phone allowed to listen, or originated
+     * from the web app to one (LiveCalls::listenToRoom). The listener's
+     * microphone is muted (MUTEAUDIO in), so the room hears nothing of them —
+     * but it does hear a beep as the phone picks up, and the phone shows
+     * "Listening in" on its screen for as long as it lasts: never secret.
+     * Only to a phone that's free: it never breaks into a call.
+     *
+     * Like paging, it goes around bedtime and the phone's hours: a grown-up
+     * checking on a sleeping child is what bedtime is for.
+     */
+    private function renderRoomListenTargets(array $rows): string
+    {
+        $out = '';
+        foreach ($rows as $row) {
+            $d = DeviceRepository::toView($row);
+            if (!$d['roomListen'] || $d['sipUsername'] === '' || !$d['available']) {
+                continue;
+            }
+            $out .= "exten => l{$d['id']},1,NoOp(twocans: listening in on {$d['name']})\n";
+            $out .= " same => n,Set(DB(" . self::ROOM_LISTEN_FAMILY . "/\${UNIQUEID})=\${CHANNEL(endpoint)}|{$d['id']}|\${EPOCH})\n";
+            $out .= " same => n,GotoIf(\$[\"\${DEVICE_STATE(PJSIP/{$d['sipUsername']})}\" = \"NOT_INUSE\"]?free)\n";
+            // On a call, ringing or offline: say so rather than break in.
+            $out .= " same => n,Answer()\n";
+            $out .= " same => n,Playback(vm-nobodyavail)\n";
+            $out .= " same => n,Hangup()\n";
+            $out .= " same => n(free),Set(MUTEAUDIO(in)=on)\n";
+            $out .= " same => n,Set(CALLERID(all)=\"Listening in\" <" . self::TEST_CALLER_NUMBER . ">)\n";
+            $out .= " same => n,Dial(PJSIP/{$d['sipUsername']},20,b(" . self::PAGE_CONTEXT . "^intercom^1)A(beep))\n";
+            $out .= " same => n,Hangup()\n";
+        }
+
+        return $out;
+    }
+
+    /**
+     * The times tables quiz, and the games line — numbers a child dials, like
+     * the joke line. 246 goes straight to times tables; the games line (4263)
+     * asks which game first. See Games.
+     *
+     * Everything's in the dialplan, so it works with the web app down; each
+     * game is noted as it goes (QUIZ_FAMILY) — even one hung up halfway — and
+     * bin/minute.php brings it in for the Games page.
+     */
+    private function renderQuizLine(): string
+    {
+        $number = self::quizNumber();
+        $games = self::gamesNumber();
+
+        // Each a fun line: a paused phone is turned away first.
+        $line = static fn(string $n, string $what, string $context): string => "; {$n} — {$what}.\n"
+            . "exten => {$n},1,NoOp(twocans: {$what})\n"
+            . self::renderPausedGate()
+            . " same => n,Goto({$context},s,1)\n\n";
+
+        return $line($number, 'the times tables quiz', self::QUIZ_CONTEXT)
+            . $line($games, 'the games line', self::GAMES_CONTEXT)
+            . $line(self::sleepsNumber(), 'how many sleeps until Christmas', self::CHRISTMAS_CONTEXT)
+            . $line(self::radioNumber(), 'the radio', self::RADIO_CONTEXT)
+            . $line(self::clockNumber(), 'what time is it', self::CLOCK_CONTEXT)
+            . $line(self::timerNumber(), 'the kitchen timer', self::TIMER_CONTEXT)
+            . $line(self::sillyNumber(), 'silly voices', self::SILLY_CONTEXT)
+            . $line(self::walkieNumber(), 'the walkie-talkie', self::WALKIE_CONTEXT);
+    }
+
+    private function renderQuizContext(): string
+    {
+        $settings = new SettingsRepository();
+        $questions = $settings->quizQuestions();
+        $q = self::QUIZ_SOUNDS;
+        $say = self::QUIZ_SAY_CONTEXT;
+
+        // The games line's menu: a key for each game, asked twice at most.
+        $out = "\n[" . self::GAMES_CONTEXT . "]\n";
+        $out .= "; The games line — see renderQuizLine() and Games.\n";
+        $out .= "exten => s,1,Answer()\n";
+        $out .= " same => n,Wait(1)\n";
+        $out .= " same => n,Set(TRIES=0)\n";
+        $out .= " same => n(menu),Read(G,{$q}/games-menu,1,,1,6)\n";
+        foreach (Games::GAMES as $game => $g) {
+            $out .= " same => n,GotoIf(\$[\"\${G}\" = \"{$g['key']}\"]?" . self::GAME_CONTEXTS[$game] . ",s,1)\n";
+        }
+        $out .= " same => n,Set(TRIES=\$[\${TRIES} + 1])\n";
+        $out .= " same => n,GotoIf(\$[\${TRIES} < 2]?menu)\n";
+        $out .= " same => n,Playback({$q}/bye)\n";
+        $out .= " same => n,Hangup()\n";
+
+        // Times tables: which table (or a mix of the household's chosen ones, on #).
+        $tables = $settings->quizTables();
+        $mix = implode(',', $tables);
+        $count = count($tables);
+        $out .= "\n[" . self::QUIZ_CONTEXT . "]\n";
+        $out .= "; Times tables. The mix: {$mix}.\n";
+        $out .= "exten => s,1,Answer()\n";
+        $out .= " same => n,Wait(1)\n";
+        $out .= " same => n,Set(TABLES={$mix})\n";
+        $out .= " same => n,Playback({$q}/welcome)\n";
+        // Up to two digits and #; nothing, or anything but 2 to 12, is a mix.
+        $out .= " same => n,Read(TABLE,{$q}/pick,2,,1,6)\n";
+        $out .= " same => n,GotoIf(\$[\"\${TABLE}\" = \"\"]?mix)\n";
+        $out .= " same => n,GotoIf(\$[\${TABLE} >= 2 & \${TABLE} <= 12]?chosen)\n";
+        $out .= " same => n(mix),Set(TABLE=0)\n";
+        $out .= " same => n(chosen),Set(TABLE=\$[\${TABLE} + 0])\n";
+        $out .= " same => n,Playback({$q}/how)\n";
+        $out .= self::renderAskLoop('times', $questions,
+            " same => n,Set(T=\${IF(\$[\${TABLE} = 0]?\${CUT(TABLES,\\,,\${RAND(1,{$count})})}:\${TABLE})})\n"
+            . " same => n,Set(R=\${RAND(1,12)})\n"
+            // Half the time the other way round: 7 × 3 as well as 3 × 7.
+            . " same => n,Set(SWAP=\${RAND(0,1)})\n"
+            . " same => n,Set(A=\${IF(\$[\${SWAP} = 1]?\${R}:\${T})})\n"
+            . " same => n,Set(B=\${IF(\$[\${SWAP} = 1]?\${T}:\${R})})\n"
+            . " same => n,Set(ANSWER=\$[\${A} * \${B}])\n"
+            . " same => n,Gosub({$say},\${A},1)\n"
+            . " same => n,Set(SAYA=\${GOSUB_RETVAL})\n"
+            . " same => n,Gosub({$say},\${B},1)\n"
+            . " same => n,Set(QFILES={$q}/whats&\${SAYA}&{$q}/times&\${GOSUB_RETVAL})\n");
+
+        // Sums: adding and taking away, never past the household's limit, and
+        // never below nought. TABLE notes the limit.
+        $max = $settings->sumsMax();
+        $out .= "\n[" . self::GAME_CONTEXTS['sums'] . "]\n";
+        $out .= "; Sums, up to {$max}.\n";
+        $out .= "exten => s,1,Answer()\n";
+        $out .= " same => n,Wait(1)\n";
+        $out .= " same => n,Set(TABLE={$max})\n";
+        $out .= " same => n,Playback({$q}/sums-welcome)\n";
+        $out .= self::renderAskLoop('sums', $questions,
+            " same => n,GotoIf(\$[\${RAND(0,1)} = 1]?minus)\n"
+            . " same => n,Set(A=\${RAND(1," . ($max - 1) . ")})\n"
+            . " same => n,Set(B=\${RAND(1,\$[{$max} - \${A}])})\n"
+            . " same => n,Set(ANSWER=\$[\${A} + \${B}])\n"
+            . " same => n,Set(OP=plus)\n"
+            . " same => n,Goto(say)\n"
+            . " same => n(minus),Set(A=\${RAND(2,{$max})})\n"
+            . " same => n,Set(B=\${RAND(1,\$[\${A} - 1])})\n"
+            . " same => n,Set(ANSWER=\$[\${A} - \${B}])\n"
+            . " same => n,Set(OP=take-away)\n"
+            . " same => n(say),Gosub({$say},\${A},1)\n"
+            . " same => n,Set(SAYA=\${GOSUB_RETVAL})\n"
+            . " same => n,Gosub({$say},\${B},1)\n"
+            . " same => n,Set(QFILES={$q}/whats&\${SAYA}&{$q}/\${OP}&\${GOSUB_RETVAL})\n");
+
+        // Number bonds: what goes with 7 to make 10. TABLE notes the target,
+        // 0 for a mix of them.
+        $targets = $settings->bondsTo();
+        $tlist = implode(',', $targets);
+        $out .= "\n[" . self::GAME_CONTEXTS['bonds'] . "]\n";
+        $out .= "; Number bonds, to {$tlist}.\n";
+        $out .= "exten => s,1,Answer()\n";
+        $out .= " same => n,Wait(1)\n";
+        $out .= " same => n,Set(TARGETS={$tlist})\n";
+        $out .= " same => n,Set(TABLE=" . (count($targets) === 1 ? $targets[0] : 0) . ")\n";
+        $out .= " same => n,Playback({$q}/bonds-welcome)\n";
+        $out .= self::renderAskLoop('bonds', $questions,
+            " same => n,Set(T=\${CUT(TARGETS,\\,,\${RAND(1," . count($targets) . ")})})\n"
+            . " same => n,Set(A=\${RAND(1,\$[\${T} - 1])})\n"
+            . " same => n,Set(ANSWER=\$[\${T} - \${A}])\n"
+            . " same => n,Gosub({$say},\${A},1)\n"
+            . " same => n,Set(SAYA=\${GOSUB_RETVAL})\n"
+            . " same => n,Gosub({$say},\${T},1)\n"
+            . " same => n,Set(QFILES={$q}/bonds-what-goes&\${SAYA}&{$q}/bonds-to-make&\${GOSUB_RETVAL})\n");
+
+        $out .= $this->renderGuessGame();
+        $out .= $this->renderRiddlesGame();
+
+        // A number as the quiz's voice says it: the files to play, joined by &.
+        $out .= "\n[" . self::QUIZ_SAY_CONTEXT . "]\n";
+        $out .= "; 0 to 144, as files for the quiz's voice to play — see quizSay().\n";
+        foreach (range(0, 144) as $n) {
+            $files = implode('&', array_map(static fn(string $f): string => "{$q}/{$f}", self::quizSay($n)));
+            $out .= "exten => {$n},1,Return({$files})\n";
+        }
+
+        return $out;
+    }
+
+    /**
+     * The questions of a game, the same for every one that has right answers:
+     * $ask sets ANSWER and QFILES (the question, as files to play); the child
+     * types an answer and #; a cheer, or the answer; a score at the end.
+     */
+    private static function renderAskLoop(string $game, int $questions, string $ask): string
+    {
+        $q = self::QUIZ_SOUNDS;
+        $say = self::QUIZ_SAY_CONTEXT;
+
+        $out = " same => n,Set(SCORE=0)\n";
+        $out .= " same => n,Set(ASKED=0)\n";
+        $out .= " same => n(next),GotoIf(\$[\${ASKED} >= {$questions}]?done)\n";
+        $out .= $ask;
+        // Read plays the question and stops it at the first key pressed.
+        $out .= " same => n,Read(GOT,\${QFILES},3,,1,8)\n";
+        $out .= " same => n,GotoIf(\$[\"\${GOT}\" != \"\"]?check)\n";
+        // Nothing typed: a nudge, once. Still nothing and the child's gone.
+        $out .= " same => n,Read(GOT,{$q}/nudge,3,,1,8)\n";
+        $out .= " same => n,GotoIf(\$[\"\${GOT}\" = \"\"]?done)\n";
+        $out .= " same => n(check),Set(ASKED=\$[\${ASKED} + 1])\n";
+        $out .= " same => n,GotoIf(\$[\${GOT} = \${ANSWER}]?right)\n";
+        $out .= " same => n,Gosub({$say},\${ANSWER},1)\n";
+        $out .= " same => n,Playback({$q}/wrong&\${GOSUB_RETVAL})\n";
+        $out .= " same => n,Goto(note)\n";
+        $out .= " same => n(right),Set(SCORE=\$[\${SCORE} + 1])\n";
+        $out .= " same => n,Playback({$q}/right-\${RAND(1,4)})\n";
+        // Noted after every answer, so a game hung up halfway still counts.
+        $out .= " same => n(note)," . self::quizNote($game) . "\n";
+        $out .= " same => n,Goto(next)\n";
+        $out .= self::renderScore();
+
+        return $out;
+    }
+
+    /** Note the game so far, for Quiz::import(): who, the table, the score, how many asked, when, and the game. */
+    private static function quizNote(string $game): string
+    {
+        return "Set(DB(" . self::QUIZ_FAMILY . "/\${UNIQUEID})=\${CHANNEL(endpoint)}|\${TABLE}|\${SCORE}|\${ASKED}|\${EPOCH}|{$game})";
+    }
+
+    /** "You got 8 right, out of 10", a cheer, and goodbye. */
+    private static function renderScore(): string
+    {
+        $q = self::QUIZ_SOUNDS;
+        $say = self::QUIZ_SAY_CONTEXT;
+
+        $out = " same => n(done),GotoIf(\$[\${ASKED} = 0]?bye)\n";
+        $out .= " same => n,Gosub({$say},\${SCORE},1)\n";
+        $out .= " same => n,Set(SAYS=\${GOSUB_RETVAL})\n";
+        $out .= " same => n,Gosub({$say},\${ASKED},1)\n";
+        $out .= " same => n,Playback({$q}/you-got&\${SAYS}&{$q}/right-out-of&\${GOSUB_RETVAL})\n";
+        $out .= " same => n,Playback({$q}/\${IF(\$[\${SCORE} = \${ASKED}]?perfect:good)})\n";
+        $out .= " same => n(bye),Playback({$q}/bye)\n";
+        $out .= " same => n,Hangup()\n";
+
+        return $out;
+    }
+
+    /** @var array<int,int>|null station id => its key on the menu, for stations with songs on */
+    private ?array $radioKeys = null;
+
+    /** The stations on the radio's menu, with songs on them: id => key (1 to 5). */
+    private function radioStationKeys(): array
+    {
+        if ($this->radioKeys !== null) {
+            return $this->radioKeys;
+        }
+        $radio = new Radio();
+        $keys = [];
+        foreach ($radio->stations() as $row) {
+            if (count($keys) < Radio::MAX_STATIONS && $radio->playlist((int) $row['id']) !== []) {
+                $keys[(int) $row['id']] = count($keys) + 1;
+            }
+        }
+
+        return $this->radioKeys = $keys;
+    }
+
+    /**
+     * The radio: the household's songs, one after another until the child
+     * hangs up — see Radio.
+     *
+     * With stations, a menu first ("Press 1 for… party songs"), unless the
+     * phone has a favourite (TC_RADIOST); 0 is all the songs. At bedtime — on
+     * a child's phone — it can play only the calm songs, or be off, and the
+     * sleep timer says night night after a while (TIMEOUT absolute, which
+     * lands on the T extension).
+     *
+     * Each list is in the household's order, or shuffled when this is
+     * written; each call carries on where the last one stopped, so every song
+     * comes round before any repeats. ControlPlayback gives the keypad: # the
+     * next song, ★ the stations, 5 pause, 6 and 4 forward and back.
+     */
+    private function renderRadio(): string
+    {
+        $radio = new Radio();
+        $settings = new SettingsRepository();
+        $q = self::QUIZ_SOUNDS;
+        $ctx = self::RADIO_CONTEXT;
+        $keys = $this->radioStationKeys();
+        $bedtime = $settings->radioBedtime();
+        $sleep = $settings->radioSleepMinutes();
+        $atBedtime = $settings->quietHours() && ($bedtime !== 'normal' || $sleep > 0);
+
+        // Every list it can play: all the songs (0), and each station; each
+        // as it is, and its calm songs only.
+        $stationsById = [];
+        foreach ($radio->stations() as $row) {
+            $stationsById[(int) $row['id']] = $row;
+        }
+        $lists = ['0' => $radio->playlist(), '0c' => $radio->playlist(null, true)];
+        $shuffled = ['0' => $settings->radioShuffle(), '0c' => $settings->radioShuffle()];
+        foreach (array_keys($keys) as $id) {
+            $lists[(string) $id] = $radio->playlist($id);
+            $lists[$id . 'c'] = $radio->playlist($id, true);
+            $shuffled[(string) $id] = $shuffled[$id . 'c'] = (bool) $stationsById[$id]['shuffle'];
+        }
+        foreach ($lists as $name => $songs) {
+            if ($shuffled[$name]) {
+                shuffle($songs);
+                $lists[$name] = $songs;
+            }
+        }
+
+        $out = "\n[{$ctx}]\n";
+        $out .= '; The radio — ' . count($lists['0']) . ' song(s), ' . ($settings->radioShuffle() ? 'shuffled' : 'in order')
+            . ', ' . count($keys) . " station(s). See Radio.\n";
+        $out .= "exten => s,1,Answer()\n";
+        $out .= " same => n,Wait(1)\n";
+        $out .= " same => n,Set(CALM=)\n";
+        if ($atBedtime) {
+            $out .= " same => n,GotoIf(\$[\"\${TC_ADULT}\" = \"1\"]?awake)\n";
+            $out .= self::renderTimeJumps($settings->quietTimeRange(), 'bed');
+            $out .= " same => n,Goto(awake)\n";
+            $out .= " same => n(bed),NoOp(twocans: the radio at bedtime)\n";
+            if ($bedtime === 'off') {
+                $out .= " same => n,Playback({$q}/radio-bedtime)\n";
+                $out .= " same => n,Hangup()\n";
+            }
+            if ($bedtime === 'calm') {
+                $out .= " same => n,Set(CALM=c)\n";
+            }
+            if ($sleep > 0) {
+                $out .= " same => n,Set(TIMEOUT(absolute)=" . ($sleep * 60) . ")\n";
+            }
+        }
+        $out .= " same => n(awake),Set(ST=\${TC_RADIOST})\n";
+        $out .= " same => n,GotoIf(\$[\"\${ST}\" != \"\"]?play)\n";
+        if ($keys !== []) {
+            // The menu: "Press 1 for" and the station's name, said by the
+            // household, or "station one".
+            $store = new RadioStationStore();
+            $files = ["{$q}/radio-welcome"];
+            foreach ($keys as $id => $key) {
+                $files[] = "{$q}/press-{$key}";
+                $own = $stationsById[$id]['name_audio'] ?? null;
+                $files[] = ($own !== null ? $store->playbackPath((string) $own) : null) ?? "{$q}/station-{$key}";
+            }
+            $files[] = "{$q}/radio-all";
+            // Back here from ★ too, so it starts from all the songs again.
+            $out .= " same => n(menu),Set(ST=0)\n";
+            $out .= " same => n,Read(K," . implode('&', $files) . ",1,,2,6)\n";
+            foreach ($keys as $id => $key) {
+                $out .= " same => n,ExecIf(\$[\"\${K}\" = \"{$key}\"]?Set(ST={$id}))\n";
+            }
+        } else {
+            $out .= " same => n(menu),Set(ST=0)\n";
+        }
+        $out .= " same => n(play),Goto({$ctx}-play,\${ST}\${CALM},1)\n";
+
+        // Each list, playing round and round.
+        $out .= "\n[{$ctx}-play]\n";
+        // The sleep timer's up.
+        $out .= "exten => T,1,Playback({$q}/radio-goodnight)\n";
+        $out .= " same => n,Hangup()\n";
+        foreach ($lists as $name => $songs) {
+            $name = (string) $name; // PHP makes the key '0' a number
+            $count = count($songs);
+            $out .= "exten => {$name},1,NoOp(twocans: the radio, " . ($name === '0' || $name === '0c' ? 'all the songs' : 'station ' . (int) $name)
+                . (str_ends_with((string) $name, 'c') ? ', calm ones' : '') . ", {$count})\n";
+            if ($count === 0) {
+                // Nothing on it: at bedtime, it's sleeping; else, say so.
+                $out .= ' same => n,Playback(' . (str_ends_with((string) $name, 'c') ? "{$q}/radio-bedtime" : 'vm-nomore') . ")\n";
+                $out .= " same => n,Hangup()\n";
+                continue;
+            }
+            $global = 'TWOCANS_RADIO_POS_' . strtoupper((string) $name);
+            $out .= " same => n,Set(POS=\${GLOBAL({$global})})\n";
+            $out .= " same => n,GotoIf(\$[\"\${POS}\" = \"\"]?first)\n";
+            $out .= " same => n,GotoIf(\$[\${POS} <= {$count}]?song)\n";
+            $out .= " same => n(first),Set(POS=1)\n";
+            $out .= " same => n(song),Gosub({$ctx}-list-{$name},\${POS},1)\n";
+            $out .= " same => n,Set(POS=\$[\${POS} % {$count} + 1])\n";
+            $out .= " same => n,Set(GLOBAL({$global})=\${POS})\n";
+            $out .= " same => n,ControlPlayback(\${GOSUB_RETVAL},10000,6,4,#*,5)\n";
+            // ★: the stations, if there are any.
+            $out .= " same => n,GotoIf(\$[\"\${CPLAYBACKSTOPKEY}\" = \"*\"]?{$ctx},s," . ($keys !== [] ? 'menu' : 'play') . ")\n";
+            $out .= " same => n,Wait(1)\n";
+            $out .= " same => n,Goto(song)\n";
+        }
+        foreach ($lists as $name => $songs) {
+            if ($songs === []) {
+                continue;
+            }
+            $out .= "\n[{$ctx}-list-{$name}]\n";
+            foreach ($songs as $i => $path) {
+                $out .= 'exten => ' . ($i + 1) . ",1,Return({$path})\n";
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * "What time is it?" — see Clock. The time to the nearest five minutes,
+     * the way children learn it, worked out when the call comes in; then, on
+     * a child's phone, bedtime: now, or how long till it when it's close.
+     */
+    private function renderClock(): string
+    {
+        $q = self::QUIZ_SOUNDS;
+        $say = self::QUIZ_SAY_CONTEXT;
+        $tz = self::timezone();
+        $settings = new SettingsRepository();
+
+        $out = "\n[" . self::CLOCK_CONTEXT . "]\n";
+        $out .= "; What time is it — see Clock.\n";
+        $out .= "exten => s,1,Answer()\n";
+        $out .= " same => n,Wait(1)\n";
+        $out .= " same => n,Set(H=\${STRFTIME(\${EPOCH},{$tz},%H)})\n";
+        $out .= " same => n,Set(M=\${STRFTIME(\${EPOCH},{$tz},%M)})\n";
+        $out .= " same => n,Set(NOW=\$[\${H} * 60 + \${M}])\n";
+        // To the nearest five minutes; 60 is the next hour.
+        $out .= " same => n,Set(R=\${MATH(\$[\${M} + 2]/5,int)})\n";
+        $out .= " same => n,Set(R=\$[\${R} * 5])\n";
+        $out .= " same => n,ExecIf(\$[\${R} = 60]?Set(H=\$[\${H} + 1]))\n";
+        $out .= " same => n,ExecIf(\$[\${R} = 60]?Set(R=0))\n";
+        $out .= " same => n,Set(H12=\$[\${H} % 12])\n";
+        $out .= " same => n,ExecIf(\$[\${H12} = 0]?Set(H12=12))\n";
+        $out .= " same => n,Set(NEXT=\$[\${H12} % 12 + 1])\n";
+        $out .= " same => n,GotoIf(\$[\${R} = 0]?oclock)\n";
+        $out .= " same => n,GotoIf(\$[\${R} = 15]?quarterpast)\n";
+        $out .= " same => n,GotoIf(\$[\${R} = 30]?halfpast)\n";
+        $out .= " same => n,GotoIf(\$[\${R} = 45]?quarterto)\n";
+        $out .= " same => n,GotoIf(\$[\${R} > 30]?to)\n";
+        $out .= " same => n,Gosub({$say},\${R},1)\n";
+        $out .= " same => n,Playback({$q}/clock-its&\${GOSUB_RETVAL}&{$q}/clock-past&{$q}/n-\${H12})\n";
+        $out .= " same => n,Goto(bedtime)\n";
+        $out .= " same => n(to),Gosub({$say},\$[60 - \${R}],1)\n";
+        $out .= " same => n,Playback({$q}/clock-its&\${GOSUB_RETVAL}&{$q}/clock-to&{$q}/n-\${NEXT})\n";
+        $out .= " same => n,Goto(bedtime)\n";
+        $out .= " same => n(oclock),Playback({$q}/clock-its&{$q}/n-\${H12}&{$q}/clock-oclock)\n";
+        $out .= " same => n,Goto(bedtime)\n";
+        $out .= " same => n(quarterpast),Playback({$q}/clock-quarter-past&{$q}/n-\${H12})\n";
+        $out .= " same => n,Goto(bedtime)\n";
+        $out .= " same => n(halfpast),Playback({$q}/clock-half-past&{$q}/n-\${H12})\n";
+        $out .= " same => n,Goto(bedtime)\n";
+        $out .= " same => n(quarterto),Playback({$q}/clock-quarter-to&{$q}/n-\${NEXT})\n";
+        $out .= " same => n(bedtime),Wait(0.5)\n";
+        if ($settings->quietHours()) {
+            // Not on a grown-up's phone: their bedtime is their own business.
+            $out .= " same => n,GotoIf(\$[\"\${TC_ADULT}\" = \"1\"]?bye)\n";
+            $out .= self::renderTimeJumps($settings->quietTimeRange(), 'bednow');
+            // Today's bedtime, by the day of the week: minutes after midnight.
+            $out .= " same => n,Set(DOW=\${STRFTIME(\${EPOCH},{$tz},%u)})\n";
+            $out .= " same => n,Set(BED=)\n";
+            foreach (Clock::bedtimes($settings) as $dow => $at) {
+                [$h, $m] = array_map('intval', explode(':', $at));
+                $out .= " same => n,ExecIf(\$[\${DOW} = {$dow}]?Set(BED=" . ($h * 60 + $m) . "))\n";
+            }
+            $out .= " same => n,GotoIf(\$[\"\${BED}\" = \"\"]?bye)\n";
+            $out .= " same => n,Set(LEFT=\$[\${BED} - \${NOW}])\n";
+            $out .= " same => n,GotoIf(\$[\${LEFT} <= 0 | \${LEFT} > " . Clock::BEDTIME_WINDOW . "]?bye)\n";
+            $out .= " same => n,GotoIf(\$[\${LEFT} = 60]?anhour)\n";
+            $out .= " same => n,GotoIf(\$[\${LEFT} > 60]?hourand)\n";
+            $out .= " same => n,Gosub({$say},\${LEFT},1)\n";
+            $out .= " same => n,Playback({$q}/bedtime-in&\${GOSUB_RETVAL}&{$q}/bedtime-minutes)\n";
+            $out .= " same => n,Goto(bye)\n";
+            $out .= " same => n(anhour),Playback({$q}/bedtime-in-an-hour)\n";
+            $out .= " same => n,Goto(bye)\n";
+            $out .= " same => n(hourand),Gosub({$say},\$[\${LEFT} - 60],1)\n";
+            $out .= " same => n,Playback({$q}/bedtime-in-an-hour-and&\${GOSUB_RETVAL}&{$q}/bedtime-minutes)\n";
+            $out .= " same => n,Goto(bye)\n";
+            $out .= " same => n(bednow),Playback({$q}/bedtime-now)\n";
+        }
+        $out .= " same => n(bye),Wait(1)\n";
+        $out .= " same => n,Hangup()\n";
+
+        return $out;
+    }
+
+    /**
+     * The kitchen timer — see Timers. The minutes, then a call file dated
+     * for when they're up, moved into Asterisk's outgoing spool: pbx_spool
+     * rings the phone at that second. Named after the phone, so a new timer
+     * replaces its old one; 0 cancels it.
+     */
+    private function renderTimer(): string
+    {
+        $q = self::QUIZ_SOUNDS;
+        $say = self::QUIZ_SAY_CONTEXT;
+        $ctx = self::TIMER_CONTEXT;
+        $stage = self::TIMER_STAGING;
+        $spool = '/var/spool/asterisk/outgoing';
+        $max = Timers::MAX_MINUTES;
+        $family = Timers::FAMILY;
+
+        $out = "\n[{$ctx}]\n";
+        $out .= "; The kitchen timer — see Timers.\n";
+        $out .= "exten => s,1,Answer()\n";
+        $out .= " same => n,Wait(1)\n";
+        $out .= " same => n,Set(PHONE=\${CHANNEL(endpoint)})\n";
+        // Only a phone can be rung back.
+        $out .= " same => n,GotoIf(\$[\"\${PHONE}\" = \"\"]?bye)\n";
+        $out .= " same => n,Read(MIN,{$q}/timer-ask,3,,2,8)\n";
+        $out .= " same => n,GotoIf(\$[\"\${MIN}\" = \"\"]?bye)\n";
+        $out .= " same => n,Set(MIN=\$[\${MIN} + 0])\n";
+        $out .= " same => n,GotoIf(\$[\${MIN} = 0]?cancel)\n";
+        $out .= " same => n,ExecIf(\$[\${MIN} > {$max}]?Set(MIN={$max}))\n";
+        $out .= " same => n,Set(DUE=\$[\${EPOCH} + \${MIN} * 60])\n";
+        // A call file: written aside, dated for when it's due, then moved in
+        // whole. A line an echo, so nothing needs escaping twice over.
+        $lines = ['Channel: PJSIP/${PHONE}', 'CallerID: "Timer" <timer>', 'MaxRetries: 1', 'RetryTime: 60',
+            'WaitTime: 45', "Context: {$ctx}", 'Extension: ding', 'Priority: 1'];
+        // (; starts a comment in Asterisk's config, so each is escaped.)
+        $echo = implode('\\; ', array_map(static fn(string $l): string => "echo '" . $l . "'", $lines));
+        $out .= " same => n,System(mkdir -p {$stage} && { {$echo}\\; } > {$stage}/\${PHONE}.call && touch -d @\${DUE} {$stage}/\${PHONE}.call && mv -f {$stage}/\${PHONE}.call {$spool}/tc-timer-\${PHONE}.call)\n";
+        $out .= " same => n,Set(DB({$family}/\${PHONE})=\${DUE})\n";
+        $out .= " same => n,GotoIf(\$[\${MIN} = 1]?one)\n";
+        $out .= " same => n,Gosub({$say},\${MIN},1)\n";
+        $out .= " same => n,Playback({$q}/timer-set&\${GOSUB_RETVAL}&{$q}/timer-minutes)\n";
+        $out .= " same => n,Goto(bye)\n";
+        $out .= " same => n(one),Playback({$q}/timer-set-one)\n";
+        $out .= " same => n,Goto(bye)\n";
+        $out .= " same => n(cancel),Gosub(drop,1(\${PHONE}))\n";
+        $out .= " same => n,Playback({$q}/timer-cancelled)\n";
+        $out .= " same => n(bye),Wait(1)\n";
+        $out .= " same => n,Hangup()\n";
+        // Its time is up: the phone rings, and says so.
+        $out .= "exten => ding,1,Answer()\n";
+        $out .= " same => n,Wait(1)\n";
+        $out .= " same => n,Set(DB_DELETE({$family}/\${CHANNEL(endpoint)})=)\n";
+        $out .= " same => n,Playback({$q}/timer-done&beep&beep&beep&{$q}/timer-done)\n";
+        $out .= " same => n,Hangup()\n";
+        // Cancelled from the web page (Timers::cancel), for TIMER_PHONE.
+        $out .= "exten => cancel,1,Gosub(drop,1(\${TIMER_PHONE}))\n";
+        $out .= " same => n,Hangup()\n";
+        // Take a phone's timer away: its call file, and its note.
+        $out .= "exten => drop,1,GotoIf(\$[\"\${REGEX(\"^[A-Za-z0-9_.-]+\$\" \${ARG1})}\" != \"1\"]?done)\n";
+        $out .= " same => n,System(rm -f {$spool}/tc-timer-\${ARG1}.call)\n";
+        $out .= " same => n,Set(DB_DELETE({$family}/\${ARG1})=)\n";
+        $out .= " same => n(done),Return()\n";
+
+        return $out;
+    }
+
+    /**
+     * The phone $d walkie-talkies to, by its SIP name — one that answers by
+     * itself, is set up, and isn't paused — or null.
+     */
+    private function walkiePartner(array $d, array $rows): ?string
+    {
+        if ($d['walkieTo'] === null) {
+            return null;
+        }
+        foreach ($rows as $row) {
+            $other = DeviceRepository::toView($row);
+            if ($other['id'] === $d['walkieTo']) {
+                return $other['autoAnswer'] && $other['available'] && $other['sipUsername'] !== '' && $other['pausedUntil'] === null
+                    ? $other['sipUsername'] : null;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Silly voices: say something after the beep, and hear it back high (a
+     * chipmunk) then low (a giant) — PITCH_SHIFT on what the phone hears.
+     * The recording's thrown away when they hang up.
+     */
+    private function renderSilly(): string
+    {
+        $q = self::QUIZ_SOUNDS;
+        // No dot in its name: Asterisk would take what follows for a file type.
+        $rec = '/tmp/twocans-silly-${CUT(UNIQUEID,.,1)}-${CUT(UNIQUEID,.,2)}';
+
+        $out = "\n[" . self::SILLY_CONTEXT . "]\n";
+        $out .= "; Silly voices — see renderSilly().\n";
+        $out .= "exten => s,1,Answer()\n";
+        $out .= " same => n,Wait(1)\n";
+        $out .= " same => n(again),Playback({$q}/silly-say)\n";
+        // A beep, then up to ten seconds; two of quiet, or #, ends it.
+        $out .= " same => n,Record({$rec}.wav,2,10)\n";
+        $out .= " same => n,Playback({$q}/silly-chipmunk)\n";
+        $out .= " same => n,Set(PITCH_SHIFT(tx)=highest)\n";
+        $out .= " same => n,Playback({$rec})\n";
+        $out .= " same => n,Set(PITCH_SHIFT(tx)=1.0)\n";
+        $out .= " same => n,Playback({$q}/silly-giant)\n";
+        $out .= " same => n,Set(PITCH_SHIFT(tx)=lowest)\n";
+        $out .= " same => n,Playback({$rec})\n";
+        $out .= " same => n,Set(PITCH_SHIFT(tx)=1.0)\n";
+        $out .= " same => n,Read(AGAIN,{$q}/silly-again,1,,1,6)\n";
+        $out .= " same => n,GotoIf(\$[\"\${AGAIN}\" = \"1\"]?again)\n";
+        $out .= " same => n,Playback({$q}/bye)\n";
+        $out .= " same => n,Hangup()\n";
+        // Nothing of a child's voice is kept.
+        $out .= "exten => h,1,System(rm -f {$rec}.wav)\n";
+
+        return $out;
+    }
+
+    /**
+     * The walkie-talkie: ring the phone this one's paired with (TC_WALKIE),
+     * which answers by itself on speaker — the announcement headers — with
+     * a beep, two-way. Never into a call; not at bedtime on a child's phone.
+     */
+    private function renderWalkie(array $rows): string
+    {
+        $q = self::QUIZ_SOUNDS;
+        $settings = new SettingsRepository();
+
+        $out = "\n[" . self::WALKIE_CONTEXT . "]\n";
+        $out .= "; The walkie-talkie — see renderWalkie().\n";
+        $out .= "exten => s,1,GotoIf(\$[\"\${TC_WALKIE}\" = \"\"]?none)\n";
+        if ($settings->quietHours()) {
+            $out .= " same => n,GotoIf(\$[\"\${TC_ADULT}\" = \"1\"]?awake)\n";
+            $out .= self::renderTimeJumps($settings->quietTimeRange(), 'bed');
+        }
+        $out .= " same => n(awake),GotoIf(\$[\"\${DEVICE_STATE(PJSIP/\${TC_WALKIE})}\" != \"NOT_INUSE\"]?busy)\n";
+        $out .= " same => n,Set(CALLERID(name)=Walkie-talkie: \${CALLERID(name)})\n";
+        $out .= " same => n,Dial(PJSIP/\${TC_WALKIE},20,b(" . self::PAGE_CONTEXT . "^intercom^1)A(beep))\n";
+        $out .= " same => n,Hangup()\n";
+        $out .= " same => n(none),Answer()\n";
+        $out .= " same => n,Wait(1)\n";
+        $out .= " same => n,Playback(" . self::BLOCKED_MESSAGE . ")\n";
+        $out .= " same => n,Hangup()\n";
+        $out .= " same => n(busy),Answer()\n";
+        $out .= " same => n,Wait(1)\n";
+        $out .= " same => n,Playback(vm-nobodyavail)\n";
+        $out .= " same => n,Hangup()\n";
+        $out .= " same => n(bed),Answer()\n";
+        $out .= " same => n,Wait(1)\n";
+        $out .= " same => n,Playback({$q}/bedtime-now)\n";
+        $out .= " same => n,Hangup()\n";
+
+        return $out;
+    }
+
+    /**
+     * How many sleeps until Christmas, in Santa's voice — see Christmas.
+     *
+     * The sum's done when the call comes in, so the line is right every day
+     * without anything being rewritten: today and Christmas Day, both at
+     * noon (so a clock change can't nudge it), and the days between, rounded.
+     * Past Christmas, it's next year's. 0 is Christmas Day — Santa's message;
+     * 1 is Christmas Eve.
+     */
+    private function renderChristmas(): string
+    {
+        $c = Christmas::SOUNDS;
+        $tz = self::timezone();
+        $settings = new SettingsRepository();
+        // The household's own message if there is one, else the built-in one.
+        $own = $settings->santaMessage() === null ? null : (new SantaStore())->playbackPath((string) $settings->santaMessage());
+        $message = $own ?? "{$c}/christmas-day";
+        $fmt = '%Y-%m-%d %H:%M:%S';
+
+        $out = "\n[" . self::CHRISTMAS_CONTEXT . "]\n";
+        $out .= "; How many sleeps until Christmas — see Christmas.\n";
+        $out .= "exten => s,1,Answer()\n";
+        $out .= " same => n,Wait(1)\n";
+        $out .= " same => n,Set(TODAY=\${STRFTIME(\${EPOCH},{$tz},%Y-%m-%d)} 12:00:00)\n";
+        $out .= " same => n,Set(YEAR=\${STRFTIME(\${EPOCH},{$tz},%Y)})\n";
+        $out .= " same => n,Set(NOON=\${STRPTIME(\${TODAY},{$tz},{$fmt})})\n";
+        $out .= " same => n,Set(XMAS=\${STRPTIME(\${YEAR}-12-25 12:00:00,{$tz},{$fmt})})\n";
+        $out .= " same => n,GotoIf(\$[\${XMAS} >= \${NOON}]?count)\n";
+        $out .= " same => n,Set(XMAS=\${STRPTIME(\$[\${YEAR} + 1]-12-25 12:00:00,{$tz},{$fmt})})\n";
+        $out .= " same => n(count),Set(DIFF=\$[\${XMAS} - \${NOON} + 43200])\n";
+        $out .= " same => n,Set(SLEEPS=\${MATH(\${DIFF}/86400,int)})\n";
+        $out .= " same => n,GotoIf(\$[\${SLEEPS} = 0]?santa,1)\n";
+        $out .= " same => n,GotoIf(\$[\${SLEEPS} = 1]?eve)\n";
+        $out .= " same => n,Gosub(" . self::CHRISTMAS_SAY_CONTEXT . ",\${SLEEPS},1)\n";
+        $out .= " same => n,Playback({$c}/intro&\${GOSUB_RETVAL}&{$c}/sleeps-until&{$c}/signoff-\${RAND(1,4)})\n";
+        $out .= " same => n,Hangup()\n";
+        $out .= " same => n(eve),Playback({$c}/christmas-eve)\n";
+        $out .= " same => n,Hangup()\n";
+        // Santa's message: on Christmas Day, and when he rings on Christmas
+        // morning (Christmas::ringIfDue). The built-in one if the household's
+        // has gone missing, rather than silence.
+        $out .= "exten => santa,1,Answer()\n";
+        $out .= " same => n,Wait(1)\n";
+        $out .= " same => n,Playback({$message})\n";
+        $out .= " same => n,GotoIf(\$[\"\${PLAYBACKSTATUS}\" = \"SUCCESS\"]?bye)\n";
+        $out .= " same => n,Playback({$c}/christmas-day)\n";
+        $out .= " same => n(bye),Wait(1)\n";
+        $out .= " same => n,Hangup()\n";
+
+        $out .= "\n[" . self::CHRISTMAS_SAY_CONTEXT . "]\n";
+        $out .= "; 2 to 365 in Santa's voice — see quizSay().\n";
+        foreach (range(2, 365) as $n) {
+            $files = implode('&', array_map(static fn(string $f): string => "{$c}/{$f}", self::quizSay($n)));
+            $out .= "exten => {$n},1,Return({$files})\n";
+        }
+
+        return $out;
+    }
+
+    /**
+     * Guess my number: 1 to 100, "higher!" or "lower!" after each guess, and
+     * how many goes it took. Noted with the goes as the score, and asked 1
+     * once it's guessed (0 while it isn't).
+     */
+    private function renderGuessGame(): string
+    {
+        $q = self::QUIZ_SOUNDS;
+        $say = self::QUIZ_SAY_CONTEXT;
+
+        $out = "\n[" . self::GAME_CONTEXTS['guess'] . "]\n";
+        $out .= "; Guess my number — see Games.\n";
+        $out .= "exten => s,1,Answer()\n";
+        $out .= " same => n,Wait(1)\n";
+        $out .= " same => n,Set(NUMBER=\${RAND(1,100)})\n";
+        $out .= " same => n,Set(TABLE=0)\n";
+        $out .= " same => n,Set(SCORE=0)\n";
+        $out .= " same => n,Set(ASKED=0)\n";
+        $out .= " same => n,Set(PROMPT={$q}/guess-welcome)\n";
+        $out .= " same => n(ask),Read(GOT,\${PROMPT},3,,1,10)\n";
+        $out .= " same => n,GotoIf(\$[\"\${GOT}\" != \"\"]?check)\n";
+        $out .= " same => n,Read(GOT,{$q}/nudge,3,,1,10)\n";
+        $out .= " same => n,GotoIf(\$[\"\${GOT}\" = \"\"]?bye)\n";
+        $out .= " same => n(check),Set(SCORE=\$[\${SCORE} + 1])\n";
+        $out .= " same => n,Set(ASKED=\${IF(\$[\${GOT} = \${NUMBER}]?1:0)})\n";
+        $out .= " same => n," . self::quizNote('guess') . "\n";
+        $out .= " same => n,GotoIf(\$[\${ASKED} = 1]?got)\n";
+        $out .= " same => n,Set(PROMPT={$q}/\${IF(\$[\${GOT} < \${NUMBER}]?higher:lower)})\n";
+        // Enough is enough: a child still guessing after 25 goes has wandered off.
+        $out .= " same => n,GotoIf(\$[\${SCORE} < 25]?ask)\n";
+        $out .= " same => n,Goto(bye)\n";
+        $out .= " same => n(got),GotoIf(\$[\${SCORE} = 1]?first)\n";
+        $out .= " same => n,Gosub({$say},\${SCORE},1)\n";
+        $out .= " same => n,Playback({$q}/guess-got-it&\${GOSUB_RETVAL}&{$q}/guess-goes)\n";
+        $out .= " same => n,Goto(bye)\n";
+        $out .= " same => n(first),Playback({$q}/guess-first)\n";
+        $out .= " same => n(bye),Playback({$q}/bye)\n";
+        $out .= " same => n,Hangup()\n";
+
+        return $out;
+    }
+
+    /**
+     * Animal riddles: five a game, answered 1, 2 or 3. The riddles are put in
+     * a shuffled order when this is written, and each game carries on from
+     * where the last left off — like the joke line — so they come round in
+     * turn rather than the same few again.
+     */
+    private function renderRiddlesGame(): string
+    {
+        $q = self::QUIZ_SOUNDS;
+        $riddles = array_keys(Games::RIDDLES);
+        shuffle($riddles);
+        $count = count($riddles);
+        $context = self::GAME_CONTEXTS['riddles'];
+
+        $out = "\n[{$context}]\n";
+        $out .= "; Animal riddles — see Games::RIDDLES.\n";
+        $out .= "exten => s,1,Answer()\n";
+        $out .= " same => n,Wait(1)\n";
+        $out .= " same => n,Set(TABLE=0)\n";
+        $out .= " same => n,Set(SCORE=0)\n";
+        $out .= " same => n,Set(ASKED=0)\n";
+        $out .= " same => n,Playback({$q}/riddles-welcome)\n";
+        $out .= " same => n,Set(POS=\${GLOBAL(TWOCANS_RIDDLE_POS)})\n";
+        $out .= " same => n,GotoIf(\$[\"\${POS}\" = \"\"]?first)\n";
+        $out .= " same => n,GotoIf(\$[\${POS} <= {$count}]?next)\n";
+        $out .= " same => n(first),Set(POS=1)\n";
+        $out .= " same => n(next),GotoIf(\$[\${ASKED} >= " . Games::RIDDLES_A_GAME . "]?done)\n";
+        $out .= " same => n,Gosub({$context}-list,\${POS},1)\n";
+        $out .= " same => n,Set(POS=\$[\${POS} % {$count} + 1])\n";
+        $out .= " same => n,Set(GLOBAL(TWOCANS_RIDDLE_POS)=\${POS})\n";
+        $out .= " same => n,Read(GOT,\${GOSUB_RETVAL},1,,1,8)\n";
+        $out .= " same => n,GotoIf(\$[\"\${GOT}\" != \"\"]?check)\n";
+        $out .= " same => n,Read(GOT,{$q}/riddle-nudge,1,,1,8)\n";
+        $out .= " same => n,GotoIf(\$[\"\${GOT}\" = \"\"]?done)\n";
+        $out .= " same => n(check),Set(ASKED=\$[\${ASKED} + 1])\n";
+        $out .= " same => n,GotoIf(\$[\"\${GOT}\" = \"\${RIDDLE_ANSWER}\"]?right)\n";
+        $out .= " same => n,Playback({$q}/riddle-wrong&{$q}/n-\${RIDDLE_ANSWER})\n";
+        $out .= " same => n,Goto(note)\n";
+        $out .= " same => n(right),Set(SCORE=\$[\${SCORE} + 1])\n";
+        $out .= " same => n,Playback({$q}/right-\${RAND(1,4)})\n";
+        $out .= " same => n(note)," . self::quizNote('riddles') . "\n";
+        $out .= " same => n,Goto(next)\n";
+        $out .= self::renderScore();
+
+        // Each riddle by its place in the shuffled order: its answer, and its recording.
+        $out .= "\n[{$context}-list]\n";
+        foreach ($riddles as $i => $n) {
+            $out .= 'exten => ' . ($i + 1) . ",1,Set(RIDDLE_ANSWER=" . Games::RIDDLES[$n]['answer'] . ")\n";
+            $out .= " same => n,Return({$q}/riddle-{$n})\n";
+        }
+
+        return $out;
+    }
+
+    /**
+     * The clips that say a number, 0 to 399: "forty" "two", "one hundred and"
+     * "twelve". Nought is said as "0" — the score when none were right. The
+     * quiz's voice has them up to 144 (its hundred is one hundred); Santa's
+     * from 2 to 365, for the sleeps until Christmas.
+     *
+     * @return array<int,string>
+     */
+    public static function quizSay(int $n): array
+    {
+        if ($n === 0) {
+            return ['n-0'];
+        }
+        if ($n >= 100) {
+            $hundreds = intdiv($n, 100) * 100;
+
+            return $n % 100 === 0 ? ['n-' . $hundreds] : ['n-' . $hundreds . '-and', ...self::quizSay($n % 100)];
+        }
+        if ($n <= 20 || $n % 10 === 0) {
+            return ['n-' . $n];
+        }
+
+        return ['n-' . (intdiv($n, 10) * 10), 'n-' . ($n % 10)];
     }
 
     /**
@@ -2072,7 +3102,9 @@ final class PjsipConfig
         if ($count === 0) {
             $out .= "; No jokes uploaded yet, so the line says so rather than\n";
             $out .= "; answering into silence.\n";
-            $out .= "exten => {$number},1,Answer()\n";
+            $out .= "exten => {$number},1,NoOp(twocans: joke line, empty)\n";
+            $out .= self::renderPausedGate();
+            $out .= " same => n,Answer()\n";
             $out .= " same => n,Wait(1)\n";
             $out .= " same => n,Playback(vm-nomore)\n";
             $out .= " same => n,Hangup()\n\n";
@@ -2086,6 +3118,7 @@ final class PjsipConfig
         // come around again within a handful of calls.
         $out .= "; {$count} joke(s), played through a shuffled order before repeating.\n";
         $out .= "exten => {$number},1,NoOp(twocans: joke line)\n";
+        $out .= self::renderPausedGate();
         $out .= " same => n,Answer()\n";
         $out .= " same => n,Wait(1)\n";
         $out .= " same => n,Set(POS=\${GLOBAL(TWOCANS_JOKE_POS)})\n";

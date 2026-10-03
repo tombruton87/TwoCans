@@ -317,7 +317,7 @@ $onlineCount = count(array_filter($deviceRows, static fn($d) => $d['online']));
 
         <?php if (Auth::can('rules')): ?>
           <form method="post" action="/" enctype="multipart/form-data"
-                class="tc-row tc-row--wrap">
+                class="tc-row tc-row--wrap" data-tc-ajax data-tc-ajax-go>
             <?= form_fields() ?>
             <input type="hidden" name="action" value="quiet_message">
             <label class="tc-btn tc-btn--ghost tc-audio-file">

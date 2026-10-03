@@ -24,12 +24,29 @@ $canNotifications = Auth::can('notifications');
       <a class="tc-btn tc-btn--coral" href="<?= e(url(['screen' => 'phones', 'wizard' => 1])) ?>">+ Add a phone</a>
     <?php endif; ?>
 
+    <?php if ($screen === 'contacts'): ?>
+      <a class="tc-btn tc-btn--ghost" href="<?= e(url(['contactsheet' => 1])) ?>" target="_blank" rel="noopener">
+        <i class="fa-solid fa-print" aria-hidden="true"></i> Contact sheet
+      </a>
+    <?php endif; ?>
     <?php if ($screen === 'contacts' && Auth::can('contacts')): ?>
       <form method="post" action="/" class="tc-inline-form">
         <?= form_fields() ?>
         <input type="hidden" name="action" value="contact_add">
         <button class="tc-btn tc-btn--teal" type="submit">+ Add a person</button>
       </form>
+    <?php endif; ?>
+
+    <?php if ($screen === 'dashboard'): ?>
+      <a class="tc-btn tc-btn--ghost" href="<?= e(url(['screen' => 'week'])) ?>">
+        <i class="fa-solid fa-calendar-week" aria-hidden="true"></i> This week
+      </a>
+    <?php endif; ?>
+
+    <?php if ($screen === 'voicemail'): ?>
+      <a class="tc-btn tc-btn--ghost" href="<?= e(url(['screen' => 'keepsakes'])) ?>">
+        <i class="fa-solid fa-star" aria-hidden="true"></i> Keepsakes
+      </a>
     <?php endif; ?>
 
     <?php if ($screen === 'calllog'): ?>
@@ -47,7 +64,7 @@ $canNotifications = Auth::can('notifications');
              live, since the sidebar that carries it is hidden there. */ ?>
     <div class="tc-menu" data-tc-menu>
       <button type="button"
-              class="tc-account <?= in_array($screen, ['start', 'guardians', 'trunk', 'dialplan', 'greetings', 'announcements', 'homeassistant', 'system', 'notifications'], true) ? 'is-active' : '' ?>"
+              class="tc-account <?= in_array($screen, ['start', 'guardians', 'trunk', 'dialplan', 'greetings', 'announcements', 'christmas', 'radio', 'helpers', 'homeassistant', 'system', 'notifications'], true) ? 'is-active' : '' ?>"
               data-tc-menu-toggle aria-haspopup="menu" aria-expanded="false"
               title="Account and settings">
         <?= e(initial($user['name'])) ?>
@@ -94,6 +111,18 @@ $canNotifications = Auth::can('notifications');
              href="<?= e(url(['screen' => 'announcements'])) ?>">
             <i class="fa-solid fa-bullhorn" aria-hidden="true"></i> Announcements
           </a>
+          <a class="tc-menu__item <?= $screen === 'helpers' ? 'is-active' : '' ?>" role="menuitem"
+             href="<?= e(url(['screen' => 'helpers'])) ?>">
+            <i class="fa-solid fa-clock" aria-hidden="true"></i> Handy lines
+          </a>
+          <a class="tc-menu__item <?= $screen === 'radio' ? 'is-active' : '' ?>" role="menuitem"
+             href="<?= e(url(['screen' => 'radio'])) ?>">
+            <i class="fa-solid fa-radio" aria-hidden="true"></i> The radio
+          </a>
+          <a class="tc-menu__item <?= $screen === 'christmas' ? 'is-active' : '' ?>" role="menuitem"
+             href="<?= e(url(['screen' => 'christmas'])) ?>">
+            <i class="fa-solid fa-tree" aria-hidden="true"></i> Sleeps till Christmas
+          </a>
         <?php endif; ?>
         <?php if ($canSystem || $canNotifications): ?>
           <div class="tc-menu__divider" role="separator"></div>
@@ -102,6 +131,9 @@ $canNotifications = Auth::can('notifications');
           <a class="tc-menu__item <?= $screen === 'system' ? 'is-active' : '' ?>" role="menuitem"
              href="<?= e(url(['screen' => 'system'])) ?>">
             <i class="fa-solid fa-server" aria-hidden="true"></i> System
+            <?php if ((new UpdateCheck())->isNewer()): ?>
+              <span class="tc-menu__badge" title="A newer twocans is out">new</span>
+            <?php endif; ?>
           </a>
         <?php endif; ?>
         <?php if ($canNotifications): ?>

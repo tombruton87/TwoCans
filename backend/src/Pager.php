@@ -215,8 +215,44 @@ final class Pager
 
     // ------------------------------------------------------------ finding phones
 
+    /**
+     * The phone makers' MAC prefixes (OUIs), from the IEEE registry: what a
+     * scan looks for. Cisco's, which cover routers and switches as well as
+     * its adapters, are in data/cisco-ouis.txt (see brandFor).
+     */
+    public const OUIS = [
+        'grandstream' => ['000B82', '144CFF', 'C074AD', 'EC74D7'],
+        'yealink' => ['001565', '249AD8', '3497D7', '44DBD2', '644F56', '805E0C', '805EC0', 'B061A9', 'C4FC22', 'EC1DA9', 'F01653'],
+        'poly' => ['0004F2', '482567', '64167F'],
+        'fanvil' => ['0C383E'],
+    ];
+
     /** Grandstream's MAC prefixes. */
-    public const GRANDSTREAM_OUIS = ['000B82', 'C074AD', 'EC74D7'];
+    public const GRANDSTREAM_OUIS = self::OUIS['grandstream'];
+
+    /** @var ?array<string,true> */
+    private static ?array $ciscoOuis = null;
+
+    /** Who made it, from its MAC (12 hex digits): a key of DeviceRepository::BRANDS, or null. */
+    public static function brandFor(string $mac): ?string
+    {
+        $oui = strtoupper(substr(preg_replace('/[^0-9A-Fa-f]/', '', $mac) ?? '', 0, 6));
+        foreach (self::OUIS as $brand => $ouis) {
+            if (in_array($oui, $ouis, true)) {
+                return $brand;
+            }
+        }
+        if (self::$ciscoOuis === null) {
+            self::$ciscoOuis = [];
+            foreach (@file(__DIR__ . '/data/cisco-ouis.txt', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [] as $line) {
+                if (preg_match('/^[0-9A-F]{6}$/', $line)) {
+                    self::$ciscoOuis[$line] = true;
+                }
+            }
+        }
+
+        return isset(self::$ciscoOuis[$oui]) ? 'cisco' : null;
+    }
 
     /**
      * Ask the pager to look for Grandstream phones on the home network: the
@@ -261,12 +297,19 @@ final class Pager
         return in_array(strtoupper(substr($mac, 0, 6)), self::GRANDSTREAM_OUIS, true);
     }
 
-    /**
-     * Grandstreams in an ARP table (/proc/net/arp), on the home /24.
-     *
-     * @return array<string,string> ip => MAC, 12 uppercase hex digits
-     */
+    /** Grandstreams in an ARP table: see phonesIn(). */
     public static function grandstreamsIn(string $arp, string $home): array
+    {
+        return array_map(static fn(array $f): string => $f['mac'],
+            array_filter(self::phonesIn($arp, $home), static fn(array $f): bool => $f['brand'] === 'grandstream'));
+    }
+
+    /**
+     * Anything a phone maker made in an ARP table (/proc/net/arp), on the home /24.
+     *
+     * @return array<string,array{mac:string,brand:string}> ip => its MAC (12 uppercase hex digits) and maker
+     */
+    public static function phonesIn(string $arp, string $home): array
     {
         $prefix = implode('.', array_slice(explode('.', $home), 0, 3)) . '.';
         $found = [];
@@ -276,17 +319,25 @@ final class Pager
                 continue;
             }
             $mac = strtoupper(str_replace(':', '', $cols[3]));
-            if (preg_match('/^[0-9A-F]{12}$/', $mac) && self::isGrandstream($mac)) {
-                $found[$cols[0]] = $mac;
+            $brand = preg_match('/^[0-9A-F]{12}$/', $mac) ? self::brandFor($mac) : null;
+            if ($brand !== null) {
+                $found[$cols[0]] = ['mac' => $mac, 'brand' => $brand];
             }
         }
 
         return $found;
     }
 
-    /** The model a GHP says it is, unasked-for credentials not needed; '' if it won't say. */
-    public static function askModel(string $ip): string
+    /**
+     * The model a phone says it is, without signing in; '' if it won't say.
+     * A Grandstream answers a question; the rest are read off their sign-in
+     * page — the model name it shows, if it's one twocans knows.
+     */
+    public static function askModel(string $ip, string $brand = 'grandstream'): string
     {
+        if ($brand !== 'grandstream') {
+            return self::modelIn(self::signInPage($ip), $brand);
+        }
         $ctx = stream_context_create(['http' => ['timeout' => 2, 'ignore_errors' => true]]);
         $body = @file_get_contents('http://' . $ip . '/json/configs/model.define.js', false, $ctx);
         $json = json_decode($body === false ? '' : $body, true);
@@ -294,11 +345,53 @@ final class Pager
         return is_array($json) ? substr(preg_replace('/[^A-Za-z0-9]/', '', (string) ($json['model'] ?? '')) ?? '', 0, 20) : '';
     }
 
+    /** A device's web page — headers and the start of it — over http, or https if that's where it sends us. */
+    private static function signInPage(string $ip): string
+    {
+        $ctx = stream_context_create([
+            'http' => ['timeout' => 2, 'ignore_errors' => true, 'follow_location' => 1, 'max_redirects' => 3],
+            // Its own certificate, on the home network: we only read its model.
+            'ssl' => ['verify_peer' => false, 'verify_peer_name' => false],
+        ]);
+        $body = @file_get_contents('http://' . $ip . '/', false, $ctx, 0, 65536);
+        $headers = implode("\n", $http_response_header ?? []);
+
+        return $headers . "\n" . ($body === false ? '' : $body);
+    }
+
     /**
-     * Look over the home /24 for Grandstreams: a packet to every address makes
-     * the host learn each one's MAC, which the ARP table then shows; each
-     * Grandstream is asked what model it is. Needs the host's network, so it
-     * runs in the pager. Writes scan.json.
+     * The model in a maker's web page, as FoundPhones::typeFor knows it — a
+     * Yealink "SIP-T46U", a Poly "VVX 450", a Cisco "SPA112" or "ATA 191",
+     * a Fanvil "GA10" — or ''.
+     */
+    public static function modelIn(string $page, string $brand): string
+    {
+        $pattern = match ($brand) {
+            'yealink' => '/\b(?:SIP-)?(T\d{2}[A-Z]|W\d{2}[BP])\b/',
+            'poly' => '/\bVVX[ _-]?(\d{3})\b/i',
+            'cisco' => '/\b(SPA ?1[12]2|ATA ?19[12])\b/i',
+            'fanvil' => '/\b(GA1[01])\b/i',
+            default => null,
+        };
+        if ($pattern === null || preg_match_all($pattern, $page, $m) === 0) {
+            return '';
+        }
+        foreach ($m[1] as $found) {
+            $model = strtoupper(str_replace([' ', '_', '-'], '', $brand === 'poly' ? 'VVX' . $found : $found));
+            if (FoundPhones::typeFor($model) !== '') {
+                return $model;
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * Look over the home /24 for phones: a packet to every address makes the
+     * host learn each one's MAC, which the ARP table then shows; anything a
+     * phone maker made is asked what model it is. A Cisco is kept only if it
+     * says it's one of its adapters — not the router. Needs the host's
+     * network, so it runs in the pager. Writes scan.json.
      */
     public static function scan(string $home): array
     {
@@ -316,8 +409,12 @@ final class Pager
         sleep(3); // time for every address to answer ARP
 
         $found = [];
-        foreach (self::grandstreamsIn((string) @file_get_contents('/proc/net/arp'), $home) as $ip => $mac) {
-            $found[] = ['ip' => $ip, 'mac' => $mac, 'model' => self::askModel($ip)];
+        foreach (self::phonesIn((string) @file_get_contents('/proc/net/arp'), $home) as $ip => $f) {
+            $model = self::askModel($ip, $f['brand']);
+            if ($f['brand'] === 'cisco' && $model === '') {
+                continue;
+            }
+            $found[] = ['ip' => $ip, 'mac' => $f['mac'], 'brand' => $f['brand'], 'model' => $model];
         }
         @file_put_contents($out, (string) json_encode(['at' => time(), 'found' => $found]));
 

@@ -11,6 +11,49 @@ $canBackup = Auth::can('backups');
 ?>
 <div class="tc-stack tc-narrow">
 
+  <?php
+  // Is there a newer twocans? See UpdateCheck; asked by bin/minute.php.
+  $updates = new UpdateCheck();
+  $latest = $updates->latest();
+  ?>
+  <section class="tc-card tc-update<?= $updates->isNewer() ? ' is-new' : '' ?>" id="updates" data-tc-ajax-region>
+    <div class="tc-card__head">
+      <h2 class="tc-card__title">twocans <?= e(UpdateCheck::current()) ?></h2>
+      <?php if ($updates->isNewer()): ?>
+        <span class="tc-pill tc-pill--coral">Update available</span>
+      <?php elseif ($updates->enabled() && $latest['version'] !== ''): ?>
+        <span class="tc-pill tc-pill--ok">Up to date</span>
+      <?php endif; ?>
+    </div>
+    <?php if ($updates->isNewer()): ?>
+      <p class="tc-card__hint">
+        <b>twocans <?= e($latest['version']) ?> is out.</b> To update, on the machine twocans runs on,
+        in its folder: <code>./twocans update</code> — your settings, phones and recordings are kept.
+        <?php if ($latest['url'] !== ''): ?>
+          <a class="tc-link" href="<?= e($latest['url']) ?>" target="_blank" rel="noopener">What's new</a>
+        <?php endif; ?>
+      </p>
+    <?php elseif (!$updates->enabled()): ?>
+      <p class="tc-card__hint">Not checking for new versions. See what's out at
+        <a class="tc-link" href="https://github.com/<?= e(UpdateCheck::REPO) ?>/releases" target="_blank" rel="noopener">GitHub</a>.</p>
+    <?php elseif ($latest['version'] === ''): ?>
+      <p class="tc-card__hint">Not checked for new versions yet — it will within a minute or so.</p>
+    <?php endif; ?>
+    <form method="post" action="/" class="tc-row tc-row--wrap" data-tc-ajax style="gap:10px;align-items:center">
+      <?= form_fields() ?>
+      <input type="hidden" name="action" value="update_check">
+      <input type="hidden" name="on" value="<?= $updates->enabled() ? '0' : '1' ?>">
+      <span class="tc-micro">
+        <?php if ($updates->enabled()): ?>
+          Checks GitHub twice a day<?= $latest['checkedAt'] > 0 ? ' · last ' . e(date('j M, H:i', $latest['checkedAt'])) : '' ?>.
+        <?php else: ?>
+          Checking is off.
+        <?php endif; ?>
+      </span>
+      <button class="tc-link" type="submit"><?= $updates->enabled() ? 'Stop checking' : 'Check for new versions' ?></button>
+    </form>
+  </section>
+
   <section class="tc-card">
     <div class="tc-card__head">
       <h2 class="tc-card__title">System health</h2>
@@ -38,7 +81,7 @@ $canBackup = Auth::can('backups');
           <span style="font:800 11px var(--tc-body);padding:4px 10px;border-radius:999px;white-space:nowrap;
             <?= $check['ok']
                 ? 'background:var(--tc-teal-bg);color:var(--tc-teal-deep);'
-                : 'background:var(--tc-coral-bg);color:var(--tc-coral);' ?>">
+                : 'background:var(--tc-coral-bg);color:var(--tc-coral-ink);' ?>">
             <?= $check['ok'] ? 'OK' : 'Check' ?>
           </span>
         </div>
@@ -93,16 +136,17 @@ $canBackup = Auth::can('backups');
       <div class="tc-card__head">
         <h2 class="tc-card__title">Restore a backup</h2>
       </div>
-      <p class="tc-card__hint" style="color:var(--tc-coral)">
+      <p class="tc-card__hint" style="color:var(--tc-coral-ink)">
         This replaces the current database, recordings, voicemails, photos and
         jokes with the ones inside the backup. It cannot be undone — a safety
         dump of the current database is written first.
       </p>
-      <form method="post" action="/" enctype="multipart/form-data">
+      <form method="post" action="/" enctype="multipart/form-data" data-tc-ajax data-tc-ajax-go
+            data-tc-preparing="Uploaded — restoring the backup. This can take a few minutes, so stay on this page…">
         <?= form_fields() ?>
         <input type="hidden" name="action" value="backup_restore">
         <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">
-          <input class="tc-input" type="file" name="backup" accept=".tgz,application/gzip" required>
+          <input class="tc-input" type="file" name="backup" accept=".tgz,application/gzip" aria-label="The backup file to restore" required>
           <input class="tc-input" type="text" name="confirm" placeholder="Type RESTORE to confirm"
                  autocomplete="off" required style="max-width:260px">
           <button class="tc-btn tc-btn--coral" type="submit">Restore from this file</button>

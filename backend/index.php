@@ -131,8 +131,23 @@ if (preg_match('#^/hello/([a-f0-9]{32})/?(?:\?.*)?$#', $_SERVER['REQUEST_URI'] ?
  */
 $gsConfigMatch = preg_match('#^/grandstream/cfg([0-9A-Fa-f]{12})\.xml$#', $_SERVER['REQUEST_URI'] ?? '', $gsMac);
 $phonebookMatch = preg_match('#^/phonebook/(grandstream|yealink)\.xml$#', $_SERVER['REQUEST_URI'] ?? '', $pbVendor);
+// A Fanvil GA10: its own <mac>.cfg (or .xml); not its common file.
+$fanvilMatch = preg_match('#^/fanvil/(?:([0-9a-fA-F]{12})\.(?:cfg|xml)|[^/]+\.(?:cfg|xml|txt))$#', $_SERVER['REQUEST_URI'] ?? '', $fanvilFile);
+// A Poly VVX: its master <mac>.cfg, then twocans-<mac>.cfg, and <mac>-directory.xml.
+$polyMatch = preg_match('#^/polycom/(?:(twocans-)?([0-9a-fA-F]{12})\.cfg|([0-9a-fA-F]{12})-directory\.xml)$#', $_SERVER['REQUEST_URI'] ?? '', $polyFile);
+// A Cisco SPA112: its own <mac>.xml (its Profile Rule asks for $MA.xml).
+$ciscoConfigMatch = preg_match('#^/cisco/([0-9A-Fa-f]{12})\.xml$#', $_SERVER['REQUEST_URI'] ?? '', $ciscoMac);
+// A Yealink desk phone's own wallpaper (YealinkProvisioning::desk).
+$ylWallpaperMatch = preg_match('#^/yealink/wallpaper/([a-f0-9]{32}\.jpg)$#', $_SERVER['REQUEST_URI'] ?? '', $ylWallpaper);
+// A Yealink base: the common file every one fetches, then its own <mac>.cfg.
+// Newer firmware asks for a boot file first (<mac>.boot, or the common
+// y000000000000.boot), which names the files to load: see YealinkProvisioning::boot().
+$ylConfigMatch = preg_match('#^/yealink/(?:([0-9A-Fa-f]{12})|(y0{9}\d{3}))\.(cfg|boot)$#', $_SERVER['REQUEST_URI'] ?? '', $ylFile);
+// Anything else asked of a provisioning path is not found — never the sign-in
+// page, which a phone would take for its settings.
+$provisioningOther = !$ylConfigMatch && preg_match('#^/(yealink|polycom|cisco|fanvil|grandstream)/#', $_SERVER['REQUEST_URI'] ?? '') === 1;
 
-if ($gsConfigMatch || $phonebookMatch) {
+if ($gsConfigMatch || $phonebookMatch || $ylConfigMatch || $ciscoConfigMatch || $polyMatch || $fanvilMatch || $ylWallpaperMatch || $provisioningOther) {
     $expected = 'Basic ' . base64_encode('twocans:' . (new SettingsRepository())->provisionPass());
     $provided = (string) ($_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '');
 
@@ -143,8 +158,140 @@ if ($gsConfigMatch || $phonebookMatch) {
         exit("twocans: provisioning needs a username and password\n");
     }
 
-    header('Content-Type: application/xml; charset=utf-8');
     header('Cache-Control: no-store');
+
+    if ($provisioningOther) {
+        http_response_code(404);
+        header('Content-Type: text/plain; charset=utf-8');
+        exit("twocans: not a file twocans serves\n");
+    }
+
+    if ($ylWallpaperMatch) {
+        // Only a picture that's a phone's wallpaper: not anyone's photo.
+        $file = (new DeviceRepository())->isWallpaper($ylWallpaper[1]) ? (new PhotoStore())->file($ylWallpaper[1]) : null;
+        if ($file === null) {
+            http_response_code(404);
+            header('Content-Type: text/plain; charset=utf-8');
+            exit("twocans: no such wallpaper\n");
+        }
+        header('Content-Type: image/jpeg');
+        header('Content-Length: ' . filesize($file));
+        readfile($file);
+        exit;
+    }
+
+    if ($fanvilMatch) {
+        $mac = strtoupper((string) ($fanvilFile[1] ?? ''));
+        $found = $mac === '' ? [] : array_values(array_filter((new DeviceRepository())->findByMac($mac),
+            static fn(array $r): bool => (DeviceRepository::TYPES[(string) $r['type']]['brand'] ?? '') === 'fanvil'));
+        if ($found === []) {
+            // Its own file, not added yet: remember it, so adding a phone can offer it.
+            if ($mac !== '' && trim($mac, '0') !== '') {
+                (new FoundPhones())->sawFetch($mac, (string) ($_SERVER['REMOTE_ADDR'] ?? ''), (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''));
+            }
+            http_response_code(404);
+            header('Content-Type: text/plain; charset=utf-8');
+            exit($mac === '' ? "twocans: everything is in each adapter's own <mac>.cfg\n" : "twocans: no Fanvil adapter with that MAC\n");
+        }
+        (new DeviceRepository())->touchSettingsFetched((int) $found[0]['id']);
+        header('Content-Type: application/xml; charset=utf-8');
+        echo (new FanvilProvisioning())->xml(DeviceRepository::toView($found[0]));
+        exit;
+    }
+
+    if ($polyMatch) {
+        $mac = strtoupper(($polyFile[2] ?? '') !== '' ? $polyFile[2] : ($polyFile[3] ?? ''));
+        $found = array_values(array_filter((new DeviceRepository())->findByMac($mac),
+            static fn(array $r): bool => (DeviceRepository::TYPES[(string) $r['type']]['brand'] ?? '') === 'poly'));
+        if ($found === []) {
+            // Not added yet: remember it, so adding a phone can offer it.
+            // (Not 000000000000.cfg, every phone's fallback.)
+            if (($polyFile[1] ?? '') === '' && ($polyFile[2] ?? '') !== '' && trim($mac, '0') !== '') {
+                (new FoundPhones())->sawFetch($mac, (string) ($_SERVER['REMOTE_ADDR'] ?? ''), (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''));
+            }
+            http_response_code(404);
+            header('Content-Type: text/plain; charset=utf-8');
+            exit("twocans: no Poly phone with that MAC\n");
+        }
+        $device = DeviceRepository::toView($found[0]);
+        header('Content-Type: application/xml; charset=utf-8');
+        if (($polyFile[3] ?? '') !== '') {
+            $hotkeyRepo = new DeviceHotkeyRepository();
+            echo (new PolyProvisioning())->directory($hotkeyRepo->forDevice($device['id']), $hotkeyRepo->labels());
+        } elseif (($polyFile[1] ?? '') !== '') {
+            (new DeviceRepository())->touchSettingsFetched($device['id']);
+            echo (new PolyProvisioning())->config($device);
+        } else {
+            echo PolyProvisioning::master();
+        }
+        exit;
+    }
+
+    if ($ciscoConfigMatch) {
+        header('Content-Type: application/xml; charset=utf-8');
+        $found = array_values(array_filter((new DeviceRepository())->findByMac(strtoupper($ciscoMac[1])),
+            static fn(array $r): bool => (DeviceRepository::TYPES[(string) $r['type']]['brand'] ?? '') === 'cisco'));
+        if ($found === []) {
+            // Not added yet: remember it, so adding a phone can offer it.
+            (new FoundPhones())->sawFetch($ciscoMac[1], (string) ($_SERVER['REMOTE_ADDR'] ?? ''), (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''));
+            http_response_code(404);
+            header('Content-Type: text/plain; charset=utf-8');
+            exit("twocans: no Cisco adapter with that MAC\n");
+        }
+        $byPort = [];
+        foreach ($found as $row) {
+            (new DeviceRepository())->touchSettingsFetched((int) $row['id']);
+            $byPort[(int) $row['port']] ??= DeviceRepository::toView($row);
+        }
+        echo (new CiscoProvisioning())->xml(
+            $byPort,
+            preg_match('/^[A-Za-z0-9.\-]+(:\d{1,5})?$/', (string) ($_SERVER['HTTP_HOST'] ?? '')) === 1 ? (string) $_SERVER['HTTP_HOST'] : null,
+            ($_SERVER['HTTPS'] ?? '') === 'on'
+        );
+        exit;
+    }
+
+    if ($ylConfigMatch) {
+        header('Content-Type: text/plain; charset=utf-8');
+        $boot = ($ylFile[3] ?? '') === 'boot';
+        if (($ylFile[1] ?? '') === '') {
+            // The common file: nothing in it; the common boot file names the
+            // phone's own (the phone fills in $mac).
+            echo $boot ? YealinkProvisioning::boot(null) : YealinkProvisioning::common();
+            exit;
+        }
+        $found = array_values(array_filter((new DeviceRepository())->findByMac(strtoupper($ylFile[1])),
+            static fn(array $r): bool => (DeviceRepository::TYPES[(string) $r['type']]['brand'] ?? '') === 'yealink'));
+        if ($found === []) {
+            // Not added yet: remember it, so adding a phone can offer it.
+            (new FoundPhones())->sawFetch($ylFile[1], (string) ($_SERVER['REMOTE_ADDR'] ?? ''), (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''));
+            http_response_code(404);
+            exit("twocans: no Yealink phone with that MAC\n");
+        }
+        if ($boot) {
+            echo YealinkProvisioning::boot(strtolower($ylFile[1]));
+            exit;
+        }
+        $host = preg_match('/^[A-Za-z0-9.\-]+(:\d{1,5})?$/', (string) ($_SERVER['HTTP_HOST'] ?? '')) === 1 ? (string) $_SERVER['HTTP_HOST'] : null;
+        // A desk phone: its own file, with its speed-dial keys.
+        if (YealinkProvisioning::isDesk((string) $found[0]['type'])) {
+            $device = DeviceRepository::toView($found[0]);
+            (new DeviceRepository())->touchSettingsFetched($device['id']);
+            $hotkeyRepo = new DeviceHotkeyRepository();
+            echo (new YealinkProvisioning())->desk($device, $hotkeyRepo->forDevice($device['id']), $hotkeyRepo->labels(), $host, ($_SERVER['HTTPS'] ?? '') === 'on');
+            exit;
+        }
+        // A cordless base: every handset on it.
+        $byHandset = [];
+        foreach ($found as $row) {
+            (new DeviceRepository())->touchSettingsFetched((int) $row['id']);
+            $byHandset[(int) $row['port']] ??= DeviceRepository::toView($row);
+        }
+        echo (new YealinkProvisioning())->cfg($byHandset, $host, ($_SERVER['HTTPS'] ?? '') === 'on');
+        exit;
+    }
+
+    header('Content-Type: application/xml; charset=utf-8');
 
     // The allowlist as a remote phonebook, in whichever shape the phone reads.
     if ($phonebookMatch) {
@@ -155,7 +302,9 @@ if ($gsConfigMatch || $phonebookMatch) {
         exit;
     }
 
-    $found = (new DeviceRepository())->findByMac(strtoupper($gsMac[1]));
+    // A Yealink's MAC isn't a Grandstream's to fetch.
+    $found = array_values(array_filter((new DeviceRepository())->findByMac(strtoupper($gsMac[1])),
+        static fn(array $r): bool => (DeviceRepository::TYPES[(string) $r['type']]['brand'] ?? '') === 'grandstream'));
     if ($found === []) {
         // Not added yet: remember it, so adding a phone can offer it.
         (new FoundPhones())->sawFetch($gsMac[1], (string) ($_SERVER['REMOTE_ADDR'] ?? ''), (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''));
@@ -187,9 +336,29 @@ if ($gsConfigMatch || $phonebookMatch) {
     echo (new GrandstreamProvisioning())->xml(
         DeviceRepository::toView($device),
         $hotkeyRepo->forDevice((int) $device['id']),
-        $hotkeyRepo->labels()
+        $hotkeyRepo->labels(),
+        // Exactly how it reached twocans: it keeps using that.
+        preg_match('/^[A-Za-z0-9.\-]+(:\d{1,5})?$/', (string) ($_SERVER['HTTP_HOST'] ?? '')) === 1 ? (string) $_SERVER['HTTP_HOST'] : null,
+        ($_SERVER['HTTPS'] ?? '') === 'on'
     );
     exit;
+}
+
+/*
+ * A desk phone telling twocans something about itself — it's started up, its
+ * handset's off or back on the hook (GrandstreamProvisioning::phoneEventUrl).
+ * Before the login gate, like provisioning; the key says which phone.
+ */
+if (preg_match('#^/grandstream/event(\?|$)#', $_SERVER['REQUEST_URI'] ?? '')) {
+    $row = (new DeviceRepository())->find((int) ($_GET['d'] ?? 0));
+    $view = $row === null ? null : DeviceRepository::toView($row);
+    header('Content-Type: text/plain; charset=utf-8');
+    if ($view === null || !hash_equals(GrandstreamProvisioning::eventKey($view), (string) ($_GET['k'] ?? ''))) {
+        http_response_code(403);
+        exit("no\n");
+    }
+    (new DeviceRepository())->phoneEvent((int) $view['id'], (string) ($_GET['e'] ?? ''));
+    exit("ok\n");
 }
 
 $store = new Store();
@@ -241,7 +410,57 @@ if (isset($_GET['photo'])) {
     exit;
 }
 
+// The contact sheet, to print: see ContactSheet.
+if (isset($_GET['contactsheet'])) {
+    $deviceRepo = new DeviceRepository();
+    $phones = [];
+    foreach ($deviceRepo->all() as $row) {
+        $phones[(int) $row['id']] = (string) $row['name'];
+    }
+    $deviceId = isset($_GET['phone']) && isset($phones[(int) $_GET['phone']]) ? (int) $_GET['phone'] : null;
+    $theme = isset(ContactSheet::THEMES[$_GET['theme'] ?? '']) ? (string) $_GET['theme'] : 'dino';
+    $title = trim((string) ($_GET['title'] ?? ''));
+    view('contact_sheet', [
+        'options' => [
+            'theme' => $theme,
+            'paper' => isset(ContactSheet::PAPERS[$_GET['paper'] ?? '']) ? (string) $_GET['paper'] : 'a4',
+            'deviceId' => $deviceId,
+            'title' => mb_substr($title !== '' ? $title : ContactSheet::THEMES[$theme]['title'], 0, 40),
+            // The lines ticked: once somebody's chosen (lines_set), exactly
+            // those; until then, each one's default.
+            'lines' => $lines = isset($_GET['lines_set'])
+                ? array_values(array_intersect(array_keys(ContactSheet::LINES), array_map('strval', (array) ($_GET['lines'] ?? []))))
+                : null,
+        ],
+        'people' => ContactSheet::people($deviceId),
+        'available' => ContactSheet::available($deviceId),
+        'services' => ContactSheet::services($deviceId, $lines),
+        'device' => $deviceId === null ? null : DeviceRepository::toView($deviceRepo->find($deviceId)),
+        'phones' => $phones,
+    ]);
+    exit;
+}
+
 // A desk phone's faceplate, to print: see Faceplate.
+// A phone's diagnostics, masked, to send to whoever's helping: see Diagnostics.
+// ?view=1 shows it in the browser first.
+if (isset($_GET['diagnostics'])) {
+    $device = Auth::can('devices') ? (new DeviceRepository())->find((int) $_GET['diagnostics']) : null;
+    if ($device === null) {
+        http_response_code(404);
+        exit('Not found');
+    }
+    $text = (new Diagnostics())->forDevice($device);
+    header('Content-Type: text/plain; charset=utf-8');
+    header('Cache-Control: no-store');
+    header('X-Content-Type-Options: nosniff');
+    if (($_GET['view'] ?? '') !== '1') {
+        header('Content-Disposition: attachment; filename="' . Diagnostics::fileName(DeviceRepository::toView($device)) . '"');
+    }
+    echo $text;
+    exit;
+}
+
 if (isset($_GET['faceplate'])) {
     $device = Auth::can('devices') ? (new DeviceRepository())->find((int) $_GET['faceplate']) : null;
     if ($device === null || (DeviceRepository::TYPES[$device['type']]['faceplate'] ?? null) === null) {

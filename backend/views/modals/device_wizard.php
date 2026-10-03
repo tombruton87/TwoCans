@@ -1,7 +1,7 @@
 <?php
 /**
- * Add-a-phone wizard, each kind of phone its own way: pick the kind (an app,
- * a desk phone, an adapter) and for hardware the model → name it, with how it
+ * Add-a-phone wizard, each kind of phone its own way: pick who makes it (an
+ * app, Grandstream, Yealink) and for hardware the model → name it, with how it
  * connects (the app) or its MAC (hardware) → set it up: a QR code for the app,
  * the steps for a Grandstream, and for a desk phone its hotkeys next.
  *
@@ -14,10 +14,14 @@
  * @var ?array $device Set on step 3 — the freshly created device
  */
 $draft = $store->deviceDraft();
+// A phone found by its maker alone has no model yet: that's picked first.
+if ($step === 2 && !isset(DeviceRepository::TYPES[(string) ($draft['type'] ?? '')])) {
+    $step = 1;
+}
 $closeUrl = url(['screen' => 'phones']);
 $d = $device !== null ? DeviceRepository::toView($device) : null;
-// Step 1 is two choices: the kind of phone, then (for hardware) the model.
-$family = isset(DeviceRepository::FAMILIES[$_GET['family'] ?? '']) ? (string) $_GET['family'] : null;
+// Step 1 is two choices: who makes it, then (for hardware) the model.
+$brand = isset(DeviceRepository::BRANDS[$_GET['brand'] ?? '']) && ($_GET['brand'] ?? '') !== 'app' ? (string) $_GET['brand'] : null;
 $canAdd = Auth::can('devices');
 ?>
 <div class="tc-modal" data-tc-modal="<?= e($closeUrl) ?>" data-tc-close="<?= e($closeUrl) ?>"
@@ -36,7 +40,7 @@ $canAdd = Auth::can('devices');
 
     <div class="tc-modal__body">
 
-      <?php if ($step === 1 && $family === null): ?>
+      <?php if ($step === 1 && $brand === null): ?>
         <?php
         // Grandstreams on the network that aren't added yet: pick one and its
         // model and MAC are filled in. A scan asked for a moment ago is still
@@ -49,7 +53,7 @@ $canAdd = Auth::can('devices');
         <div class="tc-wizard-found"<?= $scanning ? ' data-tc-reload-after="3"' : '' ?>>
           <div class="tc-row" style="justify-content:space-between;align-items:center;gap:10px">
             <div class="tc-wizard-found__title">
-              <?= $found !== [] ? 'Found on your network' : 'Is it a Grandstream?' ?>
+              <?= $found !== [] ? 'Found on your network' : 'Is it plugged in already?' ?>
             </div>
             <form method="post" action="/">
               <?= form_fields() ?>
@@ -63,10 +67,10 @@ $canAdd = Auth::can('devices');
           <?php if ($found === []): ?>
             <p class="tc-card__hint">
               <?= $scanning
-                  ? 'Looking over your network for Grandstream phones and adapters…'
+                  ? 'Looking over your network for phones and adapters…'
                   : ($scan['at'] !== null && $askedAt > 0
                       ? "None found that aren't added already. Check it's plugged in and has started up, then look again."
-                      : 'Plug it in, let it start up, then look — twocans finds it and knows which model it is.') ?>
+                      : 'Plug it in, let it start up, then look — twocans finds Grandstream, Yealink, Poly, Cisco and Fanvil phones, and usually knows which model each is.') ?>
             </p>
           <?php else: ?>
             <div class="tc-stack tc-stack--tight">
@@ -76,16 +80,16 @@ $canAdd = Auth::can('devices');
                   <input type="hidden" name="action" value="device_pick_found">
                   <input type="hidden" name="mac" value="<?= e($f['mac']) ?>">
                   <input type="hidden" name="type" value="<?= e($f['type']) ?>">
-                  <button class="tc-provider-row tc-wizard-found__phone" type="submit" <?= $f['type'] === '' ? 'disabled' : '' ?>>
-                    <span class="tc-provider-row__mark"><i class="fa-solid <?= DeviceRepository::isDesk($f['type']) ? 'fa-phone-flip' : ($f['type'] !== '' ? 'fa-plug' : 'fa-question') ?>" aria-hidden="true"></i></span>
+                  <button class="tc-provider-row tc-wizard-found__phone" type="submit" <?= $f['type'] === '' && $f['brand'] === '' ? 'disabled' : '' ?>>
+                    <span class="tc-provider-row__mark"><i class="fa-solid <?= e(['desk' => 'fa-phone-flip', 'adapter' => 'fa-plug', 'dect' => 'fa-mobile-retro'][DeviceRepository::TYPES[$f['type']]['family'] ?? ''] ?? ($f['brand'] !== '' ? 'fa-phone' : 'fa-question')) ?>" aria-hidden="true"></i></span>
                     <span class="tc-grow">
                       <span class="tc-provider-row__name" style="display:block"><?= e($f['label']) ?> <span class="tc-card__hint">at <?= e($f['ip']) ?></span></span>
                       <span class="tc-card__hint" style="display:block">
                         MAC <?= e(implode(':', str_split($f['mac'], 2))) ?>
-                        <?= $f['type'] === '' ? ' · not a model twocans knows' : '' ?>
+                        <?= $f['type'] === '' ? ($f['brand'] !== '' ? ' · pick its model next' : ' · not a model twocans knows') : '' ?>
                       </span>
                     </span>
-                    <?php if ($f['type'] !== ''): ?><span class="tc-wizard-pick__go">Add →</span><?php endif; ?>
+                    <?php if ($f['type'] !== '' || $f['brand'] !== ''): ?><span class="tc-wizard-pick__go">Add →</span><?php endif; ?>
                   </button>
                 </form>
               <?php endforeach; ?>
@@ -97,15 +101,21 @@ $canAdd = Auth::can('devices');
         <div class="tc-wizard-sub">Each is added its own way. Start with the app if you're not sure — it works on any phone or tablet you already have.</div>
 
         <div class="tc-stack tc-stack--tight">
-          <?php foreach (DeviceRepository::FAMILIES as $key => $f): ?>
+          <?php foreach (DeviceRepository::BRANDS as $key => $f): ?>
             <form method="post" action="/" style="display:flex">
               <?= form_fields() ?>
-              <input type="hidden" name="action" value="device_pick_family">
-              <input type="hidden" name="family" value="<?= e($key) ?>">
+              <input type="hidden" name="action" value="device_pick_brand">
+              <input type="hidden" name="brand" value="<?= e($key) ?>">
               <button class="tc-provider-row tc-provider-row--active tc-wizard-pick" type="submit">
                 <span class="tc-provider-row__mark"><i class="fa-solid <?= e($f['icon']) ?>" aria-hidden="true"></i></span>
                 <span class="tc-grow">
-                  <span class="tc-provider-row__name" style="display:block"><?= e($f['label']) ?></span>
+                  <span class="tc-provider-row__name" style="display:block"><?= e($f['label']) ?>
+                    <?php /* Every model it makes is untested: say so before it's picked. */ ?>
+                    <?php $models = DeviceRepository::typesBy($key); ?>
+                    <?php if ($key !== 'app' && $models !== [] && array_filter(array_keys($models), [DeviceRepository::class, 'untested']) === array_keys($models)): ?>
+                      <span class="tc-untested" title="Set up from its maker's documentation — not yet tried with a real one">Untested</span>
+                    <?php endif; ?>
+                  </span>
                   <span class="tc-card__hint" style="display:block"><?= e($f['sub']) ?></span>
                 </span>
                 <span class="tc-wizard-pick__go">→</span>
@@ -115,42 +125,74 @@ $canAdd = Auth::can('devices');
         </div>
 
       <?php elseif ($step === 1): ?>
-        <?php if ($family === 'desk'): ?>
-          <div class="tc-wizard-title">Which desk phone?</div>
-          <div class="tc-wizard-sub">The model is on the label underneath. They all work the same way — the 61x has three hotkeys, the 62x six.</div>
-        <?php else: ?>
-          <div class="tc-wizard-title">Which adapter?</div>
-          <div class="tc-wizard-sub">An HT801 takes one corded phone; an HT802 takes two, each a phone of its own here.</div>
+        <?php
+        // The brand's models, a group for each kind: desk phones, adapters, cordless.
+        $groups = [];
+        foreach (DeviceRepository::typesBy($brand) as $key => $type) {
+            $groups[$type['family']][$key] = $type;
+        }
+        // Desk phones first: they're what most get.
+        uksort($groups, static fn(string $a, string $b): int => array_search($a, ['desk', 'dect', 'adapter'], true) <=> array_search($b, ['desk', 'dect', 'adapter'], true));
+        ?>
+        <div class="tc-wizard-title">Which <?= e(DeviceRepository::BRANDS[$brand]['label']) ?>?</div>
+        <?php if (($draft['type'] ?? null) === '' && ($draft['mac'] ?? '') !== '' && Pager::brandFor((string) $draft['mac']) === $brand): ?>
+          <div class="tc-note">The one found on your network — <?= e(implode(':', str_split((string) $draft['mac'], 2))) ?> — wouldn't say which it is. Pick its model; its MAC is filled in for you.</div>
         <?php endif; ?>
-
-        <div class="tc-wizard-models<?= $family === 'desk' ? ' tc-wizard-models--desk' : '' ?>">
-          <?php foreach (DeviceRepository::typesIn($family) as $key => $type): ?>
-            <form method="post" action="/">
-              <?= form_fields() ?>
-              <input type="hidden" name="action" value="device_pick_model">
-              <input type="hidden" name="type" value="<?= e($key) ?>">
-              <button class="tc-wizard-model" type="submit">
-                <?php if ($family === 'desk'): ?>
-                  <?php /* A little drawing of it: its colour, and its keys in their rows. */ ?>
-                  <span class="tc-wizard-model__phone tc-wizard-model__phone--<?= e((string) $type['body']) ?>" aria-hidden="true">
-                    <?php for ($i = 0; $i < $type['keys']; $i++): ?><span></span><?php endfor; ?>
-                  </span>
-                <?php else: ?>
-                  <span class="tc-wizard-model__adapter" aria-hidden="true">
-                    <?php for ($i = 0; $i < ($key === 'ht802' ? 2 : 1); $i++): ?><i class="fa-solid fa-phone"></i><?php endfor; ?>
-                  </span>
-                <?php endif; ?>
-                <span class="tc-wizard-model__name"><?= e($type['label']) ?></span>
-                <span class="tc-wizard-model__sub"><?= e(preg_replace('/^Grandstream (hotel phone|adapter) · /', '', $type['sub'])) ?></span>
-              </button>
-            </form>
-          <?php endforeach; ?>
+        <div class="tc-wizard-sub">
+          <?= $brand === 'poly' ? 'Any VVX with UC Software 5 or 6. The model is on the label underneath — some share a setup (a 311 is set up as a 310).' : ($brand === 'cisco' ? 'Plug up to two corded phones into it — each is a phone of its own here.' : ($brand === 'yealink'
+              ? 'Desk phones, or a cordless base on your router with its handsets — each handset a phone of its own here. The model is on the label underneath.'
+              : 'The model is on the label underneath.')) ?>
         </div>
 
+        <?php foreach ($groups as $family => $types): ?>
+          <?php if (count($groups) > 1): ?>
+            <div class="tc-wizard-group">
+              <?= e(['desk' => 'Desk phones', 'adapter' => 'Adapters for a corded phone', 'dect' => 'Cordless'][$family] ?? '') ?>
+              <span class="tc-card__hint">
+                <?= e(['desk' => '— the 61x has three hotkeys, the 62x six', 'adapter' => '— an HT802 takes two phones, each a phone of its own here'][$family] ?? '') ?>
+              </span>
+            </div>
+          <?php endif; ?>
+          <div class="tc-wizard-models<?= $family === 'desk' ? ' tc-wizard-models--desk' : '' ?>">
+            <?php foreach ($types as $key => $type): ?>
+              <form method="post" action="/">
+                <?= form_fields() ?>
+                <input type="hidden" name="action" value="device_pick_model">
+                <input type="hidden" name="type" value="<?= e($key) ?>">
+                <button class="tc-wizard-model" type="submit">
+                  <?php if ($family === 'desk' && $type['body'] !== null): ?>
+                    <?php /* A little drawing of it: its colour, and its keys in their rows. */ ?>
+                    <span class="tc-wizard-model__phone tc-wizard-model__phone--<?= e((string) $type['body']) ?>" aria-hidden="true">
+                      <?php for ($i = 0; $i < $type['keys']; $i++): ?><span></span><?php endfor; ?>
+                    </span>
+                  <?php elseif ($family === 'dect'): ?>
+                    <span class="tc-wizard-model__adapter" aria-hidden="true"><i class="fa-solid fa-mobile-retro"></i></span>
+                  <?php elseif ($family === 'desk'): ?>
+                    <span class="tc-wizard-model__adapter" aria-hidden="true"><i class="fa-solid fa-phone"></i></span>
+                  <?php else: ?>
+                    <span class="tc-wizard-model__adapter" aria-hidden="true">
+                      <?php for ($i = 0; $i < DeviceRepository::ports($key); $i++): ?><i class="fa-solid fa-phone"></i><?php endfor; ?>
+                    </span>
+                  <?php endif; ?>
+                  <span class="tc-wizard-model__name"><?= e($type['label']) ?></span>
+                  <?php if (DeviceRepository::untested($key)): ?>
+                    <span class="tc-untested" title="Set up from its maker's documentation — not yet tried with a real one">Untested</span>
+                  <?php endif; ?>
+                  <span class="tc-wizard-model__sub"><?= e(preg_replace('/^(Grandstream|Yealink|Poly|Cisco) [a-z ]+(\([^)]*\) )?· /', '', $type['sub'])) ?></span>
+                </button>
+              </form>
+            <?php endforeach; ?>
+          </div>
+        <?php endforeach; ?>
+
         <div class="tc-note" style="margin:16px 0 0">
-          <?= $family === 'desk'
-              ? "You'll need the MAC address from the label underneath — it's how twocans hands the phone its settings. A W on the end of the model (GHP621W) is the Wi-Fi version, set up the same way."
-              : "You'll need the MAC address from the label underneath — it's how twocans hands the adapter its settings." ?>
+          <?= $brand === 'yealink'
+              ? "You'll need the MAC address from the label underneath — the base's, for a cordless phone. It's how twocans hands it its settings."
+              : ($brand === 'poly'
+              ? "You'll need the MAC address from the label underneath — it's how twocans hands the phone its settings, and its speed dials."
+              : ($brand === 'cisco'
+              ? "You'll need the MAC address from the label underneath — it's how twocans hands the adapter its settings. They all need touch-tone phones: none can hear a rotary dial. The SPA122 and ATA 192 have a router built in; an ATA 191 or 192 must be the Multiplatform (-3PW) version."
+              : "You'll need the MAC address from the label underneath — it's how twocans hands it its settings. A W on the end of the model (GHP621W) is the Wi-Fi version, set up the same way.")) ?>
         </div>
         <div class="tc-wizard-actions">
           <a class="tc-btn tc-btn--ghost" href="<?= e(url(['screen' => 'phones', 'wizard' => 1])) ?>" style="padding:13px 18px">Back</a>
@@ -167,8 +209,8 @@ $canAdd = Auth::can('devices');
           <input class="tc-name-input" type="text" name="name" placeholder="Playroom Phone"
                  aria-label="Phone name" required autofocus>
 
-          <?php $ata = in_array($draft['type'], ['ht801', 'ht802'], true); ?>
-          <?php if ($ata && $draft['type'] === 'ht802'): ?>
+          <?php $ata = DeviceRepository::isAdapter($draft['type']); ?>
+          <?php if ($ata && DeviceRepository::ports($draft['type']) === 2): ?>
             <div style="font:800 14px var(--tc-display);margin:4px 0 4px">Phone 2 socket <span class="tc-card__hint">(optional)</span></div>
             <input class="tc-name-input" type="text" name="name2" placeholder="Kitchen Phone"
                    aria-label="Name for the phone in socket 2">
@@ -200,14 +242,29 @@ $canAdd = Auth::can('devices');
             on a home network — you can change it later by adding the phone again.
           </div>
           <?php else: ?>
-          <div style="font:800 14px var(--tc-display);margin:14px 0 4px">MAC address</div>
-          <input class="tc-name-input" type="text" name="mac" placeholder="00:0B:82:C1:23:45" value="<?= e(($draft['mac'] ?? '') !== '' ? implode(':', str_split((string) $draft['mac'], 2)) : '') ?>"
+          <div style="font:800 14px var(--tc-display);margin:14px 0 4px"><?= DeviceRepository::isDect($draft['type']) ? "The base's MAC address" : 'MAC address' ?></div>
+          <input class="tc-name-input tc-mac-input" type="text" name="mac" placeholder="<?= (DeviceRepository::TYPES[$draft['type']]['brand'] ?? '') === 'yealink' ? '80:5E:C0:12:34:56' : '00:0B:82:C1:23:45' ?>" data-tc-mac value="<?= e(($draft['mac'] ?? '') !== '' ? implode(':', str_split((string) $draft['mac'], 2)) : '') ?>"
                  aria-label="MAC address" autocomplete="off" style="font-size:15px" required>
-          <div class="tc-note">Printed on the underside of the <?= $ata ? 'adapter' : 'phone' ?> — used to serve its settings.</div>
+          <div class="tc-note">Printed on the underside of the <?= $ata ? 'adapter' : (DeviceRepository::isDect($draft['type']) ? DeviceRepository::TYPES[$draft['type']]['label'] . ' base — not the handset' : 'phone') ?> — used to serve its settings.</div>
+          <?php if (DeviceRepository::isDect($draft['type'])): ?>
+            <?php
+            // The handsets this base has already: their numbers are taken.
+            $taken = ($draft['mac'] ?? '') !== '' ? array_map('intval', array_column((new DeviceRepository())->findByMac((string) $draft['mac']), 'port')) : [];
+            ?>
+            <div style="font:800 14px var(--tc-display);margin:14px 0 4px">Which handset is it?</div>
+            <select class="tc-input" name="handset" aria-label="Handset number" style="max-width:220px">
+              <?php foreach (range(1, DeviceRepository::ports($draft['type'])) as $n): ?>
+                <?php if (!in_array($n, $taken, true)): ?>
+                  <option value="<?= $n ?>">Handset <?= $n ?></option>
+                <?php endif; ?>
+              <?php endforeach; ?>
+            </select>
+            <div class="tc-note">The number the handset shows on its screen — the order it was registered to the base. The one that came with the base is handset 1.</div>
+          <?php endif; ?>
           <?php endif; ?>
 
           <div class="tc-wizard-actions">
-            <a class="tc-btn tc-btn--ghost" href="<?= e(url(['screen' => 'phones', 'wizard' => 1] + ($draft['type'] === 'linphone' ? [] : ['family' => DeviceRepository::TYPES[$draft['type']]['family'] ?? '']))) ?>"
+            <a class="tc-btn tc-btn--ghost" href="<?= e(url(['screen' => 'phones', 'wizard' => 1] + ($draft['type'] === 'linphone' ? [] : ['brand' => DeviceRepository::TYPES[$draft['type']]['brand'] ?? '']))) ?>"
                style="padding:13px 18px">Back</a>
             <button class="tc-btn tc-btn--coral tc-btn--grow" type="submit"
                     style="padding:13px;font-size:15px">Create it →</button>
@@ -219,13 +276,13 @@ $canAdd = Auth::can('devices');
           <div class="tc-success-tick">✓</div>
           <div class="tc-wizard-title" style="margin-bottom:0"><?= e($d['name']) ?> is ready</div>
           <div class="tc-card__hint" style="font-size:13px">
-            <?= $d['type'] !== 'linphone' ? 'Point the ' . ($d['ata'] ? 'adapter' : 'phone') . ' at twocans as below, then reboot it.' : 'Scan it on a phone, or copy the link on a desktop.' ?>
+            <?= $d['type'] !== 'linphone' ? 'Point the ' . ($d['ata'] ? 'adapter' : ($d['dect'] ? 'base' : 'phone')) . ' at twocans as below, then reboot it.' : 'Scan it on a phone, or copy the link on a desktop.' ?>
           </div>
         </div>
 
         <?php if ($d['family'] !== 'app'): ?>
           <div class="tc-manual-setup" style="padding:16px;text-align:left">
-            <div style="font:800 14px var(--tc-display);margin-bottom:8px">Grandstream <?= e($d['model']) ?> setup</div>
+            <div style="font:800 14px var(--tc-display);margin-bottom:8px"><?= $d['dect'] ? 'Yealink W60B base' : e(['cisco' => 'Cisco ', 'grandstream' => 'Grandstream '][$d['brand']] ?? '') . e($d['model']) ?> setup</div>
             <?php view('partials/grandstream_setup', ['d' => $d]); ?>
           </div>
         <?php else: ?>

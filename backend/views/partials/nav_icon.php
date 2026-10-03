@@ -25,6 +25,18 @@ switch ($icon) {
         <span class="tc-nav-icon tc-nav-icon--joke"><i class="eye"></i><i class="eye"></i><i class="grin"></i></span>
     <?php break;
 
+    case 'week': ?>
+        <span class="tc-nav-icon tc-nav-icon--fa"><i class="fa-solid fa-calendar-week" aria-hidden="true"></i></span>
+    <?php break;
+
+    case 'quiz': ?>
+        <span class="tc-nav-icon tc-nav-icon--fa"><i class="fa-solid fa-dice" aria-hidden="true"></i></span>
+    <?php break;
+
+    case 'keepsakes': ?>
+        <span class="tc-nav-icon tc-nav-icon--fa"><i class="fa-solid fa-star" aria-hidden="true"></i></span>
+    <?php break;
+
     case 'trunk': ?>
         <span class="tc-nav-icon tc-nav-icon--trunk"><i></i></span>
     <?php break;

@@ -97,6 +97,24 @@ $activeCall = $activeCalls[0] ?? null;
             case 'homeassistant':
                 view('screens/homeassistant', ['store' => $store]);
                 break;
+            case 'keepsakes':
+                view('screens/keepsakes', ['store' => $store]);
+                break;
+            case 'quiz':
+                view('screens/quiz', ['store' => $store]);
+                break;
+            case 'helpers':
+                view('screens/helpers', ['store' => $store]);
+                break;
+            case 'week':
+                view('screens/week', ['store' => $store]);
+                break;
+            case 'radio':
+                view('screens/radio', ['store' => $store]);
+                break;
+            case 'christmas':
+                view('screens/christmas', ['store' => $store]);
+                break;
             default:
                 view('screens/dashboard', [
                     'store' => $store, 'activeCalls' => $activeCalls,

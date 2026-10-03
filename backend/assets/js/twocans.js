@@ -677,10 +677,97 @@
     }
   }, true);
 
+  /* An upload shows how it's going: a bar while the file goes up, then a
+     wheel while the server prepares it (converting audio takes a moment),
+     both read out to a screen reader. Leaving the page while the file is
+     still going up would lose it, so the browser asks first. */
+  var uploading = 0;
+  window.addEventListener('beforeunload', function (ev) {
+    if (uploading > 0) { ev.preventDefault(); ev.returnValue = ''; }
+  });
+
+  function hasFile(form) {
+    return Array.prototype.some.call(form.querySelectorAll('input[type=file]'), function (i) {
+      return i.files && i.files.length > 0;
+    });
+  }
+
+  function uploadStatus(form) {
+    var box = document.createElement('div');
+    box.className = 'tc-upload';
+    box.innerHTML = '<span class="tc-upload__track"><span class="tc-upload__fill"></span></span>'
+      + '<span class="tc-upload__spin" aria-hidden="true"></span>'
+      + '<span class="tc-upload__text" aria-hidden="true">Uploading…</span>'
+      + '<span class="tc-sr-only" role="status" aria-live="polite">Uploading</span>';
+    form.appendChild(box);
+    var fill = box.querySelector('.tc-upload__fill');
+    var text = box.querySelector('.tc-upload__text');
+    var said = box.querySelector('[role=status]');
+    var quarter = 0;
+    var sent = false;
+    uploading++;
+    var finishUpload = function () { if (!sent) { sent = true; uploading--; } };
+    return {
+      progress: function (pct) {
+        fill.style.width = pct + '%';
+        text.textContent = 'Uploading ' + pct + '%';
+        // A screen reader hears it a quarter at a time, not every percent.
+        if (Math.floor(pct / 25) > quarter && pct < 100) {
+          quarter = Math.floor(pct / 25);
+          said.textContent = 'Uploading, ' + quarter * 25 + ' percent';
+        }
+      },
+      preparing: function () {
+        finishUpload();
+        box.classList.add('is-preparing');
+        fill.style.width = '100%';
+        var audio = form.querySelector('input[type=file][accept*="audio"]');
+        text.textContent = said.textContent = form.getAttribute('data-tc-preparing')
+          || (audio ? 'Uploaded — preparing the audio…' : 'Uploaded — saving…');
+      },
+      done: function () { finishUpload(); box.remove(); }
+    };
+  }
+
+  /* Send a form as the page's script: with progress when there's a file in
+     it, plain fetch otherwise. Resolves to the server's answer, or null. */
+  function sendForm(form, status) {
+    var body = new FormData(form);
+    var url = form.getAttribute('action') || '/';
+    if (!status) {
+      return fetch(url, {
+        method: 'POST',
+        body: body,
+        credentials: 'same-origin',
+        headers: { 'X-Twocans-Ajax': '1', 'Accept': 'application/json' }
+      }).then(function (r) { return r.ok ? r.json() : null; });
+    }
+    return new Promise(function (resolve, reject) {
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', url);
+      xhr.withCredentials = true;
+      xhr.setRequestHeader('X-Twocans-Ajax', '1');
+      xhr.setRequestHeader('Accept', 'application/json');
+      xhr.upload.onprogress = function (e) {
+        if (e.lengthComputable) status.progress(Math.min(100, Math.round(e.loaded / e.total * 100)));
+      };
+      xhr.upload.onload = function () { status.preparing(); };
+      xhr.onload = function () {
+        if (xhr.status < 200 || xhr.status >= 300) { resolve(null); return; }
+        try { resolve(JSON.parse(xhr.responseText)); } catch (e) { resolve(null); }
+      };
+      xhr.onerror = reject;
+      xhr.onabort = reject;
+      xhr.send(body);
+    });
+  }
+
   /* Forms marked data-tc-ajax save without leaving the page: the server
      answers with its message and where the fresh page is, and only the part of
      the page around the form (data-tc-ajax-region) is swapped for the new one.
-     Without JavaScript they are ordinary forms. */
+     data-tc-ajax-go instead goes to the fresh page once it's saved — for a
+     form whose result shows somewhere else on it. Without JavaScript they are
+     ordinary forms. */
   document.addEventListener('submit', function (ev) {
     var form = ev.target;
     if (!form.matches || !form.matches('[data-tc-ajax]') || !window.fetch || !window.FormData) return;
@@ -688,24 +775,25 @@
     if (form.dataset.tcSending) return;
     form.dataset.tcSending = '1';
     form.classList.add('is-sending');
+    form.setAttribute('aria-busy', 'true');
     var region = form.closest('[data-tc-ajax-region]');
     var name = form.querySelector('[data-tc-filename]');
+    var status = hasFile(form) ? uploadStatus(form) : null;
     // After the picker has shown the file's name, which it does on the same change.
-    if (name && form.querySelector('input[type=file]')) setTimeout(function () { name.textContent = 'Saving…'; }, 0);
+    if (name && status) setTimeout(function () { name.textContent = 'Sending…'; }, 0);
 
     var failed = function () {
       showToast("Couldn't save that — try again.");
       if (name) name.textContent = 'Choose a file';
     };
-    fetch(form.getAttribute('action') || '/', {
-      method: 'POST',
-      body: new FormData(form),
-      credentials: 'same-origin',
-      headers: { 'X-Twocans-Ajax': '1', 'Accept': 'application/json' }
-    })
-      .then(function (r) { return r.ok ? r.json() : null; })
+    sendForm(form, status)
       .then(function (data) {
         if (!data || !data.ok) { failed(); return null; }
+        if (form.hasAttribute('data-tc-ajax-go') && data.location) {
+          try { sessionStorage.setItem('tcToast', data.toast || ''); } catch (e) { /* the page still works */ }
+          location.href = data.location;
+          return null;
+        }
         showToast(data.toast);
         if (!region || !region.id || !data.location) return null;
         return fetch(data.location, { credentials: 'same-origin' })
@@ -729,10 +817,278 @@
       })
       .catch(failed)
       .finally(function () {
+        if (status) status.done();
         delete form.dataset.tcSending;
         form.classList.remove('is-sending');
+        form.removeAttribute('aria-busy');
       });
   });
+
+  /* A list in an order of the household's choosing (data-tc-sortable, naming
+     the form that saves it): drag an item by its handle — with a mouse or a
+     finger, so pointer events rather than the browser's own drag and drop,
+     which a phone doesn't do — or focus the handle and use the up and down
+     arrows. The new order is saved as soon as it's let go. */
+  var sortOrder = function (list) {
+    return Array.prototype.map.call(list.querySelectorAll('[data-tc-sort-id]'), function (el) {
+      return el.getAttribute('data-tc-sort-id');
+    });
+  };
+  var sortSave = function (list) {
+    var form = document.getElementById(list.getAttribute('data-tc-sortable'));
+    if (!form) return;
+    var body = new FormData(form);
+    sortOrder(list).forEach(function (id) { body.append('ids[]', id); });
+    fetch(form.getAttribute('action') || '/', {
+      method: 'POST',
+      body: body,
+      credentials: 'same-origin',
+      headers: { 'X-Twocans-Ajax': '1', 'Accept': 'application/json' }
+    })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) { showToast(data && data.ok ? data.toast : "Couldn't save the order — try again."); })
+      .catch(function () { showToast("Couldn't save the order — try again."); });
+  };
+  var sortSay = function (item) {
+    var said = document.querySelector('[data-tc-sort-said]');
+    var list = item.parentElement;
+    if (!said || !list) return;
+    var all = list.querySelectorAll('[data-tc-sort-id]');
+    var at = Array.prototype.indexOf.call(all, item) + 1;
+    var handle = item.querySelector('[data-tc-sort-handle]');
+    var name = handle ? handle.getAttribute('aria-label').replace(/^Move /, '').replace(/ — .*$/, '') : 'It';
+    said.textContent = name + ', ' + at + ' of ' + all.length;
+  };
+
+  var calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* Animate items from where they were to where they are now ("FLIP"): for a
+     keyboard move, and for the drop at the end of a drag. */
+  var sortGlide = function (items, before) {
+    if (calm) return;
+    items.forEach(function (el) {
+      var was = before.get(el);
+      if (was === undefined) return;
+      var shift = was - el.getBoundingClientRect().top;
+      if (!shift) return;
+      el.style.transition = 'none';
+      el.style.transform = 'translateY(' + shift + 'px)';
+      requestAnimationFrame(function () {
+        el.style.transition = 'transform .2s ease';
+        el.style.transform = '';
+      });
+    });
+  };
+  var sortTops = function (items) {
+    var tops = new Map();
+    items.forEach(function (el) { tops.set(el, el.getBoundingClientRect().top); });
+    return tops;
+  };
+
+  /* Dragging: the song is lifted and follows the pointer, and the others
+     slide out of its way — nothing in the page is moved until it's let go,
+     when it settles into its place. */
+  document.addEventListener('pointerdown', function (ev) {
+    var handle = ev.target.closest('[data-tc-sort-handle]');
+    if (!handle || ev.button > 0) return;
+    var item = handle.closest('[data-tc-sort-id]');
+    var list = item && item.closest('[data-tc-sortable]');
+    if (!list) return;
+    ev.preventDefault();
+    // Followed on the whole document: the handle moves under the pointer.
+    var pointer = ev.pointerId;
+    var items = Array.prototype.slice.call(list.querySelectorAll('[data-tc-sort-id]'));
+    var from = items.indexOf(item);
+    var others = items.filter(function (el) { return el !== item; });
+    // Where each item sits, in page terms, and how far one slot is.
+    var tops = items.map(function (el) { return el.getBoundingClientRect().top + window.scrollY; });
+    var heights = items.map(function (el) { return el.getBoundingClientRect().height; });
+    var gap = items.length > 1 ? tops[1] - tops[0] - heights[0] : 0;
+    var slot = heights[from] + gap;
+    var startY = ev.clientY + window.scrollY;
+    var to = from;
+    var before = sortOrder(list).join(',');
+
+    item.classList.add('is-dragging');
+    list.classList.add('is-sorting');
+    others.forEach(function (el) { el.style.transition = calm ? 'none' : 'transform .18s ease'; });
+    item.style.transition = 'none';
+
+    var scroller = null;
+    var lastY = ev.clientY;
+    var follow = function () {
+      var dy = lastY + window.scrollY - startY;
+      item.style.transform = 'translateY(' + dy + 'px)';
+      // Its middle, against the others' middles where they started.
+      var middle = tops[from] + heights[from] / 2 + dy;
+      to = 0;
+      items.forEach(function (el, i) {
+        if (el !== item && middle > tops[i] + heights[i] / 2) to++;
+      });
+      items.forEach(function (el, i) {
+        if (el === item) return;
+        var shift = 0;
+        if (from < to && i > from && i <= to) shift = -slot;
+        else if (from > to && i >= to && i < from) shift = slot;
+        el.style.transform = shift ? 'translateY(' + shift + 'px)' : '';
+      });
+    };
+    var move = function (e) {
+      if (e.pointerId !== pointer) return;
+      e.preventDefault();
+      lastY = e.clientY;
+      follow();
+      // Near the top or bottom of the window, scroll it along, and keep up.
+      var edge = e.clientY < 70 ? -12 : (e.clientY > window.innerHeight - 70 ? 12 : 0);
+      if (edge && !scroller) {
+        scroller = setInterval(function () { window.scrollBy(0, edge); follow(); }, 16);
+      } else if (!edge && scroller) {
+        clearInterval(scroller);
+        scroller = null;
+      }
+    };
+    var up = function (e) {
+      if (e.pointerId !== pointer) return;
+      document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerup', up);
+      document.removeEventListener('pointercancel', up);
+      if (scroller) clearInterval(scroller);
+      // Where everything is on screen now, then the real order, then glide.
+      var seen = sortTops(items);
+      items.forEach(function (el) { el.style.transition = 'none'; el.style.transform = ''; });
+      if (to !== from) {
+        var rest = others.slice();
+        rest.splice(to, 0, item);
+        rest.forEach(function (el) { list.appendChild(el); });
+      }
+      item.classList.remove('is-dragging');
+      list.classList.remove('is-sorting');
+      sortGlide(items, seen);
+      if (sortOrder(list).join(',') !== before) {
+        sortSay(item);
+        sortSave(list);
+      }
+    };
+    document.addEventListener('pointermove', move, { passive: false });
+    document.addEventListener('pointerup', up);
+    document.addEventListener('pointercancel', up);
+  });
+
+  var sortTimer = null;
+  document.addEventListener('keydown', function (ev) {
+    var handle = ev.target.closest && ev.target.closest('[data-tc-sort-handle]');
+    if (!handle || (ev.key !== 'ArrowUp' && ev.key !== 'ArrowDown')) return;
+    var item = handle.closest('[data-tc-sort-id]');
+    var list = item && item.closest('[data-tc-sortable]');
+    if (!list) return;
+    ev.preventDefault();
+    var sibling = ev.key === 'ArrowUp' ? item.previousElementSibling : item.nextElementSibling;
+    if (!sibling || !sibling.hasAttribute('data-tc-sort-id')) return;
+    var seen = sortTops([item, sibling]);
+    if (ev.key === 'ArrowUp') sibling.before(item); else sibling.after(item);
+    sortGlide([item, sibling], seen);
+    handle.focus();
+    sortSay(item);
+    // A few presses in a row are one change: saved once they stop.
+    clearTimeout(sortTimer);
+    sortTimer = setTimeout(function () { sortSave(list); }, 700);
+  });
+
+  /* A MAC address box (data-tc-mac): typed or pasted any way — dashes,
+     spaces, lower case — it becomes 00:0B:82:C1:23:45 as you go, and can't
+     be more than the twelve characters a MAC has. The server takes either. */
+  var macBox = function (input) {
+    input.setAttribute('maxlength', '17');
+    input.setAttribute('spellcheck', 'false');
+    input.setAttribute('autocapitalize', 'characters');
+    input.setAttribute('pattern', '([0-9A-Fa-f]{2}[:\\-]?){5}[0-9A-Fa-f]{2}');
+    input.setAttribute('title', "Twelve characters, 0–9 and A–F — like 00:0B:82:C1:23:45, from the label under the phone");
+  };
+  document.querySelectorAll('[data-tc-mac]').forEach(macBox);
+  document.addEventListener('input', function (ev) {
+    var input = ev.target.closest && ev.target.closest('[data-tc-mac]');
+    if (!input) return;
+    // Where the caret is, counted in hex characters, so it stays put.
+    var before = input.value.slice(0, input.selectionStart || 0).replace(/[^0-9a-f]/gi, '').length;
+    var hex = input.value.replace(/[^0-9a-f]/gi, '').toUpperCase().slice(0, 12);
+    var shown = hex.replace(/(.{2})(?=.)/g, '$1:');
+    if (shown === input.value) return;
+    input.value = shown;
+    // After k hex characters: k, plus the colons between them.
+    var at = Math.min(before > 0 ? before + Math.floor((before - 1) / 2) : 0, shown.length);
+    try { input.setSelectionRange(at, at); } catch (e) { /* not every input type can */ }
+  });
+
+  /* Notifications on this device (data-tc-push, the box's public key): ask
+     the browser, subscribe through the service worker, and hand twocans what
+     it needs to push here. Needs HTTPS, and on an iPhone, twocans added to
+     the Home Screen first. */
+  var pushCard = document.querySelector('[data-tc-push]');
+  if (pushCard) {
+    var pushOn = pushCard.querySelector('[data-tc-push-on]');
+    var pushSaid = pushCard.querySelector('[data-tc-push-status]');
+    var pushKey = function (b64) {
+      var raw = atob((b64 + '==='.slice((b64.length + 3) % 4)).replace(/-/g, '+').replace(/_/g, '/'));
+      var out = new Uint8Array(raw.length);
+      for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+      return out;
+    };
+    var standalone = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches;
+    var isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+    if (!window.isSecureContext) {
+      pushSaid.textContent = 'Notifications need twocans opened over https:// — not this address.';
+    } else if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      pushSaid.textContent = isIOS && !standalone
+        ? 'Add twocans to your Home Screen first (Share → Add to Home Screen), then open it from there.'
+        : "This browser can't show notifications from websites.";
+    } else {
+      // The helper that shows notifications (sw.js) has to be running; if it
+      // can't start in this browser, say so rather than leave a blank card.
+      var notReady = setTimeout(function () {
+        pushSaid.textContent = "This browser couldn't start twocans' notification helper — try another browser, or the app on your Home Screen.";
+      }, 6000);
+      navigator.serviceWorker.ready.then(function (reg) {
+        clearTimeout(notReady);
+        return reg.pushManager.getSubscription().then(function (sub) {
+          var listed = sub && pushCard.querySelector('[data-tc-push-endpoint="' + CSS.escape(sub.endpoint) + '"]');
+          if (listed) {
+            listed.classList.add('is-this');
+            pushSaid.textContent = 'This device is getting notifications.';
+            return;
+          }
+          if (Notification.permission === 'denied') {
+            pushSaid.textContent = "Notifications are blocked for twocans in this browser's settings.";
+            return;
+          }
+          pushOn.hidden = false;
+          pushOn.addEventListener('click', function () {
+            pushOn.disabled = true;
+            pushSaid.textContent = 'Asking…';
+            Notification.requestPermission().then(function (answer) {
+              if (answer !== 'granted') throw new Error('not allowed');
+              return reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: pushKey(pushCard.getAttribute('data-tc-push')) });
+            }).then(function (fresh) {
+              var keys = fresh.toJSON().keys || {};
+              var body = new FormData(pushCard.querySelector('[data-tc-push-form]'));
+              body.append('endpoint', fresh.endpoint);
+              body.append('p256dh', keys.p256dh || '');
+              body.append('auth', keys.auth || '');
+              return fetch('/', { method: 'POST', body: body, credentials: 'same-origin',
+                headers: { 'X-Twocans-Ajax': '1', 'Accept': 'application/json' } }).then(function (r) { return r.json(); });
+            }).then(function (data) {
+              try { sessionStorage.setItem('tcToast', (data && data.toast) || ''); } catch (e) { /* fine */ }
+              location.reload();
+            }).catch(function () {
+              pushOn.disabled = false;
+              pushSaid.textContent = Notification.permission === 'denied'
+                ? "Notifications were turned down — allow them for twocans in the browser's settings."
+                : "Couldn't turn them on — try again.";
+            });
+          });
+        });
+      });
+    }
+  }
 
   /* Picking a photo submits straight away — nobody expects to choose a
      picture and then have to press Save as well. */
@@ -930,6 +1286,7 @@
       btn.type = 'button';
       btn.className = 'tc-btn tc-btn--ghost tc-rec-btn' + (label.classList.contains('tc-btn--sm') ? ' tc-btn--sm' : '');
       btn.innerHTML = '<i class="fa-solid fa-microphone" aria-hidden="true"></i> <span>Record</span>';
+      btn.setAttribute('aria-pressed', 'false');
       label.insertAdjacentElement('afterend', btn);
       var text = btn.querySelector('span');
       var max = Number(input.getAttribute('data-tc-rec-max')) || 60;
@@ -952,6 +1309,7 @@
             clearInterval(timer);
             stream.getTracks().forEach(function (t) { t.stop(); });
             btn.classList.remove('is-recording');
+            btn.setAttribute('aria-pressed', 'false');
             text.textContent = 'Record again';
             var mime = (recorder.mimeType || type || 'audio/webm').split(';')[0];
             var blob = new Blob(chunks, { type: mime });
@@ -968,6 +1326,7 @@
           secs = 0;
           recorder.start();
           btn.classList.add('is-recording');
+          btn.setAttribute('aria-pressed', 'true');
           text.textContent = 'Stop · 0:00';
           timer = setInterval(function () {
             secs += 1;

@@ -63,7 +63,7 @@ $hiddenFields = static function () use ($hidden): string {
     <?php if ($href !== null): ?>
       <a class="tc-btn tc-btn--ghost tc-btn--sm" href="<?= e($href) ?>">Open →</a>
     <?php elseif ($canEdit): ?>
-      <form method="post" action="/" enctype="multipart/form-data" class="tc-inline-form">
+      <form method="post" action="/" enctype="multipart/form-data" class="tc-inline-form" data-tc-ajax data-tc-ajax-go>
         <?= form_fields() ?>
         <input type="hidden" name="action" value="<?= e($action) ?>">
         <?= $hiddenFields() ?>

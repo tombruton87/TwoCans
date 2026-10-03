@@ -139,6 +139,26 @@ final class Ami
         return (array) ($reply['output'] ?? []);
     }
 
+    /**
+     * The notes the dialplan has left in an AstDB family, by key, taking
+     * each one away as it's read — as the emergency notes are (Notifier).
+     *
+     * @return array<string,string>
+     */
+    public function takeNotes(string $family): array
+    {
+        $notes = [];
+        foreach ($this->command('database show ' . $family) as $line) {
+            // "/tc_quiz/1790511012.63                      : kitchen-1a2b|7|8|10|1790511012"
+            if (preg_match('#^/' . preg_quote($family, '#') . '/(\S+)\s*:\s*(.*)$#', trim((string) $line), $m)) {
+                $notes[$m[1]] = trim($m[2]);
+                $this->command('database del ' . $family . ' ' . $m[1]);
+            }
+        }
+
+        return $notes;
+    }
+
     /** Apply generated config without dropping active calls. */
     public function reloadPjsip(): bool
     {

@@ -10,11 +10,15 @@ docker/asterisk/voicemail/*
 docker/asterisk/asks/*
 storage/photos/*
 storage/jokes/*
+# Voicemails a family kept for good — their voices.
+storage/keepsakes/*
 # A parent's recorded "nobody can take your call" message. Their voice, and
 # only ever meant to exist on their own box.
 storage/refusals/*
 # Pages waiting for the pager, and its heartbeat — see backend/src/Pager.php.
 storage/pager/*
+# Who is signed in to the web app — see backend/src/bootstrap.php.
+storage/sessions/*
 
 # Backups are the same recordings and photos, plus the database — never commit.
 storage/backups/*

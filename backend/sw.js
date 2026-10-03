@@ -1,5 +1,6 @@
 /*
- * twocans service worker — what makes "Add to Home Screen" an app.
+ * twocans service worker — what makes "Add to Home Screen" an app, and shows
+ * the notifications twocans sends (Web Push — see backend/src/WebPush.php).
  *
  * Deliberately modest. Pages are always fetched from the box, never from a
  * cache: they show who is allowed to call the children, and a stale copy of
@@ -7,7 +8,7 @@
  * is kept, so it opens quickly, and when the box can't be reached at all a
  * small "can't reach your line" page is shown instead of the browser's error.
  */
-const VERSION = 'twocans-v1';
+const VERSION = 'twocans-v2';
 const OFFLINE = '/assets/pwa/offline.html';
 const SHELL = [OFFLINE, '/assets/pwa/icon-192.png'];
 
@@ -51,3 +52,39 @@ self.addEventListener('fetch', (event) => {
   }
   // Everything else — audio, downloads, the app's own requests — straight through.
 });
+
+/* A notification from twocans: what happened, and the page it's about.
+   Decrypted by the browser before it gets here. An emergency stays on screen
+   until it's dealt with. */
+self.addEventListener('push', (event) => {
+  let message = { title: 'twocans', body: 'Something needs a look.', url: '/' };
+  try {
+    if (event.data) message = Object.assign(message, event.data.json());
+  } catch (e) { /* show the plain one */ }
+  event.waitUntil(self.registration.showNotification(message.title, {
+    body: message.body,
+    icon: '/assets/pwa/icon-192.png',
+    badge: '/assets/pwa/icon-192.png',
+    tag: message.tag || 'twocans',
+    renotify: true,
+    requireInteraction: !!message.urgent,
+    data: { url: message.url || '/' },
+  }));
+});
+
+/* Tapped: the page it's about, in the app if it's open, else a new window. */
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = new URL((event.notification.data && event.notification.data.url) || '/', self.location.origin).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const client of list) {
+        if (new URL(client.url).origin === self.location.origin && 'focus' in client) {
+          return client.navigate(target).then((c) => (c || client).focus());
+        }
+      }
+      return self.clients.openWindow(target);
+    })
+  );
+});
+

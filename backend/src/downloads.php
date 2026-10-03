@@ -275,6 +275,65 @@ switch ($download) {
 
         // no break — $send exits
 
+    case 'radio_song':
+        $row = (new Radio())->find((int) ($_GET['id'] ?? 0));
+        // file() validates the name and re-derives the path from the store.
+        $file = $row === null ? null : (new RadioStore())->file((string) $row['audio_file']);
+        if ($file === null) {
+            http_response_code(404);
+            exit('No such song');
+        }
+
+        $play($file, 'song-' . (int) $row['id'] . '.wav');
+
+    case 'radio_station_name':
+        $row = (new Radio())->station((int) ($_GET['id'] ?? 0));
+        $file = $row === null ? null : (new RadioStationStore())->file((string) ($row['name_audio'] ?? ''));
+        if ($file === null) {
+            http_response_code(404);
+            exit('No recording of that name');
+        }
+
+        $play($file, 'station-' . (int) $row['id'] . '.wav');
+
+    case 'santa_message':
+        // The household's own Santa message, or — ?builtin=1, or without one —
+        // the one twocans ships.
+        $settings = new SettingsRepository();
+        $file = isset($_GET['builtin']) ? null : (new SantaStore())->file($settings->santaMessage());
+        $file ??= '/var/lib/twocans/defaults/christmas/christmas-day.wav';
+        if (!is_readable($file)) {
+            http_response_code(404);
+            exit("No message from Santa");
+        }
+
+        $play($file, 'santa.wav');
+
+    case 'keepsake_audio':
+        $keepsakes = new Keepsakes();
+        $row = $keepsakes->find((int) ($_GET['id'] ?? 0));
+        $file = $row === null ? null : $keepsakes->audioFile($row);
+        if ($file === null) {
+            http_response_code(404);
+            exit('No audio for that keepsake');
+        }
+
+        $play($file, 'keepsake-' . (int) $row['id'] . '.wav');
+
+    case 'keepsakes_zip':
+        $year = (int) ($_GET['year'] ?? 0);
+        $zip = (new Keepsakes())->zipYear($year);
+        if ($zip === null) {
+            http_response_code(404);
+            exit('No keepsakes from ' . $year);
+        }
+        header('Content-Type: application/zip');
+        header('Content-Disposition: attachment; filename="twocans-keepsakes-' . $year . '.zip"');
+        header('Content-Length: ' . filesize($zip));
+        readfile($zip);
+        @unlink($zip);
+        exit;
+
     case 'backup':
         if (!Auth::can('backups')) {
             http_response_code(403);

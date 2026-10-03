@@ -6,6 +6,8 @@
 $rows = array_map([VoicemailRepository::class, 'toView'], $voicemails->all());
 $canDelete = Auth::can('voicemail');
 $vmSpeedDial = (new SettingsRepository())->voicemailSpeedDial();
+// Messages kept for good — see Keepsakes.
+$kept = (new Keepsakes())->keptMessages();
 
 // Every mailbox, by its number: the house's, and each phone's (its extension).
 $mailboxes = [PjsipConfig::HOUSE_MAILBOX => "The house's mailbox"];
@@ -20,8 +22,9 @@ foreach ((new DeviceRepository())->all() as $d) {
     <span class="tc-info-banner__icon tc-info-banner__icon--sun">✉</span>
     Missed callers can leave a message. We transcribe each one so you can read it
     at a glance — or dial <b><?= e(PjsipConfig::VOICEMAIL_NUMBER) ?></b><?= $vmSpeedDial !== '' ? ' (or <b>' . e($vmSpeedDial) . '</b>)' : '' ?>
-    from the phone itself to listen. How long each phone rings first is on its
-    page, under Rules.
+    from the phone itself to listen to its own. The house's messages are on
+    <b><?= e(PjsipConfig::HOUSE_MESSAGES_NUMBER) ?></b>, from phones allowed to hear them. Both —
+    and how long each phone rings first — are on each phone's page, under Rules.
   </div>
 
   <?php if (Auth::can('rules')): ?>
@@ -96,6 +99,19 @@ foreach ((new DeviceRepository())->all() as $d) {
             </div>
           <?php endif; ?>
         </div>
+
+        <?php /* Keep it for good: a copy in Keepsakes that nothing clears. */ ?>
+        <?php if (isset($kept[$v['msgId']])): ?>
+          <a class="tc-btn--icon tc-btn--icon-kept" href="<?= e(url(['screen' => 'keepsakes'])) ?>#keepsake-<?= (int) $kept[$v['msgId']] ?>"
+             title="Kept for good — see Keepsakes" aria-label="Kept for good — see Keepsakes"><i class="fa-solid fa-star" aria-hidden="true"></i></a>
+        <?php elseif ($canDelete && $v['hasAudio']): ?>
+          <form method="post" action="/" class="tc-inline-form" data-tc-ajax>
+            <?= form_fields() ?>
+            <input type="hidden" name="action" value="vm_keep">
+            <input type="hidden" name="id" value="<?= (int) $v['id'] ?>">
+            <button class="tc-btn--icon" type="submit" title="Keep for good" aria-label="Keep the message from <?= e($v['name']) ?> for good"><i class="fa-regular fa-star" aria-hidden="true"></i></button>
+          </form>
+        <?php endif; ?>
 
         <?php if ($v['hasAudio']): ?>
           <a class="tc-btn--icon" style="display:flex;align-items:center;justify-content:center"

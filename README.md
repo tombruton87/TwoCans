@@ -15,6 +15,12 @@ On any Linux machine your phones can reach — a Raspberry Pi is ideal. It insta
 what's missing (Docker included, asking first), asks a few questions, and starts
 twocans. [Read the script first](get.sh) if you like; it's short.
 
+**Works on** any 64-bit Linux your phones can reach: Raspberry Pi OS (64-bit) on a
+Pi 3, 4 or 5; Ubuntu, Debian and their family (Linux Mint, Pop!_OS…); Fedora,
+Rocky, AlmaLinux and CentOS; Arch and Manjaro; openSUSE; Alpine (`apk add bash curl`
+first). If something stops it, it says what to do — and `./twocans report` makes a
+report, private details taken out, for an issue.
+
 ![The installer](docs/screenshots/installer.png)
 
 ## What it looks like
@@ -54,8 +60,9 @@ git clone https://github.com/tombruton87/TwoCans.git twocans && cd twocans
 
 `install.sh` walks you through it:
 
-- **checks the software** — Docker (offering to install it with Docker's own script,
-  or to start it), Compose, and the few tools it uses — plus memory and disk. The
+- **checks the software** — Docker (offering to install it the way that suits your
+  Linux: Docker's own script or packages, or your distribution's), Compose, and the
+  few tools it uses (offering to install those too) — plus memory and disk. The
   published images are built for Intel/AMD and for ARM, so a Raspberry Pi downloads
   them like anything else;
 - **asks a few questions** — this machine's address, a name for it on your network,

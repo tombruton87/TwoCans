@@ -14,11 +14,12 @@ final class CallRepository
     /**
      * Calls that aren't the family's calls: an announcement paging a phone,
      * the Test call button (929), and the test numbers a child can dial (600
-     * the echo, 601 the test message). Kept, like every call, so their
+     * the echo, 601 the test message), and the kitchen timer ringing back
+     * (timer). Kept, like every call, so their
      * recordings are looked after as usual, but not shown in the log, counted
      * in its totals, or sent as notifications.
      */
-    public const NOT_SHOWN = ['announce', '929', '600', '601'];
+    public const NOT_SHOWN = ['announce', '929', '600', '601', 'timer'];
 
     /** SQL: the call is one of the family's — see NOT_SHOWN. */
     public static function shownSql(string $alias = ''): string

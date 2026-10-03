@@ -39,6 +39,8 @@ $pageUrl = static fn(int $n): string => url([
       <?php if ($live > 0): ?>
         <b><?= $live ?></b> on the line right now.
       <?php endif; ?>
+      And on <b><?= e($settings->gamesNumber()) ?></b>,
+      <a href="<?= e(url(['screen' => 'quiz'])) ?>">the games line</a>.
     </div>
 
     <?php /* Same idea as retention living on the call log: the setting sits on
@@ -68,7 +70,7 @@ $pageUrl = static fn(int $n): string => url([
     </div>
 
     <?php if ($canEdit): ?>
-      <form class="tc-card tc-joke-add" method="post" action="/" enctype="multipart/form-data">
+      <form class="tc-card tc-joke-add" method="post" action="/" enctype="multipart/form-data" data-tc-ajax data-tc-ajax-go>
         <?= form_fields() ?>
         <input type="hidden" name="action" value="joke_add">
 

@@ -15,48 +15,54 @@
 
   /* Ink */
   --tc-ink:         #4A3B33;
-  --tc-ink-2:       #8C7B6B;
-  --tc-ink-3:       #A8967F;
-  --tc-ink-4:       #B6A493;
-  --tc-ink-5:       #C0A98E;
-  --tc-ink-6:       #9C8979;
-  --tc-ink-7:       #A0846A;
+  /* Text shades: each at least 4.5:1 on white and on the cream washes, the
+     WCAG AA minimum for body text. */
+  --tc-ink-2:       #726457;
+  --tc-ink-3:       #74644F;
+  --tc-ink-4:       #776350;
+  --tc-ink-5:       #7C6345;
+  --tc-ink-6:       #726154;
+  --tc-ink-7:       #7A634E;
 
   /* Accents */
   --tc-coral:       #FF7A59;
   --tc-coral-hover: #FF8765;
   --tc-coral-lip:   #E0573C;
+  /* Coral as text: the lip is for the edge under a button, too light to read. */
+  --tc-coral-ink:   #BA371E;
+  /* Text on a coral fill: white on coral is 2.6:1, too faint; this is 5.3:1. */
+  --tc-on-coral:    #3A2A22;
   --tc-coral-light: #FF8E70;
   --tc-coral-pale:  #FFA98F;
   --tc-coral-bg:    #FFE0D6;
 
   --tc-teal:        #5BC7B8;
-  --tc-teal-deep:   #3DA497;
-  --tc-teal-lip:    #2E8478;
+  --tc-teal-deep:   #2A7269;
+  --tc-teal-lip:    #1D514B;
   --tc-teal-pale:   #86DDD1;
   --tc-teal-bg:     #E6F6F2;
 
   --tc-sun:         #FFC857;
-  --tc-sun-ink:     #C77F12;
+  --tc-sun-ink:     #98610E;
   --tc-sun-ink-2:   #E08A1E;
   --tc-sun-bg:      #FFF0D9;
 
   --tc-lav:         #A78BD0;
-  --tc-lav-ink:     #7B5EA8;
+  --tc-lav-ink:     #7557A2;
   --tc-lav-bg:      #ECE3F7;
 
   --tc-sky:         #6FB7E8;
-  --tc-sky-ink:     #4F9FD6;
+  --tc-sky-ink:     #256D9F;
   --tc-sky-bg:      #DCEEFB;
 
-  --tc-red:         #E8604C;
-  --tc-red-ink:     #C9402C;
+  --tc-red:         #DB351C;
+  --tc-red-ink:     #B83B28;
   --tc-red-bg:      #FBE2DD;
   --tc-red-border:  #F2C9C0;
 
   --tc-green:       #5BB85B;
   --tc-green-bg:    #E3F4E3;
-  --tc-green-ink:   #3E8E3E;
+  --tc-green-ink:   #357935;
 
   /* Lines */
   --tc-border:      #F0E4D2;
@@ -152,7 +158,7 @@ a { color: inherit; text-decoration: none; }
   border: none; background: transparent; color: var(--tc-ink-4); font: 800 20px var(--tc-display);
   cursor: pointer; padding: 4px 8px; border-radius: 8px;
 }
-.tc-sched__remove:hover { background: var(--tc-card); color: var(--tc-coral-lip); }
+.tc-sched__remove:hover { background: var(--tc-card); color: var(--tc-coral-ink); }
 .tc-sched__foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: 10px; }
 .tc-daychip { position: relative; cursor: pointer; }
 .tc-daychip input { position: absolute; opacity: 0; width: 0; height: 0; }
@@ -379,7 +385,7 @@ a { color: inherit; text-decoration: none; }
 .tc-nav-badge {
   margin-left: auto;
   background: var(--tc-coral);
-  color: #fff;
+  color: var(--tc-on-coral);
   font: 800 11px var(--tc-body);
   min-width: 20px;
   height: 20px;
@@ -463,8 +469,8 @@ a { color: inherit; text-decoration: none; }
 }
 .tc-tab__glyph i { width: 22px; text-align: center; }
 .tc-tab__label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tc-tab.is-active { color: var(--tc-coral-lip); }
-.tc-tab.is-active .tc-tab__glyph { background: var(--tc-coral-bg); color: var(--tc-coral); }
+.tc-tab.is-active { color: var(--tc-coral-ink); }
+.tc-tab.is-active .tc-tab__glyph { background: var(--tc-coral-bg); color: var(--tc-coral-ink); }
 .tc-tab:active .tc-tab__glyph { background: var(--tc-sunken-2); }
 .tc-tab__dot {
   position: absolute; top: 2px; right: 8px;
@@ -489,7 +495,7 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* Chunky "button lip": a hard offset shadow that shrinks when pressed. */
-.tc-btn--coral { background: var(--tc-coral); color: #fff; box-shadow: 0 4px 0 var(--tc-coral-lip); }
+.tc-btn--coral { background: var(--tc-coral); color: var(--tc-on-coral); box-shadow: 0 4px 0 var(--tc-coral-lip); }
 .tc-btn--coral:hover { background: var(--tc-coral-hover); }
 .tc-btn--coral:active { box-shadow: 0 2px 0 var(--tc-coral-lip); transform: translateY(2px); }
 
@@ -547,7 +553,7 @@ a { color: inherit; text-decoration: none; }
   justify-content: center;
   padding: 0;
 }
-.tc-account.is-active { background: var(--tc-coral); color: #fff; }
+.tc-account.is-active { background: var(--tc-coral); color: var(--tc-on-coral); }
 
 /* Account / settings dropdown in the header. */
 .tc-menu { position: relative; }
@@ -587,7 +593,7 @@ a { color: inherit; text-decoration: none; }
 .tc-menu__item.is-active i { color: inherit; }
 /* A <button> that looks like the links around it. */
 button.tc-menu__item { width: 100%; border: none; background: transparent; text-align: left; }
-.tc-menu__item--signout, .tc-menu__item--signout i { color: var(--tc-coral-lip); }
+.tc-menu__item--signout, .tc-menu__item--signout i { color: var(--tc-coral-ink); }
 .tc-menu__item--signout:hover { background: var(--tc-coral-bg); }
 .tc-menu__who { padding: 8px 12px 6px; }
 .tc-menu__name { font: 800 14px var(--tc-display); color: var(--tc-ink); }
@@ -823,7 +829,7 @@ button.tc-menu__item { width: 100%; border: none; background: transparent; text-
 .tc-pill--bad   { background: var(--tc-red-bg); color: var(--tc-red-ink); }
 .tc-pill--muted { background: #F1E7D7; color: var(--tc-ink-3); }
 /* A count that wants a decision — how many people are waiting on the dashboard. */
-.tc-pill--coral { background: var(--tc-coral); color: #fff; }
+.tc-pill--coral { background: var(--tc-coral); color: var(--tc-on-coral); }
 .tc-pill--lg    { font-size: 12px; padding: 5px 13px; }
 
 .tc-chip {
@@ -842,11 +848,11 @@ button.tc-menu__item { width: 100%; border: none; background: transparent; text-
 
 .tc-tag { font: 800 11px var(--tc-body); padding: 4px 9px; border-radius: 8px; }
 .tc-tag--in-on   { background: var(--tc-teal-bg); color: var(--tc-teal-deep); }
-.tc-tag--out-on  { background: var(--tc-coral-bg); color: var(--tc-coral-lip); }
+.tc-tag--out-on  { background: var(--tc-coral-bg); color: var(--tc-coral-ink); }
 .tc-tag--off     { background: #F1E7D7; color: var(--tc-ink-4); }
 
 .tc-role-pill { font: 800 11px var(--tc-body); padding: 5px 12px; border-radius: 20px; white-space: nowrap; border: none; }
-.tc-role-pill--owner  { background: var(--tc-coral-bg); color: var(--tc-coral-lip); cursor: default; }
+.tc-role-pill--owner  { background: var(--tc-coral-bg); color: var(--tc-coral-ink); cursor: default; }
 .tc-role-pill--admin  { background: var(--tc-teal-bg); color: var(--tc-teal-deep); }
 .tc-role-pill--viewer { background: var(--tc-lav-bg); color: var(--tc-lav-ink); }
 button.tc-role-pill { cursor: pointer; }
@@ -932,9 +938,9 @@ button.tc-role-pill { cursor: pointer; }
 .tc-stat { background: var(--tc-card); border: 1.5px solid var(--tc-border); border-radius: 20px; padding: 16px 18px; box-shadow: var(--tc-shadow-card); }
 .tc-stat__num   { font: 800 30px var(--tc-display); }
 .tc-stat__label { font: 700 12px var(--tc-body); color: var(--tc-ink-3); }
-.tc-stat--coral .tc-stat__num { color: var(--tc-coral); }
+.tc-stat--coral .tc-stat__num { color: var(--tc-coral-ink); }
 .tc-stat--teal  .tc-stat__num { color: var(--tc-teal-deep); }
-.tc-stat--lav   .tc-stat__num { color: var(--tc-lav); }
+.tc-stat--lav   .tc-stat__num { color: var(--tc-lav-ink); }
 .tc-stat--red   .tc-stat__num { color: var(--tc-red); }
 
 .tc-line-row {
@@ -1051,16 +1057,16 @@ a.tc-recent-row { color: inherit; text-decoration: none; }
   gap: 10px;
   cursor: pointer;
   min-height: 200px;
-  color: #B49C7E;
+  color: var(--tc-ink-4);
   background: transparent;
   transition: border-color .15s, color .15s;
 }
-.tc-add-tile:hover { border-color: var(--tc-coral); color: var(--tc-coral); }
+.tc-add-tile:hover { border-color: var(--tc-coral); color: var(--tc-coral-ink); }
 .tc-add-tile__plus {
   width: 46px; height: 46px; border-radius: 50%;
   background: var(--tc-coral-bg);
   display: flex; align-items: center; justify-content: center;
-  font: 700 28px var(--tc-display); color: var(--tc-coral);
+  font: 700 28px var(--tc-display); color: var(--tc-coral-ink);
 }
 .tc-add-tile__title { font: 800 15px var(--tc-display); }
 .tc-add-tile__hint  { font: 600 12px var(--tc-body); text-align: center; max-width: 170px; }
@@ -1096,7 +1102,7 @@ a.tc-recent-row { color: inherit; text-decoration: none; }
   font: 800 16px var(--tc-display);
 }
 .tc-rule-row__icon--in  { background: var(--tc-teal-bg); color: var(--tc-teal-deep); }
-.tc-rule-row__icon--out { background: var(--tc-coral-bg); color: var(--tc-coral); }
+.tc-rule-row__icon--out { background: var(--tc-coral-bg); color: var(--tc-coral-ink); }
 .tc-rule-row__title { font: 800 14px var(--tc-display); }
 .tc-rule-row__hint  { font: 600 12px var(--tc-body); color: var(--tc-ink-3); }
 
@@ -1255,7 +1261,7 @@ a.tc-recent-row { color: inherit; text-decoration: none; }
 .tc-pill-btn.is-active { border: 2px solid var(--tc-teal-deep); background: var(--tc-teal-bg); color: var(--tc-teal-lip); }
 
 .tc-role-explainer { font: 800 13px var(--tc-display); }
-.tc-role-explainer--owner  { color: var(--tc-coral-lip); }
+.tc-role-explainer--owner  { color: var(--tc-coral-ink); }
 .tc-role-explainer--admin  { color: var(--tc-teal-deep); }
 .tc-role-explainer--viewer { color: var(--tc-lav-ink); }
 
@@ -1273,7 +1279,7 @@ a.tc-recent-row { color: inherit; text-decoration: none; }
 .tc-trunk-name { display: flex; align-items: center; gap: 9px; }
 .tc-trunk-name h2 { font: 800 20px var(--tc-display); margin: 0; }
 .tc-credit { font: 800 38px var(--tc-display); line-height: 1.1; color: var(--tc-ink); }
-.tc-credit.is-low { color: var(--tc-coral-lip); }
+.tc-credit.is-low { color: var(--tc-coral-ink); }
 .tc-credit-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
 
 .tc-trunk-empty {
@@ -1440,7 +1446,7 @@ a.tc-recent-row { color: inherit; text-decoration: none; }
   font: 800 13px var(--tc-display);
   display: flex; align-items: center; justify-content: center;
 }
-.tc-step-item:nth-child(1) span { background: var(--tc-coral-bg); color: var(--tc-coral); }
+.tc-step-item:nth-child(1) span { background: var(--tc-coral-bg); color: var(--tc-coral-ink); }
 .tc-step-item:nth-child(2) span { background: var(--tc-teal-bg); color: var(--tc-teal-deep); }
 .tc-step-item:nth-child(3) span { background: var(--tc-lav-bg); color: var(--tc-lav-ink); }
 .tc-step-item p { font: 600 14px var(--tc-body); color: #5C4D40; padding-top: 2px; margin: 0; }
@@ -1805,7 +1811,7 @@ div:has(> .tc-win-grid #win-custom:checked) > .tc-win-custom { display: block; }
   font: 800 18px var(--tc-display);
   letter-spacing: .04em;
 }
-.tc-dial--self .tc-dial__num { background: var(--tc-coral-bg); color: var(--tc-coral-lip); }
+.tc-dial--self .tc-dial__num { background: var(--tc-coral-bg); color: var(--tc-coral-ink); }
 .tc-dial__label { display: block; font: 800 14px var(--tc-display); color: var(--tc-ink); }
 .tc-dial__sub { display: block; font: 600 12px/1.4 var(--tc-body); color: var(--tc-ink-3); }
 
@@ -2282,7 +2288,7 @@ div:has(> .tc-win-grid #win-custom:checked) > .tc-win-custom { display: block; }
 .tc-announce__url { word-break: break-all; }
 .tc-announce__code { font: 600 12px/1.5 ui-monospace, monospace; background: var(--tc-sunken-2); border-radius: 12px; padding: 12px; overflow-x: auto; white-space: pre; margin: 10px 0 0; }
 .tc-announce__foot { margin-top: 18px; }
-.tc-link--danger { color: var(--tc-coral-lip); }
+.tc-link--danger { color: var(--tc-coral-ink); }
 .tc-announce__form > .tc-btn { align-self: flex-start; }
 
 /* Icon picker: a button showing the icon, and a panel of emoji and icons. */
@@ -2315,8 +2321,8 @@ div:has(> .tc-win-grid #win-custom:checked) > .tc-win-custom { display: block; }
 .tc-iconpick__opt:hover { background: var(--tc-sunken-2); color: var(--tc-teal-deep); }
 .tc-iconpick__opt.is-on { background: var(--tc-teal); color: #fff; }
 .tc-iconpick__foot { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
-.tc-announce-btn__emoji i { color: var(--tc-coral-lip); }
-.tc-announce__emoji i { color: var(--tc-coral-lip); }
+.tc-announce-btn__emoji i { color: var(--tc-coral-ink); }
+.tc-announce__emoji i { color: var(--tc-coral-ink); }
 .tc-announce__note { margin: -4px 0 2px 26px; }
 
 /* Installed as an app: keep the bottom tabs clear of the iPhone home bar. */
@@ -2422,7 +2428,7 @@ div:has(> .tc-win-grid #win-custom:checked) > .tc-win-custom { display: block; }
     grid-template-columns: minmax(0, 1fr) 340px;
     grid-template-areas: "main side";
   }
-  .tc-split__side { position: sticky; top: 0; max-height: calc(100vh - 140px); overflow-y: auto; }
+  /* Scrolls with the page: a column with a scrollbar of its own felt clunky. */
   .tc-split__side > * { flex-shrink: 0; }
   .tc-split__side .tc-retention { flex-direction: column; align-items: flex-start; }
   .tc-split__side .tc-retention > * { flex: none; }
@@ -2647,6 +2653,8 @@ div:has(> .tc-win-grid #win-custom:checked) > .tc-win-custom { display: block; }
 .tc-wizard-pick { border-color: var(--tc-teal-deep); background: var(--tc-teal-bg); }
 .tc-wizard-pick .tc-provider-row__mark { background: var(--tc-teal-deep); }
 .tc-wizard-pick__go { color: var(--tc-teal-deep); font: 800 18px var(--tc-display); }
+.tc-wizard-group { font: 800 14px var(--tc-display); color: var(--tc-ink); margin: 16px 0 8px; }
+.tc-wizard-group:first-of-type { margin-top: 4px; }
 .tc-wizard-models { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .tc-wizard-models form { display: flex; }
 .tc-wizard-model {
@@ -2730,10 +2738,10 @@ div:has(> .tc-win-grid #win-custom:checked) > .tc-win-custom { display: block; }
 .tc-key-offer__icon { width: 40px; height: 40px; border-radius: 11px; background: var(--tc-teal-deep); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 17px; flex: none; }
 .tc-key-offer__title { font: 800 16px var(--tc-display); color: var(--tc-ink); }
 
-/* An announcement playing by itself: its days and time. The days are chips;
-   the whole row fades while "at a set time" is off. */
+/* An announcement playing by itself: its days and time. The days are chips.
+   Not faded while "at a set time" is off — faded text is too faint to read;
+   the tick box says whether it's on. */
 .tc-announce__when { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 16px; margin: 8px 0 0 26px; }
-.tc-announce__choice:has(input[name="scheduleOn"]:not(:checked)) + .tc-announce__when { opacity: .45; }
 .tc-announce__time { width: auto; min-width: 120px; }
 .tc-daypick { display: flex; flex-wrap: wrap; gap: 6px; }
 .tc-daypick__day input { position: absolute; opacity: 0; pointer-events: none; }
@@ -2746,7 +2754,7 @@ div:has(> .tc-win-grid #win-custom:checked) > .tc-win-custom { display: block; }
 .tc-daypick__day input:focus-visible + span { outline: 2px solid var(--tc-teal-deep); outline-offset: 2px; }
 
 /* Record, beside an audio upload's "choose a file". Red while recording. */
-.tc-rec-btn.is-recording { background: var(--tc-coral); border-color: var(--tc-coral); color: #fff; }
+.tc-rec-btn.is-recording { background: var(--tc-coral); border-color: var(--tc-coral); color: var(--tc-on-coral); }
 .tc-rec-btn.is-recording .fa-microphone { animation: tc-rec-pulse 1s ease-in-out infinite; }
 @keyframes tc-rec-pulse { 50% { opacity: .35; } }
 
@@ -2780,3 +2788,199 @@ div:has(> .tc-win-grid #win-custom:checked) > .tc-win-custom { display: block; }
 .tc-vm-box .tc-row { gap: 8px; align-items: center; }
 .tc-vm-box__label { font: 800 12px var(--tc-body); color: var(--tc-ink-3); white-space: nowrap; }
 .tc-vm-box__pick { width: auto; max-width: 100%; padding-top: 7px; padding-bottom: 7px; font-size: 13px; }
+
+/* The version, on the System page: a newer one stands out. */
+.tc-update.is-new { border: 2px solid var(--tc-coral-pale); background: var(--tc-coral-bg); }
+
+/* Read by a screen reader, not shown. */
+.tc-sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+.tc-mt-8 { margin-top: 8px; }
+
+/* Nav glyphs drawn with an icon rather than CSS shapes. */
+.tc-nav-icon--fa { background: var(--tc-sunken-2); color: var(--tc-ink-3); font-size: 14px; }
+.tc-nav-btn.is-active .tc-nav-icon--fa { background: var(--tc-teal-bg); color: var(--tc-teal-deep); }
+
+/* Keeping a voicemail for good — the star beside it. */
+.tc-btn--icon { display: inline-flex; align-items: center; justify-content: center; }
+.tc-btn--icon-kept { color: var(--tc-sun-ink); border-color: var(--tc-sun); background: var(--tc-sun-bg); text-decoration: none; }
+.tc-btn--icon-kept:hover { color: var(--tc-sun-ink); border-color: var(--tc-sun-ink-2); background: var(--tc-sun-bg); }
+
+/* Keepsakes, by year. */
+.tc-keepsakes__year + .tc-keepsakes__year { margin-top: 18px; }
+.tc-keepsakes__head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 4px 2px 10px; }
+.tc-keepsakes__title { font: 800 22px var(--tc-display); margin: 0; }
+.tc-keepsakes__count { font: 700 13px var(--tc-body); color: var(--tc-ink-3); flex: 1; }
+.tc-keepsake__avatar { background: var(--tc-sun); color: var(--tc-on-coral); }
+.tc-keepsake__caption { margin-top: 10px; }
+.tc-keepsake__caption .tc-input { font-weight: 700; }
+.tc-keepsake__name { margin-top: 10px; font: 800 15px var(--tc-display); }
+
+/* The times tables quiz. */
+.tc-quiz-tables { border: 0; padding: 0; margin: 0; }
+.tc-quiz-tables__grid { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.tc-quiz-table { position: relative; }
+.tc-quiz-table input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.tc-quiz-table span {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; border-radius: 11px;
+  border: 1.5px solid var(--tc-border-3); background: var(--tc-sunken-2);
+  font: 800 15px var(--tc-display); color: var(--tc-ink-3);
+}
+.tc-quiz-table input:checked + span { background: var(--tc-teal-deep); border-color: var(--tc-teal-deep); color: #fff; }
+.tc-quiz-table input:focus-visible + span { outline: 3px solid var(--tc-teal); outline-offset: 2px; }
+
+.tc-quiz-phones { display: grid; gap: 16px; margin-top: 10px; }
+.tc-quiz-phone__head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.tc-quiz-bars { display: grid; gap: 6px; }
+.tc-quiz-bar { display: grid; grid-template-columns: 72px 1fr 44px; align-items: center; gap: 10px; }
+.tc-quiz-bar__label { font: 800 13px var(--tc-display); color: var(--tc-ink-2); }
+.tc-quiz-bar__track { height: 10px; border-radius: 6px; background: var(--tc-sunken-2); border: 1px solid var(--tc-border-3); overflow: hidden; }
+.tc-quiz-bar__fill { display: block; height: 100%; background: var(--tc-teal); border-radius: 6px; }
+.tc-quiz-bar__pct { font: 700 12px var(--tc-body); color: var(--tc-ink-3); text-align: right; }
+
+.tc-quiz-games { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 8px; }
+.tc-quiz-games li { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.tc-quiz-games__score {
+  min-width: 52px; text-align: center; padding: 5px 8px; border-radius: 10px;
+  background: var(--tc-sunken-2); border: 1.5px solid var(--tc-border-3);
+  font: 800 14px var(--tc-display);
+}
+.tc-quiz-games__score.is-perfect { background: var(--tc-sun-bg); border-color: var(--tc-sun); color: var(--tc-sun-ink); }
+
+/* The animal riddles, on the Games page. */
+.tc-riddles summary { cursor: pointer; }
+.tc-riddles__list { margin: 8px 0 0; padding-left: 22px; display: grid; gap: 6px; font-size: 13px; color: var(--tc-ink-2); }
+.tc-riddles__answer { color: var(--tc-teal-deep); }
+
+/* Sleeps till Christmas, on the Games page. */
+.tc-xmas__tree { color: var(--tc-teal-deep); }
+.tc-xmas__today { margin: 8px 0 4px; padding: 10px 14px; border-radius: 12px; background: var(--tc-sun-bg); font: 700 15px var(--tc-display); color: var(--tc-ink-2); }
+.tc-xmas__ring { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-weight: 700; }
+.tc-xmas__ring .tc-input { width: auto; min-width: 150px; max-width: 170px; }
+.tc-xmas-page { max-width: 760px; }
+
+/* The radio's songs. */
+.tc-radio-song.is-off { opacity: .6; }
+.tc-radio-song__title { font: 800 15px var(--tc-display); padding: 6px 10px; }
+
+/* An upload on its way: a bar while the file goes up, then a wheel while the
+   server prepares it — see uploadStatus() in twocans.js. */
+.tc-upload { flex-basis: 100%; display: flex; align-items: center; gap: 10px; margin-top: 10px; min-width: 200px; }
+.tc-upload__track { flex: 1; height: 8px; border-radius: 5px; background: var(--tc-sunken-2); border: 1px solid var(--tc-border-3); overflow: hidden; }
+.tc-upload__fill { display: block; width: 0; height: 100%; background: var(--tc-teal); border-radius: 5px; transition: width .2s ease; }
+.tc-upload__text { font: 700 13px var(--tc-body); color: var(--tc-ink-3); white-space: nowrap; }
+.tc-upload__spin {
+  display: none; flex: none; width: 16px; height: 16px; border-radius: 50%;
+  border: 2.5px solid var(--tc-teal-bg); border-top-color: var(--tc-teal-deep);
+  animation: tc-spin .8s linear infinite;
+}
+.tc-upload.is-preparing .tc-upload__spin { display: block; }
+.tc-upload.is-preparing .tc-upload__fill { background: var(--tc-teal-pale); }
+@media (prefers-reduced-motion: reduce) { .tc-upload__spin { animation-duration: 2.4s; } }
+/* Nothing else in the form can be pressed while it's sending. */
+form.is-sending label, form.is-sending button, form.is-sending input, form.is-sending select { pointer-events: none; opacity: .6; }
+form.is-sending .tc-upload { opacity: 1; }
+
+/* Reordering by dragging a handle — see data-tc-sortable in twocans.js. */
+.tc-sort-handle {
+  flex: none; width: 30px; height: 38px; padding: 0; border: 0; border-radius: 9px;
+  background: transparent; color: var(--tc-ink-4); cursor: grab; touch-action: none;
+  display: inline-flex; align-items: center; justify-content: center; font-size: 16px;
+}
+.tc-sort-handle:hover, .tc-sort-handle:focus-visible { background: var(--tc-sunken-2); color: var(--tc-teal-deep); }
+.tc-sort-handle:focus-visible { outline: 3px solid var(--tc-teal); outline-offset: 1px; }
+[data-tc-sortable].is-sorting { cursor: grabbing; user-select: none; }
+[data-tc-sort-id] { position: relative; }
+[data-tc-sort-id].is-dragging { z-index: 3; box-shadow: 0 14px 34px rgba(58, 42, 34, .22); cursor: grabbing; }
+[data-tc-sort-id].is-dragging .tc-sort-handle { cursor: grabbing; color: var(--tc-teal-deep); }
+/* In order (not shuffled): each song's place in it. */
+.tc-radio-list.is-ordered { counter-reset: song; }
+.tc-radio-list.is-ordered .tc-radio-song { counter-increment: song; }
+.tc-radio-list.is-ordered .tc-radio-song .tc-sort-handle::after {
+  content: counter(song); font: 800 11px var(--tc-display); margin-left: 2px; color: var(--tc-ink-3);
+}
+.tc-radio-list.is-ordered .tc-sort-handle { width: 40px; }
+
+/* Radio stations, and the tags on each song. */
+.tc-station { display: flex; align-items: flex-start; gap: 10px; padding: 12px 0; border-top: 1px solid var(--tc-border-3); }
+.tc-station:first-of-type { border-top: 0; }
+.tc-station__key {
+  flex: none; width: 30px; height: 30px; border-radius: 9px; margin-top: 4px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--tc-teal-deep); color: #fff; font: 800 15px var(--tc-display);
+}
+.tc-station__name { font: 800 15px var(--tc-display); padding: 6px 10px; }
+.tc-station__voice { align-items: center; gap: 8px; }
+.tc-station__shuffle { display: flex; align-items: center; gap: 6px; margin-top: 6px; color: var(--tc-ink-3); font-size: 13px; }
+.tc-song-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.tc-song-tag {
+  padding: 4px 10px; border-radius: 999px; border: 1.5px solid var(--tc-border-3);
+  background: var(--tc-card); color: var(--tc-ink-3); font: 700 12px var(--tc-body); cursor: pointer;
+}
+.tc-song-tag:hover { border-color: var(--tc-teal-deep); color: var(--tc-teal-deep); }
+.tc-song-tag.is-on { background: var(--tc-teal-bg); border-color: var(--tc-teal-deep); color: var(--tc-teal-deep); }
+.tc-song-tag:focus-visible { outline: 3px solid var(--tc-teal); outline-offset: 2px; }
+
+/* A desk phone's handset left off the hook. */
+.tc-offhook {
+  margin-top: 8px; padding: 8px 12px; border-radius: 10px;
+  background: var(--tc-sun-bg); color: var(--tc-sun-ink); font: 700 13px var(--tc-body);
+}
+
+/* A desk phone setting changed from what's best for a child's phone. */
+.tc-changed { margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: var(--tc-sun-bg); color: var(--tc-sun-ink); font: 700 11px var(--tc-body); vertical-align: middle; }
+.tc-untested { display: inline-block; padding: 1px 8px; border-radius: 999px; background: var(--tc-lav-bg); color: var(--tc-lav-ink); font: 700 11px var(--tc-body); vertical-align: middle; letter-spacing: .02em; }
+.tc-wizard-model .tc-untested { margin-top: 2px; }
+.tc-phone-settings { max-width: 760px; }
+
+/* Numbers to dial, side by side below the phone's two columns. */
+.tc-dial-card { margin-top: 0; }
+.tc-dial-grid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.tc-dial-grid .tc-dial + .tc-dial { margin-top: 0; }
+.tc-mac-input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .04em; }
+
+/* Pausing a phone for a while. */
+.tc-pause { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 14px 18px; }
+.tc-pause__title { font: 800 15px var(--tc-display); }
+.tc-pause__title .fa-circle-pause { color: var(--tc-ink-3); margin-right: 4px; }
+.tc-pause.is-paused { background: var(--tc-sun-bg); border-color: var(--tc-sun); }
+.tc-pause.is-paused .fa-circle-pause { color: var(--tc-sun-ink); }
+
+/* The week page. */
+.tc-week__nav { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.tc-week__title { margin: 0; text-align: center; font: 800 20px var(--tc-display); display: flex; flex-direction: column; }
+.tc-week__grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+.tc-week__head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.tc-week__name { font: 800 18px var(--tc-display); color: var(--tc-ink); text-decoration: none; }
+.tc-week__name:hover { color: var(--tc-teal-deep); }
+.tc-week__stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 12px 0; }
+.tc-week__stat { background: var(--tc-sunken-2); border-radius: 12px; padding: 10px 6px; text-align: center; display: flex; flex-direction: column; }
+.tc-week__stat b { font: 800 22px var(--tc-display); color: var(--tc-teal-deep); }
+.tc-week__stat span { font: 700 11px var(--tc-body); color: var(--tc-ink-3); }
+.tc-week__sub { font: 800 13px var(--tc-display); margin: 4px 0 6px; color: var(--tc-ink-2); }
+.tc-week__people { margin: 0 0 8px; padding-left: 20px; display: grid; gap: 4px; }
+.tc-week__notes { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; font-size: 13px; color: var(--tc-ink-2); }
+.tc-week__notes .fa-solid { width: 16px; color: var(--tc-ink-3); }
+
+/* Timer & clock. */
+.tc-helpers { max-width: 760px; }
+.tc-timers { list-style: none; padding: 0; margin: 8px 0 12px; display: grid; gap: 8px; }
+.tc-timers li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--tc-sunken-2); }
+
+/* Notifications on your own devices. */
+.tc-push__devices { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 8px; }
+.tc-push__devices li { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 12px; background: var(--tc-sunken-2); }
+.tc-push__devices li.is-this { outline: 2px solid var(--tc-teal); }
+.tc-push__devices li.is-this b::after { content: ' (this one)'; font-weight: 600; color: var(--tc-teal-deep); }
+.tc-push__iphone { margin-top: 10px; }
+.tc-push [hidden] { display: none !important; }
+
+/* A phone's wallpaper, on the shape of its screen. */
+.tc-wallpaper { display: grid; grid-template-columns: minmax(0, 260px) minmax(0, 1fr); gap: 16px; align-items: start; margin-top: 12px; }
+.tc-wallpaper__screen { position: relative; border-radius: 10px; overflow: hidden; background: #1f1a17; border: 6px solid #2b2522; box-shadow: 0 2px 8px rgba(0, 0, 0, .15); }
+.tc-wallpaper__screen img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.tc-wallpaper__none { position: absolute; inset: 0; display: grid; place-items: center; padding: 8px; text-align: center; color: #f3e9dd; font: 700 13px var(--tc-body); }
+@media (max-width: 640px) { .tc-wallpaper { grid-template-columns: 1fr; } }

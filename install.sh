@@ -18,9 +18,9 @@
 #
 # To update later:  git pull && ./install.sh
 #
-# It does not install Docker for you — doing that from a script is invasive,
-# differs per distro and trips over existing installs — so it checks, and tells
-# you what to run instead. It only uses sudo for firewall rules, and asks first.
+# If Docker or another tool is missing it offers to install it, the way that
+# suits this Linux (see scripts/platform.sh), and asks before anything that
+# uses sudo. When something can't be fixed here, it says what to do.
 #
 set -euo pipefail
 
@@ -45,6 +45,7 @@ for arg in "$@"; do
 done
 
 source "$(dirname "$0")/scripts/ui.sh"
+source "$(dirname "$0")/scripts/platform.sh"
 
 # ---------------------------------------------------------------- validators
 is_ipv4() {
@@ -109,15 +110,17 @@ write_secrets() {
 # single web container, or the separate PHP one of a development setup.
 if $RESET_OWNER; then
   APP_CONTAINER=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -xE 'twocans-(web|php)' | head -1 || true)
-  [[ -n "$APP_CONTAINER" ]] || die "twocans isn't running — start it with ./install.sh first."
+  [[ -n "$APP_CONTAINER" ]] || fail "twocans isn't running, so its Owner account can't be reset yet." \
+    "Start it: ./install.sh" "Then run ./install.sh --reset-owner again"
   TTY_FLAGS=(-i); [[ -t 0 && -t 1 ]] && TTY_FLAGS=(-it)
   exec docker exec "${TTY_FLAGS[@]}" "$APP_CONTAINER" php /var/www/html/bin/reset-owner.php
 fi
 
 if $SECRETS_ONLY; then
-  [[ -f "$ENV_FILE" ]] || { echo "No .env here — run ./install.sh first." >&2; exit 1; }
+  [[ -f "$ENV_FILE" ]] || fail "twocans hasn't been set up in this folder yet (there's no .env)." "Run ./install.sh first"
   set -a; . "./$ENV_FILE"; set +a
-  [[ -n "${ARI_PASSWORD:-}" && -n "${AMI_PASSWORD:-}" ]] || { echo ".env has no ARI_PASSWORD / AMI_PASSWORD." >&2; exit 1; }
+  [[ -n "${ARI_PASSWORD:-}" && -n "${AMI_PASSWORD:-}" ]] || fail ".env is missing Asterisk's passwords (ARI_PASSWORD and AMI_PASSWORD)." \
+    "Run ./install.sh — it adds any that are missing"
   write_secrets
   echo "  Asterisk's password files are in $SECRETS_DIR/ ($($SECRETS_CHANGED && echo updated || echo unchanged))."
   exit 0
@@ -130,7 +133,7 @@ fi
 INSTALL_LOG=""
 if mkdir -p storage/reports 2>/dev/null; then
   INSTALL_LOG="storage/reports/install-$(date +%Y%m%d-%H%M%S)$($CHECK_ONLY && echo -check || true).log"
-  if : > "$INSTALL_LOG" 2>/dev/null; then
+  if { : > "$INSTALL_LOG"; } 2>/dev/null; then
     chmod 600 "$INSTALL_LOG"
     { echo "twocans install.sh $* — $(date '+%Y-%m-%d %H:%M %Z') — twocans $(cat backend/VERSION 2>/dev/null)"; echo; } >> "$INSTALL_LOG"
     # awk rather than sed -u / grep --line-buffered, which BusyBox (Alpine)
@@ -159,6 +162,9 @@ if [[ "$(uname -s)" != Linux ]]; then
   note "Docker Desktop on macOS and Windows can't pass phone calls (SIP and RTP)"
   note "through reliably. twocans is meant for a Linux machine or a Raspberry Pi."
   confirm "Carry on anyway?" n || exit 1
+else
+  ok "$OS_NAME"
+  [[ "$OS_FAMILY" == unknown ]] && note "twocans hasn't been tried on this Linux, but it should work if Docker does."
 fi
 
 # The published images come built for Intel/AMD and for ARM (a Raspberry Pi),
@@ -169,22 +175,70 @@ ARM=false
 case "$(uname -m)" in
   x86_64|amd64) ok "$(uname -m) — using the published images" ;;
   aarch64|arm64) ARM=true; ok "$(uname -m) (ARM)" ;;
-  *) die "$(uname -m) isn't supported — twocans runs on 64-bit Intel/AMD or ARM." ;;
+  armv6l|armv7l|armhf)
+    fail "This is a 32-bit system, and twocans needs a 64-bit one." \
+      "On a Raspberry Pi (3, 4 or 5): put the 64-bit Raspberry Pi OS on its card — in Raspberry Pi Imager, choose 'Raspberry Pi OS (64-bit)'" \
+      "A Raspberry Pi 2 or older, or a Pi Zero (not Zero 2), can't run it — they're 32-bit only" \
+      "Then run the installer again" ;;
+  i386|i486|i586|i686)
+    fail "This is a 32-bit PC, and twocans needs a 64-bit one." \
+      "If the processor is 64-bit, reinstall Linux in its 64-bit (amd64 / x86_64) version" \
+      "Then run the installer again" ;;
+  *)
+    fail "This machine's processor ($(uname -m)) isn't one twocans runs on." \
+      "twocans needs a 64-bit Intel/AMD PC or a 64-bit ARM board, like a Raspberry Pi 3, 4 or 5" ;;
 esac
+# A 64-bit kernel under a 32-bit system (a Raspberry Pi with 32-bit Raspberry
+# Pi OS can be both): Docker would pull 32-bit images, which don't exist.
+if $ARM && [[ "$(userland_bits)" == 32 ]]; then
+  fail "This Raspberry Pi is running a 32-bit system, and twocans needs the 64-bit one." \
+    "Put the 64-bit Raspberry Pi OS on its card — in Raspberry Pi Imager, choose 'Raspberry Pi OS (64-bit)'" \
+    "Then run the installer again"
+fi
 
-MISSING=()
-need() { command -v "$1" >/dev/null 2>&1 || MISSING+=("$1 ($2)"); }
-need curl "curl"
-need tar "tar"
-need ss "iproute2"
-need ip "iproute2"
-need awk "gawk or mawk"
-need od "coreutils"
+MISSING=(); MISSING_PKGS=()
+need() {
+  command -v "$1" >/dev/null 2>&1 && return 0
+  MISSING+=("$1")
+  local p; p=$(pkg_name "$2")
+  [[ " ${MISSING_PKGS[*]} " == *" $p "* ]] || MISSING_PKGS+=("$p")
+}
+need curl curl
+need tar tar
+need ss iproute2
+need ip iproute2
+need awk gawk
+need od coreutils
 if ((${#MISSING[@]})); then
   bad "Missing: ${MISSING[*]}"
-  note "Install them with your package manager, e.g. sudo apt install curl iproute2"
-  exit 1
+  INSTALL_TOOLS=$(pkg_install_cmd "${MISSING_PKGS[@]}")
+  if [[ -n "$INSTALL_TOOLS" ]] && ! $CHECK_ONLY && $CAN_PROMPT && $ROOT_OK \
+    && confirm "Install them now? ($INSTALL_TOOLS)" y; then
+    quietly "Installing ${MISSING_PKGS[*]}" bash -c "$INSTALL_TOOLS"
+    for t in "${MISSING[@]}"; do
+      command -v "$t" >/dev/null 2>&1 || fail "$t still isn't there after installing ${MISSING_PKGS[*]}." \
+        "Install whichever package provides '$t' on $OS_NAME" "Then run ./install.sh again"
+    done
+  elif [[ -n "$INSTALL_TOOLS" ]]; then
+    fail "Some tools twocans needs aren't installed: ${MISSING[*]}." \
+      "Install them: ${INSTALL_TOOLS}" \
+      "Then run ./install.sh again"
+  else
+    fail "Some tools twocans needs aren't installed: ${MISSING[*]}." \
+      "Install these with your package manager: ${MISSING_PKGS[*]}" \
+      "Then run ./install.sh again"
+  fi
 fi
+# Too little room for the images at all (about 2 GB) stops here, before
+# anything's fetched; how much there is, and the memory, are shown later.
+FREE_MB=$(df -Pm . 2>/dev/null | awk 'NR == 2 {print $4}' || echo "")
+if [[ -n "$FREE_MB" ]] && (( FREE_MB < 2500 )) && ! $CHECK_ONLY; then
+  fail "There isn't enough disk space here: ${FREE_MB} MB free, and twocans needs about 3 GB." \
+    "Free some space — if Docker's installed, 'docker system prune' clears its old leftovers" \
+    "Or put twocans on a bigger disk (with get.sh: TWOCANS_DIR=/path/on/the/disk)" \
+    "Check how much is free with: df -h"
+fi
+
 ok "curl, tar, ss and ip"
 command -v git >/dev/null 2>&1 && ok "git — for updates (./twocans update)" \
   || warn "git isn't installed — you'll need it to update twocans later"
@@ -196,61 +250,86 @@ ME=$(id -un)
 # Carry on in this same session once we're in the docker group — a new group
 # only reaches new logins, and nobody wants to log out halfway through.
 rerun_with_docker_group() {
-  note "Carrying on with your new docker group (it applies to new logins from now on)."
-  exec sg docker -c "$(printf '%q ' "$0" "$@")"
+  if command -v sg >/dev/null 2>&1; then
+    note "Carrying on with your new docker group (it applies to new logins from now on)."
+    exec sg docker -c "$(printf '%q ' "$0" "$@")"
+  fi
+  fail "You've been added to the docker group, but it only applies after logging in again." \
+    "Log out and back in (or restart this machine)" \
+    "Run ./install.sh again"
+}
+
+# Join the docker group, so Docker works without sudo.
+join_docker_group() {
+  if [[ $EUID -ne 0 ]] && ! id -nG "$ME" | tr ' ' '\n' | grep -qx docker; then
+    $SUDO usermod -aG docker "$ME" 2>/dev/null || $SUDO addgroup "$ME" docker 2>/dev/null \
+      || fail "Couldn't add $ME to the docker group." "Add yourself: sudo usermod -aG docker $ME" "Log out and back in, then run ./install.sh again"
+    ok "added $ME to the docker group"
+    rerun_with_docker_group "$@"
+  fi
 }
 
 if ! command -v docker >/dev/null 2>&1; then
   bad "Docker isn't installed."
+  HOW=$(docker_install_text)
+  if [[ -z "$HOW" ]]; then
+    fail "Docker isn't installed, and this installer doesn't know how to install it on $OS_NAME." \
+      "Install Docker Engine and its compose plugin by hand: https://docs.docker.com/engine/install/" \
+      "Then run ./install.sh again"
+  fi
   if ! $CHECK_ONLY && $CAN_PROMPT && [[ "$(uname -s)" == Linux ]] \
-    && confirm "Install it now, with Docker's official script (get.docker.com)? (uses sudo)" y; then
-    GET_DOCKER=$(mktemp)
-    curl -fsSL https://get.docker.com -o "$GET_DOCKER" || die "Couldn't download Docker's install script — check this machine is online."
+    && confirm "Install it now, $HOW? (uses sudo)" y; then
+    need_root "Installing Docker"
     note "This takes a few minutes; sudo may ask for your password first."
-    sudo -v || die "sudo is needed to install Docker."
-    quietly "Installing Docker" sudo sh "$GET_DOCKER"
-    rm -f "$GET_DOCKER"
-    sudo systemctl enable --now docker >/dev/null 2>&1 || true
+    [[ "$SUDO" != sudo ]] || sudo -v || fail "Installing Docker needs your password for sudo." "Run ./install.sh again and type your password when asked"
+    quietly "Installing Docker" install_docker
+    service_enable_now docker >/dev/null 2>&1 || true
+    command -v docker >/dev/null 2>&1 || fail "Docker still isn't there after installing it." \
+      "Install it by hand: https://docs.docker.com/engine/install/" "Then run ./install.sh again"
     ok "Docker installed"
-    if ! id -nG "$ME" | tr ' ' '\n' | grep -qx docker; then
-      sudo usermod -aG docker "$ME" && ok "added $ME to the docker group"
-      rerun_with_docker_group "$@"
-    fi
+    join_docker_group "$@"
   else
-    note "Install it with Docker's official script, then run ./install.sh again:"
-    note "  curl -fsSL https://get.docker.com | sudo sh"
-    note "(or see https://docs.docker.com/engine/install/)"
-    exit 1
+    fail "twocans needs Docker to run." \
+      "Run ./install.sh (in a terminal) and say yes when it offers to install it — it'll install it $HOW" \
+      "Or install it yourself: https://docs.docker.com/engine/install/ — then run ./install.sh again"
   fi
 fi
 ok "docker $(docker --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
 
 if ! docker compose version >/dev/null 2>&1; then
-  bad "Docker Compose v2 (the 'docker compose' command) is missing."
-  note "Docker from your distribution's own packages can lack it. Docker's official"
-  note "script installs it: curl -fsSL https://get.docker.com | sudo sh"
-  note "(on Ubuntu, 'sudo apt install docker-compose-v2' also works)"
-  exit 1
+  bad "Docker Compose (the 'docker compose' command) is missing."
+  note "Docker from a distribution's own packages often comes without it."
+  if ! $CHECK_ONLY && $CAN_PROMPT && $ROOT_OK && confirm "Install it now? (uses sudo)" y; then
+    quietly "Installing Docker Compose" install_compose
+  fi
+  docker compose version >/dev/null 2>&1 || fail "Docker Compose (the 'docker compose' command) is missing." \
+    "Install Docker's compose plugin: https://docs.docker.com/compose/install/linux/" \
+    "Then run ./install.sh again"
 fi
 ok "docker compose $(docker compose version --short 2>/dev/null || echo v2)"
 
 if ! docker info >/dev/null 2>&1; then
   if docker info 2>&1 | grep -qi "permission denied"; then
     bad "You don't have permission to use Docker."
-    if ! $CHECK_ONLY && $CAN_PROMPT && confirm "Add yourself to the docker group? (uses sudo)" y; then
-      sudo usermod -aG docker "$ME" && ok "added $ME to the docker group"
-      rerun_with_docker_group "$@"
+    if ! $CHECK_ONLY && $CAN_PROMPT && $ROOT_OK && confirm "Add yourself to the docker group? (uses sudo)" y; then
+      join_docker_group "$@"
     fi
-    note "To fix it: sudo usermod -aG docker \$USER — then log out and back in."
-    exit 1
+    fail "You don't have permission to use Docker." \
+      "Add yourself to the docker group: sudo usermod -aG docker $ME" \
+      "Log out and back in" \
+      "Run ./install.sh again"
   fi
   bad "Docker isn't running."
-  if ! $CHECK_ONLY && $CAN_PROMPT && confirm "Start it, and have it start on boot? (uses sudo)" y; then
-    sudo systemctl enable --now docker >/dev/null 2>&1 || die "That didn't work — try: sudo systemctl start docker"
-    wait_for "Waiting for Docker" 30 docker info || die "Docker didn't come up — try: sudo systemctl status docker"
+  if ! $CHECK_ONLY && $CAN_PROMPT && $ROOT_OK && confirm "Start it, and have it start on boot? (uses sudo)" y; then
+    service_enable_now docker >/dev/null 2>&1 || fail "Docker wouldn't start." \
+      "Start it: $(service_start_text docker)" \
+      "If that fails, see why: $([[ $INIT == systemd ]] && echo 'sudo journalctl -u docker -n 50' || echo 'sudo cat /var/log/docker.log')" \
+      "Then run ./install.sh again"
+    wait_for "Waiting for Docker" 30 docker info || fail "Docker started, but isn't answering." \
+      "Give it a minute, then run ./install.sh again" \
+      "If it still isn't: $([[ $INIT == systemd ]] && echo 'sudo systemctl status docker' || echo "$(service_start_text docker)")"
   else
-    note "Start it with: sudo systemctl enable --now docker"
-    exit 1
+    fail "Docker isn't running." "Start it: $(service_start_text docker)" "Then run ./install.sh again"
   fi
 fi
 ok "docker is running and usable"
@@ -284,10 +363,12 @@ fi
 SUDO_OK=false
 can_sudo() {
   $SUDO_OK && return 0
+  [[ $EUID -eq 0 ]] && { SUDO_OK=true; return 0; }
+  $ROOT_OK || return 1
   if sudo -n true 2>/dev/null; then SUDO_OK=true; return 0; fi
   $CAN_PROMPT || return 1
   confirm "Read the $1 rules with sudo? (read-only; it may ask for your password)" y || return 1
-  sudo -v && SUDO_OK=true
+  if [[ "$SUDO" == sudo ]]; then sudo -v && SUDO_OK=true; else SUDO_OK=true; fi
 }
 
 # ============================================================== uninstall
@@ -298,7 +379,8 @@ can_sudo() {
 # can be deleted by hand afterwards, or installed into again.
 if $UNINSTALL; then
   section "Uninstall"
-  $CAN_PROMPT || die "Uninstalling asks questions, so it needs a terminal (and not --yes)."
+  $CAN_PROMPT || fail "Uninstalling asks before it deletes anything, so it needs you at a terminal." \
+    "Run it in a terminal, without --yes: ./install.sh --uninstall"
 
   echo "  This stops twocans and removes its containers."
   confirm "Go ahead?" n || { echo "  Nothing changed."; exit 0; }
@@ -381,7 +463,7 @@ if $UNINSTALL; then
 
   if $REMOVE_NAME; then
     sudo sed -i '/^# twocans (install.sh)$/{N;d}' /etc/avahi/hosts \
-      && { sudo systemctl reload avahi-daemon 2>/dev/null || true; } && ok "name no longer announced"
+      && { $SUDO systemctl reload avahi-daemon 2>/dev/null || $SUDO avahi-daemon -r 2>/dev/null || true; } && ok "name no longer announced"
   fi
 
   if ((${#UFW_RULES[@]})); then
@@ -610,7 +692,10 @@ if (( PORT_PROBLEMS > 0 )); then
   if $CHECK_ONLY; then
     warn "Ports to sort out before installing — see above."
   else
-    die "Free the ports above, then run ./install.sh again."
+    fail "Some ports twocans needs are already in use (see above)." \
+      "Stop whatever's using them — 'sudo ss -lptun' shows which program has each port" \
+      "If it's an old twocans or another phone system, stop it first" \
+      "Then run ./install.sh again"
   fi
 fi
 
@@ -689,7 +774,7 @@ FW_STATUS=""          # the rules, when we could read them
 FW_MISSING=()         # needs not covered, as FW_NEEDS entries
 if command -v ufw >/dev/null 2>&1; then
   FIREWALL=ufw
-  can_sudo ufw && FW_STATUS=$(sudo ufw status verbose 2>/dev/null || true)
+  can_sudo ufw && FW_STATUS=$($SUDO ufw status verbose 2>/dev/null || true)
   if [[ -n "$FW_STATUS" ]]; then
     grep -q "^Status: active" <<< "$FW_STATUS" || FIREWALL=ufw-off
   else
@@ -698,8 +783,8 @@ if command -v ufw >/dev/null 2>&1; then
   fi
 elif command -v firewall-cmd >/dev/null 2>&1 && systemctl is-active --quiet firewalld 2>/dev/null; then
   FIREWALL=firewalld
-  can_sudo firewalld && FW_STATUS=$(sudo firewall-cmd --list-ports 2>/dev/null || true)
-elif command -v nft >/dev/null 2>&1 && sudo -n nft list ruleset 2>/dev/null | grep -qE 'hook input.*policy drop'; then
+  can_sudo firewalld && FW_STATUS=$($SUDO firewall-cmd --list-ports 2>/dev/null || true)
+elif command -v nft >/dev/null 2>&1 && { [[ $EUID -eq 0 ]] && nft list ruleset || sudo -n nft list ruleset; } 2>/dev/null | grep -qE 'hook input.*policy drop'; then
   FIREWALL=nftables
 fi
 
@@ -776,7 +861,8 @@ case "$FIREWALL" in
         for c in "${FW_COMMANDS[@]}"; do note "  $c"; done
         if ! $CHECK_ONLY && confirm "Add these rules now? (uses sudo)" y; then
           for c in "${FW_COMMANDS[@]}"; do
-            eval "$c" >/dev/null || warn "that didn't work: $c"
+            # Shown with sudo; run as root, without it.
+            $SUDO bash -c "${c#sudo }" >/dev/null || warn "that didn't work: $c"
           done
           ok "firewall rules added"
         fi
@@ -805,21 +891,19 @@ fi
 
 # 2. Containers come back after a restart only if Docker itself starts at boot.
 #    Socket activation isn't enough: it waits for someone to run docker.
-if command -v systemctl >/dev/null 2>&1 && systemctl cat docker.service >/dev/null 2>&1; then
-  DOCKER_BOOT=$(systemctl is-enabled docker.service 2>/dev/null || true)
-  if [[ "$DOCKER_BOOT" == enabled ]]; then
-    ok "Docker starts when the machine boots"
+DOCKER_BOOT=$(service_on_boot docker)
+if [[ "$DOCKER_BOOT" == yes ]]; then
+  ok "Docker starts when the machine boots"
+elif [[ "$DOCKER_BOOT" == no ]]; then
+  warn "Docker doesn't start when the machine boots — after a power cut the line stays down"
+  if ! $CHECK_ONLY && $ROOT_OK && confirm "Make Docker start on boot? (uses sudo)" y; then
+    service_enable_now docker >/dev/null 2>&1 && ok "Docker will start on boot" \
+      || warn "that didn't work — try: $(service_start_text docker)"
   else
-    warn "Docker doesn't start when the machine boots — after a power cut the line stays down"
-    if ! $CHECK_ONLY && confirm "Make Docker start on boot? (uses sudo)" y; then
-      sudo systemctl enable docker.service >/dev/null 2>&1 && ok "Docker will start on boot" \
-        || warn "that didn't work — try: sudo systemctl enable docker"
-    else
-      note "To fix it: sudo systemctl enable docker"
-    fi
+    note "To fix it: $(service_start_text docker)"
   fi
 else
-  note "Couldn't check whether Docker starts on boot (no systemd here) — make sure it does."
+  note "Couldn't check whether Docker starts on boot here — make sure it does."
 fi
 
 # 3. Certificates and phone logins both fail when the clock drifts.
@@ -850,11 +934,14 @@ MDNS_FQDN="${MDNS_NAME}.local"
 MDNS_URL="http://${MDNS_FQDN}$([[ "$HTTP_PORT" == 80 ]] || echo ":$HTTP_PORT")"
 name_ips() { getent ahostsv4 "$1" 2>/dev/null | awk '{print $1}' | sort -u || true; }
 publish_name() {
-  sudo sh -c "sed -i '/^# twocans (install.sh)\$/{N;d}' /etc/avahi/hosts 2>/dev/null; printf '# twocans (install.sh)\n%s %s\n' '$LAN_IP' '$MDNS_FQDN' >> /etc/avahi/hosts" \
-    && { sudo systemctl reload avahi-daemon 2>/dev/null || sudo avahi-daemon -r 2>/dev/null; }
+  $SUDO sh -c "sed -i '/^# twocans (install.sh)\$/{N;d}' /etc/avahi/hosts 2>/dev/null; printf '# twocans (install.sh)\n%s %s\n' '$LAN_IP' '$MDNS_FQDN' >> /etc/avahi/hosts" \
+    && { $SUDO systemctl reload avahi-daemon 2>/dev/null || $SUDO rc-service avahi-daemon reload 2>/dev/null || $SUDO avahi-daemon -r 2>/dev/null; }
 }
 AVAHI_ON=false
-systemctl is-active --quiet avahi-daemon 2>/dev/null && AVAHI_ON=true
+avahi_running() {
+  { systemctl is-active --quiet avahi-daemon || rc-service avahi-daemon status || pgrep -x avahi-daemon; } >/dev/null 2>&1
+}
+avahi_running && AVAHI_ON=true
 CAN_RESOLVE=false
 grep -qE '^hosts:.*mdns' /etc/nsswitch.conf 2>/dev/null && CAN_RESOLVE=true
 
@@ -866,11 +953,12 @@ elif [[ -n "$(name_ips "$MDNS_FQDN")" ]]; then
   warn "$MDNS_FQDN is already another machine's ($(name_ips "$MDNS_FQDN" | head -1))"
   note "Pick another name with ./install.sh --reconfigure."
 else
-  if ! $AVAHI_ON && ! $CHECK_ONLY && command -v apt-get >/dev/null 2>&1 \
+  INSTALL_AVAHI=$(pkg_install_cmd $(pkg_name avahi))
+  if ! $AVAHI_ON && ! $CHECK_ONLY && [[ -n "$INSTALL_AVAHI" ]] && $ROOT_OK \
     && confirm "Install Avahi, so browsers can find twocans as $MDNS_FQDN? (uses sudo)" y; then
-    quietly "Installing Avahi" sudo apt-get install -y avahi-daemon libnss-mdns
-    sudo systemctl enable --now avahi-daemon >/dev/null 2>&1 || true
-    systemctl is-active --quiet avahi-daemon 2>/dev/null && AVAHI_ON=true
+    quietly "Installing Avahi" bash -c "$INSTALL_AVAHI"
+    service_enable_now avahi-daemon >/dev/null 2>&1 || true
+    avahi_running && AVAHI_ON=true
     grep -qE '^hosts:.*mdns' /etc/nsswitch.conf 2>/dev/null && CAN_RESOLVE=true
   fi
   if ! $AVAHI_ON; then
@@ -1032,7 +1120,7 @@ if (( RUNNING > 0 )); then
   CALLS=$(docker exec twocans-asterisk asterisk -rx 'core show channels count' 2>/dev/null | grep -oE '^[0-9]+ active call' | grep -oE '^[0-9]+' || echo 0)
   if (( ${CALLS:-0} > 0 )); then
     warn "${CALLS} call(s) in progress — updating may cut them off"
-    confirm "Carry on now?" n || die "Run ./install.sh again when the line is quiet."
+    confirm "Carry on now?" n || { note "Nothing's changed. Run ./install.sh again when the line is quiet."; exit 0; }
   fi
 fi
 

@@ -467,6 +467,21 @@ switch ($action) {
         flash($phone['name'] . ' rings ' . $now['rings'] . ' times before voicemail ✓');
         break;
 
+    case 'update_check':
+        // Whether twocans asks GitHub about new versions; asking now if turned on.
+        $updates = new UpdateCheck();
+        $on = ($_POST['on'] ?? '') === '1';
+        $updates->setEnabled($on);
+        if ($on) {
+            $latest = $updates->refresh(true);
+            flash($latest['version'] === ''
+                ? "Couldn't reach GitHub just now — it'll try again later"
+                : ($updates->isNewer() ? 'twocans ' . $latest['version'] . ' is out' : 'twocans is up to date ✓'));
+        } else {
+            flash("Won't check for new versions");
+        }
+        break;
+
     case 'vm_move':
         $to = (string) ($_POST['to'] ?? '');
         $problem = (new VoicemailRepository())->move((int) $id, $to);
@@ -482,6 +497,387 @@ switch ($action) {
             }
         }
         flash('Moved to ' . $name . ' ✓');
+        break;
+
+    case 'vm_keep':
+        $kept = (new Keepsakes())->keep((int) $id, (int) Auth::user()['id']);
+        flash($kept['ok'] ? 'Kept for good ✓ — it\'s in Keepsakes' : (string) $kept['error']);
+        break;
+
+    case 'keepsake_title':
+        (new Keepsakes())->rename((int) $id, (string) ($_POST['title'] ?? ''));
+        flash('Saved ✓');
+        break;
+
+    case 'keepsake_remove':
+        (new Keepsakes())->remove((int) $id);
+        flash('Keepsake removed');
+        break;
+
+    case 'quiz_settings':
+        $settings = new SettingsRepository();
+        $quiz = trim((string) ($_POST['number'] ?? $settings->quizNumber()));
+        $games = trim((string) ($_POST['games_number'] ?? $settings->gamesNumber()));
+        $problem = $settings->quizNumberProblem($quiz) ?? $settings->gamesNumberProblem($games)
+            ?? ($quiz === $games ? 'The quiz and the games line need numbers of their own.' : null);
+        if ($problem !== null) {
+            flash($problem);
+            break;
+        }
+        $settings->setQuizNumber($quiz);
+        $settings->setGamesNumber($games);
+        $settings->setQuizTables((array) ($_POST['tables'] ?? []));
+        $settings->setQuizQuestions((int) ($_POST['questions'] ?? 10));
+        $settings->setSumsMax((int) ($_POST['sums_max'] ?? 10));
+        $settings->setBondsTo((array) ($_POST['bonds_to'] ?? [10]));
+        (new PjsipConfig($devices))->apply();
+        flash('Saved ✓ — dial ' . $games . ' for the games');
+        break;
+
+    case 'radio_add':
+        $radioStore = new RadioStore();
+        if (!$radioStore->isAvailable()) {
+            flash("Audio conversion isn't available — the web container needs rebuilding.");
+            break;
+        }
+        // Several at once: $_FILES['songs'] arrives as arrays of each field.
+        $files = $_FILES['songs'] ?? [];
+        $uploads = [];
+        foreach ((array) ($files['name'] ?? []) as $i => $name) {
+            $uploads[] = ['name' => $name, 'type' => $files['type'][$i] ?? '', 'tmp_name' => $files['tmp_name'][$i] ?? '',
+                'error' => $files['error'][$i] ?? UPLOAD_ERR_NO_FILE, 'size' => $files['size'][$i] ?? 0];
+        }
+        $radio = new Radio();
+        $added = 0;
+        $problems = [];
+        foreach ($uploads as $upload) {
+            $converted = $radioStore->store($upload);
+            if ($converted['error'] !== null) {
+                $problems[] = Radio::titleFrom((string) $upload['name']) . ': ' . $converted['error'];
+                continue;
+            }
+            if ($radio->findByHash($converted['sha256']) !== null) {
+                $radioStore->delete((string) $converted['file']);
+                $problems[] = Radio::titleFrom((string) $upload['name']) . ' is already on the radio.';
+                continue;
+            }
+            $radio->create((string) $converted['file'], $converted['seconds'], (string) $upload['name'],
+                Auth::user()['id'] ?? null, $converted['sha256']);
+            $added++;
+        }
+        if ($added > 0) {
+            // The dialplan names each song, so new ones are written in to be heard.
+            (new PjsipConfig($devices))->apply();
+        }
+        flash(($added > 0 ? ($added === 1 ? 'A song added ✓' : $added . ' songs added ✓') : 'Nothing added')
+            . ($problems === [] ? '' : ' — ' . implode(' ', $problems)));
+        break;
+
+    case 'radio_title':
+        (new Radio())->rename((int) $id, (string) ($_POST['title'] ?? ''));
+        flash('Saved ✓');
+        break;
+
+    case 'radio_toggle':
+        $radio = new Radio();
+        $song = $radio->find((int) $id);
+        if ($song !== null) {
+            $radio->setEnabled((int) $id, !(bool) $song['enabled']);
+            (new PjsipConfig($devices))->apply();
+        }
+        break;
+
+    case 'radio_delete':
+        (new Radio())->delete((int) $id);
+        (new PjsipConfig($devices))->apply();
+        flash('Song taken off the radio');
+        break;
+
+    case 'radio_order':
+        (new Radio())->reorder(array_map('intval', (array) ($_POST['ids'] ?? [])));
+        // Only heard in order when it isn't shuffled — but written either way,
+        // so turning shuffle off plays this order.
+        (new PjsipConfig($devices))->apply();
+        flash('Order saved ✓');
+        break;
+
+    case 'radio_shuffle':
+        $settings = new SettingsRepository();
+        $settings->setRadioShuffle(!$settings->radioShuffle());
+        (new PjsipConfig($devices))->apply();
+        flash($settings->radioShuffle() ? 'Shuffle on — songs play in a mixed-up order' : 'Shuffle off — songs play in your order');
+        break;
+
+    case 'radio_calm':
+        $radio = new Radio();
+        $song = $radio->find((int) $id);
+        if ($song !== null) {
+            $radio->setCalm((int) $id, !(bool) $song['calm']);
+            (new PjsipConfig($devices))->apply();
+            flash(!(bool) $song['calm'] ? 'Calm — it can play at bedtime ✓' : 'Not a calm song');
+        }
+        break;
+
+    case 'radio_song_station':
+        $radio = new Radio();
+        $stationId = (int) ($_POST['station'] ?? 0);
+        if ($radio->find((int) $id) !== null && $radio->station($stationId) !== null) {
+            $on = !in_array((int) $id, $radio->stationSongIds($stationId), true);
+            $radio->setOnStation((int) $id, $stationId, $on);
+            (new PjsipConfig($devices))->apply();
+            flash(($on ? 'On ' : 'Off ') . $radio->station($stationId)['name'] . ' ✓');
+        }
+        break;
+
+    case 'radio_station_add':
+        $added = (new Radio())->addStation((string) ($_POST['name'] ?? ''));
+        if ($added === null) {
+            flash('There can be ' . Radio::MAX_STATIONS . ' stations — one for each key, 1 to ' . Radio::MAX_STATIONS . '.');
+            break;
+        }
+        flash('Station added ✓ — now put some songs on it');
+        break;
+
+    case 'radio_station_name':
+        (new Radio())->renameStation((int) $id, (string) ($_POST['name'] ?? ''));
+        flash('Saved ✓');
+        break;
+
+    case 'radio_station_shuffle':
+        $radio = new Radio();
+        $station = $radio->station((int) $id);
+        if ($station !== null) {
+            $radio->setStationShuffle((int) $id, !(bool) $station['shuffle']);
+            (new PjsipConfig($devices))->apply();
+        }
+        break;
+
+    case 'radio_station_audio':
+        $radio = new Radio();
+        $nameStore = new RadioStationStore();
+        if ($radio->station((int) $id) === null) {
+            break;
+        }
+        if (!$nameStore->isAvailable()) {
+            flash("Audio conversion isn't available — the web container needs rebuilding.");
+            break;
+        }
+        $converted = $nameStore->store($_FILES['name_audio'] ?? []);
+        if ($converted['error'] !== null) {
+            flash($converted['error']);
+            break;
+        }
+        $radio->setStationAudio((int) $id, (string) $converted['file']);
+        (new PjsipConfig($devices))->apply();
+        flash("Saved ✓ — the menu says it in your voice");
+        break;
+
+    case 'radio_station_audio_remove':
+        (new Radio())->setStationAudio((int) $id, null);
+        (new PjsipConfig($devices))->apply();
+        break;
+
+    case 'radio_station_delete':
+        (new Radio())->deleteStation((int) $id);
+        (new PjsipConfig($devices))->apply();
+        flash('Station taken off — its songs are still on the radio');
+        break;
+
+    case 'radio_bedtime':
+        (new SettingsRepository())->setRadioBedtime((string) ($_POST['mode'] ?? 'normal'), (int) ($_POST['minutes'] ?? 0));
+        (new PjsipConfig($devices))->apply();
+        flash('Saved ✓');
+        break;
+
+    case 'device_pause':
+    case 'device_resume':
+        $phone = $devices->find((int) $id);
+        if ($phone === null) {
+            break;
+        }
+        if ($action === 'device_resume') {
+            $devices->pause((int) $id, null);
+            (new PjsipConfig($devices))->apply();
+            flash($phone['name'] . ' is back on ✓');
+            break;
+        }
+        $for = (string) ($_POST['for'] ?? '60');
+        if ($for === 'morning') {
+            // When bedtime ends next — tomorrow's, if today's has gone.
+            [$h, $m] = array_map('intval', explode(':', (new SettingsRepository())->quietTo()));
+            $until = (new DateTimeImmutable('now', new DateTimeZone(PjsipConfig::timezone())))->setTime($h, $m);
+            if ($until->getTimestamp() <= time()) {
+                $until = $until->modify('+1 day');
+            }
+            $until = $until->getTimestamp();
+        } else {
+            $until = time() + 60 * max(5, min(24 * 60, (int) $for));
+        }
+        $devices->pause((int) $id, $until);
+        (new PjsipConfig($devices))->apply();
+        flash($phone['name'] . ' is paused until ' . date('g:ia', $until) . ' ✓');
+        break;
+
+    case 'device_walkie':
+        $to = (int) ($_POST['to'] ?? 0);
+        $target = $to > 0 ? $devices->find($to) : null;
+        $devices->setWalkie((int) $id, $target !== null && DeviceRepository::toView($target)['autoAnswer'] ? $to : null);
+        (new PjsipConfig($devices))->apply();
+        flash($target !== null ? 'Walkie-talkie to ' . $target['name'] . ' ✓' : 'No walkie-talkie');
+        break;
+
+    case 'device_phone_setting':
+        $phone = $devices->find((int) $id);
+        $key = (string) ($_POST['key'] ?? '');
+        // Only the settings its kind of phone has: see PhoneSettings.
+        $value = $phone === null ? null : PhoneSettings::parse((string) $phone['type'], $key, (string) ($_POST['value'] ?? ''));
+        if ($value === null) {
+            break;
+        }
+        if (!$devices->setPhoneSetting((int) $id, $key, $value)) {
+            flash("That isn't one of its choices.");
+            break;
+        }
+        // A ringtone is twocans' to ask for, call by call: the dialplan, not the phone.
+        if ($key === 'ringtone') {
+            $result = (new PjsipConfig($devices))->apply();
+            flash($result['error'] === null ? 'Saved ✓ — calls to ' . $phone['name'] . ' ring with it from now on' : 'Saved, but Asterisk did not reload: ' . $result['error']);
+            break;
+        }
+        // Straight to the phone, which fetches its settings.
+        $sent = GrandstreamProvisioning::notify(DeviceRepository::toView($devices->find((int) $id)));
+        flash($sent['ok'] ? 'Saved and sent to ' . $phone['name'] . ' ✓' : 'Saved — ' . $sent['error']);
+        break;
+
+    case 'device_ring_volume':
+    case 'device_hotline':
+        $phone = $devices->find((int) $id);
+        if ($phone === null || !PhoneSettings::can((string) $phone['type'], $action === 'device_ring_volume' ? 'ringVolume' : 'hotline')) {
+            break;
+        }
+        if ($action === 'device_ring_volume') {
+            $devices->setRingVolume((int) $id, (int) ($_POST['volume'] ?? 4));
+        } else {
+            // Only someone this phone may call: the same list as its hotkeys.
+            $number = trim((string) ($_POST['number'] ?? ''));
+            $allowed = '';
+            foreach ((new DeviceHotkeyRepository())->contactTargets() as $target => $row) {
+                if ((string) $target === $number && ContactRepository::toView($row)['allowOut']) {
+                    $allowed = $number;
+                }
+            }
+            $devices->setHotline((int) $id, $allowed, (int) ($_POST['delay'] ?? 4));
+        }
+        // Straight to the phone, which fetches its settings.
+        $sent = GrandstreamProvisioning::notify(DeviceRepository::toView($devices->find((int) $id)));
+        flash($sent['ok'] ? 'Saved and sent to ' . $phone['name'] . ' ✓' : 'Saved — ' . $sent['error']);
+        break;
+
+    case 'device_radio_station':
+        $stationId = (int) ($_POST['station'] ?? 0);
+        $devices->setRadioStation((int) $id, $stationId > 0 && (new Radio())->station($stationId) !== null ? $stationId : null);
+        (new PjsipConfig($devices))->apply();
+        flash('Saved ✓');
+        break;
+
+    case 'helper_numbers':
+        $settings = new SettingsRepository();
+        $which = (string) ($_POST['which'] ?? '');
+        $wanted = trim((string) ($_POST['number'] ?? ''));
+        $lines = [
+            'clock' => ['clockNumberProblem', 'setClockNumber', 'for the time'],
+            'timer' => ['timerNumberProblem', 'setTimerNumber', 'for the kitchen timer'],
+            'silly' => ['sillyNumberProblem', 'setSillyNumber', 'for silly voices'],
+            'walkie' => ['walkieNumberProblem', 'setWalkieNumber', 'for the walkie-talkie'],
+        ];
+        if (!isset($lines[$which])) {
+            break;
+        }
+        [$check, $save, $what] = $lines[$which];
+        if (($problem = $settings->$check($wanted)) !== null) {
+            flash($problem);
+            break;
+        }
+        $settings->$save($wanted);
+        (new PjsipConfig($devices))->apply();
+        flash('Dial ' . $wanted . ' ' . $what . ' ✓');
+        break;
+
+    case 'timer_cancel':
+        flash((new Timers())->cancel((string) ($_POST['endpoint'] ?? '')) ? 'Timer cancelled ✓' : "Couldn't cancel it — try again.");
+        break;
+
+    case 'radio_number':
+        $settings = new SettingsRepository();
+        $wanted = trim((string) ($_POST['number'] ?? ''));
+        if (($problem = $settings->radioNumberProblem($wanted)) !== null) {
+            flash($problem);
+            break;
+        }
+        $settings->setRadioNumber($wanted);
+        (new PjsipConfig($devices))->apply();
+        flash('Dial ' . $wanted . ' for the radio ✓');
+        break;
+
+    case 'christmas_settings':
+        $settings = new SettingsRepository();
+        $wanted = trim((string) ($_POST['number'] ?? $settings->sleepsNumber()));
+        if (($problem = $settings->sleepsNumberProblem($wanted)) !== null) {
+            flash($problem);
+            break;
+        }
+        $settings->setSleepsNumber($wanted);
+        $settings->setSantaRing(($_POST['ring'] ?? '0') === '1', (string) ($_POST['ring_time'] ?? ''));
+        (new PjsipConfig($devices))->apply();
+        flash('Saved ✓ — dial ' . $wanted . ' for the sleeps till Christmas');
+        break;
+
+    case 'santa_audio':
+        $santa = new SantaStore();
+        if (!$santa->isAvailable()) {
+            flash("Audio conversion isn't available — the web container needs rebuilding.");
+            break;
+        }
+        $converted = $santa->store($_FILES['message'] ?? []);
+        if ($converted['error'] !== null) {
+            flash($converted['error']);
+            break;
+        }
+        $settings = new SettingsRepository();
+        $santa->delete($settings->santaMessage());
+        $settings->setSantaMessage((string) $converted['file'], $converted['seconds']);
+        (new PjsipConfig($devices))->apply();
+        flash("Santa's message saved ✓ — it plays on Christmas Day");
+        break;
+
+    case 'santa_audio_remove':
+        $settings = new SettingsRepository();
+        (new SantaStore())->delete($settings->santaMessage());
+        $settings->setSantaMessage(null);
+        (new PjsipConfig($devices))->apply();
+        flash("Back to Santa's built-in message");
+        break;
+
+    case 'room_listen_switch':
+        // The room's phone (roomListen) or a phone that may listen (canRoomListen).
+        $field = (string) ($_POST['field'] ?? '');
+        if (in_array($field, ['roomListen', 'canRoomListen'], true)) {
+            $devices->toggle((int) $id, $field);
+            (new PjsipConfig($devices))->apply();
+        }
+        break;
+
+    case 'room_listen_start':
+        $room = $devices->find((int) $id);
+        $listenOn = $devices->find((int) ($_POST['listen_on'] ?? 0));
+        if ($room === null || $listenOn === null) {
+            flash('Pick a phone to listen on');
+            break;
+        }
+        $result = (new RoomListen())->start($listenOn, $room);
+        flash($result['ok']
+            ? DeviceRepository::toView($listenOn)['name'] . ' is ringing — answer it to listen ☎'
+            : (string) $result['error']);
         break;
 
     case 'voicemail_speed_dial':
@@ -549,6 +945,29 @@ switch ($action) {
             $devices->setPhoto((int) $id, $stored['file']);
             flash('Photo updated ✓');
         }
+        break;
+
+    case 'device_wallpaper':
+    case 'device_wallpaper_remove':
+        // A desk phone's own wallpaper, cropped to fill its screen.
+        $phone = $devices->find((int) $id);
+        $size = YealinkProvisioning::WALLPAPER[(string) ($phone['type'] ?? '')] ?? null;
+        if ($phone === null || $size === null) {
+            break;
+        }
+        if ($action === 'device_wallpaper') {
+            $stored = (new PhotoStore())->storeWallpaper($_FILES['wallpaper'] ?? [], $size[0], $size[1]);
+            if ($stored['error'] !== null || $stored['file'] === null) {
+                flash($stored['error'] ?? 'Choose a picture first.');
+                break;
+            }
+            $devices->setWallpaper((int) $id, $stored['file']);
+        } else {
+            $devices->setWallpaper((int) $id, null);
+        }
+        $sent = GrandstreamProvisioning::notify(DeviceRepository::toView($devices->find((int) $id)));
+        $done = $action === 'device_wallpaper' ? 'Wallpaper saved' : 'Back to its own wallpaper';
+        flash($sent['ok'] ? $done . ' and sent to ' . $phone['name'] . ' ✓' : $done . ' — ' . $sent['error']);
         break;
 
     case 'device_photo_remove':
@@ -635,18 +1054,25 @@ switch ($action) {
         break;
 
     case 'device_add_socket':
-        // The other socket of an HT802: a new phone on the same box.
+        // Another phone on the same box: an HT802's other socket, or another
+        // handset on a cordless base — on the port asked for, if it's free.
         $first = $devices->find((int) $id);
-        if ($first === null || $first['type'] !== 'ht802' || (string) $first['mac'] === ''
-            || count($devices->findByMac((string) $first['mac'])) > 1) {
-            flash('That adapter has no free socket.');
+        $type = (string) ($first['type'] ?? '');
+        $taken = $first !== null && (string) $first['mac'] !== ''
+            ? array_map('intval', array_column($devices->findByMac((string) $first['mac']), 'port')) : [];
+        $free = array_values(array_diff(range(1, DeviceRepository::ports($type)), $taken));
+        $port = in_array((int) ($_POST['port'] ?? 0), $free, true) ? (int) $_POST['port'] : ($free[0] ?? null);
+        if ($first === null || $taken === [] || $port === null || DeviceRepository::ports($type) < 2) {
+            flash(DeviceRepository::isDect($type) ? 'That base has all its handsets already.' : 'That adapter has no free socket.');
             break;
         }
-        $other = $devices->create(trim((string) ($_POST['name'] ?? '')), 'ht802', 'udp');
-        $devices->setPort((int) $other['id'], (int) $first['port'] === 1 ? 2 : 1);
+        $other = $devices->create(trim((string) ($_POST['name'] ?? '')), $type, 'udp');
+        $devices->setPort((int) $other['id'], $port);
         $devices->setMac((int) $other['id'], (string) $first['mac']);
         (new PjsipConfig($devices))->apply();
-        flash('Added — reboot the adapter so it picks up the new phone.');
+        flash(DeviceRepository::isDect($type)
+            ? 'Added — restart the base so handset ' . $port . ' picks up its line.'
+            : 'Added — reboot the adapter so it picks up the new phone.');
         redirect(url(['screen' => 'phones', 'device' => $other['id']]));
 
     case 'hotkey_set':
@@ -913,26 +1339,33 @@ switch ($action) {
         redirect(url(['screen' => 'phones', 'wizard' => 1, 'scan' => time()]));
 
     case 'device_pick_found':
-        // One twocans spotted: its model and MAC are known, so on to naming it.
+        // One twocans spotted: its model and MAC are known, so on to naming
+        // it — or just its maker, from its MAC, so on to picking its model,
+        // the MAC kept for after.
         $mac = GrandstreamProvisioning::normalizeMac((string) ($_POST['mac'] ?? ''));
         $type = (string) ($_POST['type'] ?? '');
-        if ($mac === '' || !isset(DeviceRepository::TYPES[$type])) {
-            redirect(url(['screen' => 'phones', 'wizard' => 1]));
+        if ($mac !== '' && isset(DeviceRepository::TYPES[$type])) {
+            $store->setDeviceDraft(['type' => $type, 'mac' => $mac]);
+            redirect(url(['screen' => 'phones', 'wizard' => 2]));
         }
-        $store->setDeviceDraft(['type' => $type, 'mac' => $mac]);
-        redirect(url(['screen' => 'phones', 'wizard' => 2]));
+        $brand = $mac !== '' ? Pager::brandFor($mac) : null;
+        if ($brand !== null) {
+            $store->setDeviceDraft(['type' => '', 'mac' => $mac]);
+            redirect(url(['screen' => 'phones', 'wizard' => 1, 'brand' => $brand]));
+        }
+        redirect(url(['screen' => 'phones', 'wizard' => 1]));
 
-    case 'device_pick_family':
-        $family = (string) ($_POST['family'] ?? '');
-        if (!isset(DeviceRepository::FAMILIES[$family])) {
+    case 'device_pick_brand':
+        $brand = (string) ($_POST['brand'] ?? '');
+        if (!isset(DeviceRepository::BRANDS[$brand])) {
             redirect(url(['screen' => 'phones', 'wizard' => 1]));
         }
         // An app is only ever Linphone: straight on to naming it.
-        if ($family === 'app') {
+        if ($brand === 'app') {
             $store->setDeviceDraft(['type' => 'linphone', 'mac' => '']);
             redirect(url(['screen' => 'phones', 'wizard' => 2]));
         }
-        redirect(url(['screen' => 'phones', 'wizard' => 1, 'family' => $family]));
+        redirect(url(['screen' => 'phones', 'wizard' => 1, 'brand' => $brand]));
 
     case 'device_pick_model':
         $type = (string) ($_POST['type'] ?? '');
@@ -940,7 +1373,11 @@ switch ($action) {
             flash('That one is not ready yet');
             redirect(url(['screen' => 'phones', 'wizard' => 1]));
         }
-        $store->setDeviceDraft(['type' => $type, 'mac' => '']);
+        // A phone found on the network, by its maker: its MAC comes too.
+        $found = $store->deviceDraft();
+        $foundMac = ($found['type'] ?? null) === '' ? (string) ($found['mac'] ?? '') : '';
+        $keep = $foundMac !== '' && Pager::brandFor($foundMac) === (DeviceRepository::TYPES[$type]['brand'] ?? '');
+        $store->setDeviceDraft(['type' => $type, 'mac' => $keep ? $foundMac : '']);
         redirect(url(['screen' => 'phones', 'wizard' => 2]));
 
     case 'device_wizard_step':
@@ -950,8 +1387,11 @@ switch ($action) {
     case 'device_finish':
         $draft = $store->deviceDraft();
         $type = (string) ($draft['type'] ?? 'linphone');
-        // Grandstream hardware is provisioned over UDP; the picker is hidden for it.
-        $provisioned = in_array(DeviceRepository::TYPES[$type]['family'] ?? '', ['desk', 'adapter'], true);
+        // Hardware is provisioned over UDP; the picker is hidden for it.
+        $provisioned = in_array(DeviceRepository::TYPES[$type]['family'] ?? '', ['desk', 'adapter', 'dect'], true);
+        // A cordless handset: which of its base's eight it is.
+        $port = (DeviceRepository::TYPES[$type]['family'] ?? '') === 'dect'
+            ? max(1, min(DeviceRepository::ports($type), (int) ($_POST['handset'] ?? 1))) : 1;
         $transport = $provisioned ? 'udp' : (string) ($_POST['transport'] ?? 'udp');
         $mac = GrandstreamProvisioning::normalizeMac((string) ($_POST['mac'] ?? ''));
 
@@ -960,12 +1400,19 @@ switch ($action) {
         if ($provisioned) {
             if ($mac === '') {
                 flash('That MAC address does not look right — it is on the label under the '
-                    . (DeviceRepository::isDesk($type) ? 'phone.' : 'adapter.'));
+                    . (DeviceRepository::isDesk($type) ? 'phone.' : (DeviceRepository::isDect($type) ? 'base.' : 'adapter.')));
                 redirect(url(['screen' => 'phones', 'wizard' => 2]));
             }
-            if ($devices->findByMac($mac) !== []) {
-                flash('Another phone already has that MAC address.');
-                redirect(url(['screen' => 'phones', 'wizard' => 2]));
+            // Another handset of the same base is fine — on a different number.
+            foreach ($devices->findByMac($mac) as $other) {
+                if (!DeviceRepository::isDect($type) || $other['type'] !== $type) {
+                    flash('Another phone already has that MAC address.');
+                    redirect(url(['screen' => 'phones', 'wizard' => 2]));
+                }
+                if ((int) $other['port'] === $port) {
+                    flash('That base already has a handset ' . $port . ' here — ' . $other['name'] . '.');
+                    redirect(url(['screen' => 'phones', 'wizard' => 2]));
+                }
             }
         }
 
@@ -975,14 +1422,17 @@ switch ($action) {
         }
 
         $device = $devices->create(trim((string) ($_POST['name'] ?? '')), $type, $transport);
+        if ($port !== 1) {
+            $devices->setPort((int) $device['id'], $port);
+        }
 
         if ($provisioned && $mac !== '' && !$devices->setMac((int) $device['id'], $mac)) {
             flash('Phone added, but another phone already has that MAC address.');
         }
 
-        // The HT802's second socket is a phone of its own on the same box.
+        // An adapter's second socket is a phone of its own on the same box.
         $second = trim((string) ($_POST['name2'] ?? ''));
-        if ($type === 'ht802' && $second !== '') {
+        if (DeviceRepository::isAdapter($type) && DeviceRepository::ports($type) === 2 && $second !== '') {
             $other = $devices->create($second, $type, $transport);
             $devices->setPort((int) $other['id'], 2);
             $devices->setMac((int) $other['id'], $mac);
@@ -1739,6 +2189,25 @@ switch ($action) {
         redirect(url(['screen' => 'system']));
 
         // -------------------------------------------------------- notifications
+    case 'push_subscribe':
+        $ok = (new Push())->subscribe((int) Auth::user()['id'], (string) ($_POST['endpoint'] ?? ''),
+            (string) ($_POST['p256dh'] ?? ''), (string) ($_POST['auth'] ?? ''), (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''));
+        flash($ok ? "Notifications on for this device ✓ — try Send a test" : "This browser didn't give twocans what it needs to notify it.");
+        break;
+
+    case 'push_test':
+        $push = new Push();
+        $mine = array_values(array_filter($push->all((int) Auth::user()['id']), static fn(array $r): bool => (int) $r['id'] === (int) $id));
+        $sent = $mine === [] ? 0 : $push->send('twocans test', "If you're reading this, notifications are working ✓",
+            url(['screen' => 'notifications']), false, $mine, 'test');
+        flash($sent > 0 ? 'Test sent — it should pop up in a moment' : "Couldn't reach that device — remove it and turn notifications on again.");
+        break;
+
+    case 'push_remove':
+        (new Push())->remove((int) $id, (int) Auth::user()['id']);
+        flash('That device won’t be notified any more');
+        break;
+
     case 'notifications_save':
         $result = (new NotificationRepository())->save($_POST);
         flash($result['ok'] ? 'Notifications saved' : ($result['error'] ?? 'Could not save notifications'));

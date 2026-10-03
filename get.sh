@@ -24,7 +24,25 @@ else
   bold=; dim=; red=; green=; off=; coral=; teal=
 fi
 ok()  { echo "  ${green}✓${off} $*"; }
-die() { echo "  ${red}✗${off} $*" >&2; exit 1; }
+# Stop, kindly: what went wrong, then what to do about it, step by step.
+fail() {
+  local problem=$1 i=1 step; shift
+  {
+    echo
+    echo "  ${red}✗${off} ${bold}${problem}${off}"
+    if (( $# > 0 )); then
+      echo
+      echo "    What to do:"
+      for step in "$@"; do echo "      ${bold}${i}.${off} ${step}"; ((i++)); done
+    fi
+    echo
+    echo "    ${dim}Stuck? Open an issue at${off} https://github.com/tombruton87/TwoCans/issues"
+    echo
+  } >&2
+  exit 1
+}
+die() { fail "$*"; }
+trap 'echo; echo "  ${red}✗${off} Something unexpected stopped this (line $LINENO). Run it again — if it stops in the same place, open an issue at https://github.com/tombruton87/TwoCans/issues" >&2' ERR
 
 # Piped into bash, stdin is this script — so questions go to the terminal.
 TTY=/dev/tty
@@ -46,13 +64,31 @@ echo
 echo "  ${coral}${bold}two${off}${teal}${bold}cans${off}  ${dim}a tiny phone company, run by you${off}"
 echo
 
-[[ "$(uname -s)" == Linux ]] || die "twocans runs on Linux (a Raspberry Pi is ideal)."
-[[ $EUID -ne 0 ]] || die "Run this as your normal user, not root — it asks for sudo when it needs it."
+[[ "$(uname -s)" == Linux ]] || fail "twocans runs on Linux, and this is $(uname -s)." \
+  "Use a Linux machine — a Raspberry Pi 3, 4 or 5 is ideal, or any 64-bit PC running Ubuntu, Debian or similar" \
+  "Docker Desktop on macOS and Windows can't carry phone calls reliably"
+case "$(uname -m)" in
+  x86_64|amd64|aarch64|arm64) ;;
+  armv6l|armv7l|armhf) fail "This is a 32-bit system, and twocans needs a 64-bit one." \
+    "On a Raspberry Pi 3, 4 or 5: put the 64-bit Raspberry Pi OS on its card (Raspberry Pi Imager → 'Raspberry Pi OS (64-bit)')" \
+    "Then run this again" ;;
+  *) fail "This machine's processor ($(uname -m)) isn't one twocans runs on." \
+    "twocans needs a 64-bit Intel/AMD PC or a 64-bit ARM board, like a Raspberry Pi 3, 4 or 5" ;;
+esac
+
+# Root (a container or a minimal server, often): fine, without sudo.
+SUDO=sudo
+if [[ $EUID -eq 0 ]]; then
+  SUDO=""
+  echo "  ${dim}Running as root — fine. If this machine has a normal user, running it as them is tidier.${off}"
+elif ! command -v sudo >/dev/null 2>&1; then
+  SUDO=""
+fi
 
 # ------------------------------------------------------------------- where
 DIR=${TWOCANS_DIR:-}
 if [[ -z "$DIR" ]]; then
-  DIR=$(ask "Where should twocans live?" "$HOME/twocans")
+  DIR=$(ask "Where should twocans live?" "$([[ $EUID -eq 0 ]] && echo /opt/twocans || echo "$HOME/twocans")")
 fi
 DIR=${DIR/#\~/$HOME}
 
@@ -70,41 +106,55 @@ if [[ -e "$DIR" ]]; then
   if [[ -x "$DIR/install.sh" && -f "$DIR/compose.yaml" && -d "$DIR/docker/asterisk" ]]; then
     ok "an older twocans is in $DIR — updating it instead"
     cd "$DIR"
-    [[ -d .git ]] || die "It isn't a git clone, so it can't update itself — move it aside and run this again."
+    [[ -d .git ]] || fail "The twocans in $DIR wasn't downloaded with git, so it can't update itself." \
+      "Move it aside: mv $DIR $DIR.old" "Run this again — your data can be copied across from $DIR.old/storage"
     git checkout -- docker/asterisk/etc/ari.conf docker/asterisk/etc/manager.conf docker/asterisk/etc/voicemail.conf 2>/dev/null || true
     changed=$(git status --porcelain --untracked-files=no)
     if [[ -n "$changed" ]]; then
       echo "  Files there have been changed by hand:"; echo "$changed" | sed 's/^/      /'
-      die "Undo them (git checkout -- <file>) or keep them (git stash), then run this again."
+      fail "Some of twocans' own files in $DIR have been changed by hand (above), so it can't update safely." \
+        "To undo the changes: cd $DIR && git checkout -- <file>" \
+        "Or to keep them aside: cd $DIR && git stash" \
+        "Then run this again"
     fi
-    git pull -q --ff-only || die "Couldn't update from GitHub — is this machine online?"
+    git pull -q --ff-only || fail "Couldn't update twocans from GitHub." \
+      "Check this machine is online: ping -c1 github.com" "Then run this again"
     ok "updated to $(cat backend/VERSION 2>/dev/null || echo the latest)"
     echo
     run_there ./install.sh "$@"
   fi
-  [[ -d "$DIR" && -z "$(ls -A "$DIR" 2>/dev/null)" ]] || die "$DIR already has something else in it — pick another folder."
+  [[ -d "$DIR" && -z "$(ls -A "$DIR" 2>/dev/null)" ]] || fail "$DIR already has something else in it." \
+    "Run this again and pick another folder" "Or empty $DIR first, if nothing in it is needed"
 fi
 
 # --------------------------------------------------------------------- git
 if ! command -v git >/dev/null 2>&1; then
   echo "  git is needed, to fetch twocans and to update it later."
   install_git=""
-  if command -v apt-get >/dev/null 2>&1; then install_git="sudo apt-get update -qq && sudo apt-get install -y -qq git"
-  elif command -v dnf >/dev/null 2>&1; then install_git="sudo dnf install -y -q git"
-  elif command -v yum >/dev/null 2>&1; then install_git="sudo yum install -y -q git"
-  elif command -v pacman >/dev/null 2>&1; then install_git="sudo pacman -S --noconfirm git"
-  elif command -v zypper >/dev/null 2>&1; then install_git="sudo zypper -q install -y git"
-  elif command -v apk >/dev/null 2>&1; then install_git="sudo apk add -q git"
+  if command -v apt-get >/dev/null 2>&1; then install_git="$SUDO apt-get update -qq && $SUDO apt-get install -y -qq git"
+  elif command -v dnf >/dev/null 2>&1; then install_git="$SUDO dnf install -y -q git"
+  elif command -v yum >/dev/null 2>&1; then install_git="$SUDO yum install -y -q git"
+  elif command -v pacman >/dev/null 2>&1; then install_git="$SUDO pacman -Syu --needed --noconfirm git"
+  elif command -v zypper >/dev/null 2>&1; then install_git="$SUDO zypper -q install -y git"
+  elif command -v apk >/dev/null 2>&1; then install_git="$SUDO apk add -q git"
   fi
-  [[ -n "$install_git" ]] || die "Install git with your package manager, then run this again."
-  confirm "Install git now? (uses sudo)" || die "Install git, then run this again."
-  bash -c "$install_git" || die "Installing git didn't work — install it by hand, then run this again."
+  [[ -n "$install_git" ]] || fail "git isn't installed, and this doesn't know your package manager." \
+    "Install git with your package manager" "Then run this again"
+  [[ $EUID -eq 0 || -n "$SUDO" ]] || fail "git isn't installed, and installing it needs sudo, which this machine hasn't got." \
+    "As root, install git: ${install_git# }" "Then run this again"
+  confirm "Install git now?$([[ -n "$SUDO" ]] && echo ' (uses sudo)')" || fail "twocans needs git, to download it and to update it later." \
+    "Install it: ${install_git}" "Then run this again"
+  bash -c "$install_git" || fail "Installing git didn't work." \
+    "Install it by hand: ${install_git}" "Then run this again"
   ok "git installed"
 fi
 
 # -------------------------------------------------------------------- fetch
 echo "  fetching twocans…"
-git clone -q "$REPO" "$DIR" || die "Couldn't fetch twocans from $REPO — is this machine online?"
+git clone -q "$REPO" "$DIR" || fail "Couldn't download twocans from GitHub." \
+  "Check this machine is online: ping -c1 github.com" \
+  "If it is, GitHub may be busy — wait a minute" \
+  "Then run this again"
 ok "twocans is in $DIR"
 echo
 

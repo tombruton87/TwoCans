@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * The pager: sends pages to Grandstream desk phones as multicast, which they
  * play through the speaker without a call, and looks over the home network
- * for Grandstreams when asked. See Pager.
+ * for phones — Grandstream, Yealink, Poly, Cisco, Fanvil — when asked. See Pager.
  *
  * Runs in a container on the host's network (the "pager" service), because
  * multicast can't leave Docker's own. It needs no database: the web app leaves
@@ -20,6 +20,9 @@ if (PHP_SAPI !== 'cli') {
 }
 
 require __DIR__ . '/../src/Pager.php';
+// To tell a scanned phone's model as twocans knows it (FoundPhones::typeFor).
+require __DIR__ . '/../src/DeviceRepository.php';
+require __DIR__ . '/../src/FoundPhones.php';
 
 $once = in_array('--once', $argv, true);
 $queue = Pager::path() . '/queue';
@@ -41,7 +44,8 @@ while (true) {
         }
         if (($job['type'] ?? '') === 'scan') {
             $found = Pager::scan((string) ($job['home'] ?? ''));
-            $say('pager: scanned the network, ' . count($found) . ' Grandstream' . (count($found) === 1 ? '' : 's'));
+            $say('pager: scanned the network, ' . count($found) . ' phone' . (count($found) === 1 ? '' : 's')
+                . ($found === [] ? '' : ' (' . implode(', ', array_map(static fn(array $f): string => $f['brand'] . ($f['model'] !== '' ? ' ' . $f['model'] : ''), $found)) . ')'));
             continue;
         }
         // A page is for now: one stuck behind a long outage is dropped.

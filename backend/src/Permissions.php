@@ -56,7 +56,7 @@ final class Permissions
         'device_adult' => 'devices',
         'device_limits' => 'devices',
         'device_remove' => 'devices',
-        'device_pick_family' => 'devices',
+        'device_pick_brand' => 'devices',
         'device_scan' => 'devices',
         'device_pick_found' => 'devices',
         'device_pick_model' => 'devices',
@@ -67,6 +67,8 @@ final class Permissions
         'device_test_call' => 'devices',
         'device_photo' => 'devices',
         'device_photo_remove' => 'devices',
+        'device_wallpaper' => 'devices',
+        'device_wallpaper_remove' => 'devices',
         // The message a refused caller hears is a recording made by a parent,
         // so it is part of the phone's settings and sits with them.
         'device_refusal_message' => 'devices',
@@ -103,6 +105,47 @@ final class Permissions
         'screening_junk' => 'contacts',
         'vm_delete' => 'voicemail',
         'vm_move' => 'voicemail',
+        // Keepsakes are voicemails kept for good, so they sit with voicemail.
+        'vm_keep' => 'voicemail',
+        'keepsake_title' => 'voicemail',
+        'keepsake_remove' => 'voicemail',
+        // The times tables quiz is part of what the line does, like the jokes.
+        'quiz_settings' => 'rules',
+        // The Christmas countdown, and Santa's message and morning call.
+        'christmas_settings' => 'rules',
+        // The radio, like the joke line: what's on a line is a rule of the house.
+        'radio_add' => 'rules',
+        'radio_title' => 'rules',
+        'radio_toggle' => 'rules',
+        'radio_delete' => 'rules',
+        'radio_number' => 'rules',
+        // The timer and clock's numbers; stopping a timer.
+        'helper_numbers' => 'rules',
+        'timer_cancel' => 'rules',
+        'radio_order' => 'rules',
+        'radio_calm' => 'rules',
+        'radio_song_station' => 'rules',
+        'radio_station_add' => 'rules',
+        'radio_station_name' => 'rules',
+        'radio_station_shuffle' => 'rules',
+        'radio_station_audio' => 'rules',
+        'radio_station_audio_remove' => 'rules',
+        'radio_station_delete' => 'rules',
+        'radio_bedtime' => 'rules',
+        // A phone's favourite station is set on the phone, like its other rules.
+        'device_radio_station' => 'devices',
+        // A desk phone's ring volume and hotline — its own settings, like hotkeys.
+        'device_ring_volume' => 'devices',
+        'device_hotline' => 'devices',
+        'device_phone_setting' => 'devices',
+        'device_walkie' => 'devices',
+        // Pausing a phone for a while is like its in and out switches.
+        'device_pause' => 'devices',
+        'device_resume' => 'devices',
+        'radio_shuffle' => 'rules',
+        'santa_audio' => 'rules',
+        'santa_audio_remove' => 'rules',
+        'update_check' => 'system',
         // Jokes are part of what the line does, so they sit with the other rules:
         // an Admin may manage them, a Viewer may not.
         'joke_add' => 'rules',
@@ -139,6 +182,10 @@ final class Permissions
         'listen_mode' => 'listen',
         'listen_start' => 'listen',
         'call_end' => 'listen',
+        // Listening to a room — and saying which phones may, and be — is
+        // listening in, so it takes the same permission.
+        'room_listen_switch' => 'listen',
+        'room_listen_start' => 'listen',
         // System health is read-only, so Admin may see it. Backups and restore
         // hold recordings of children, so they sit with billing: Owner only.
         'health_check' => 'system',
@@ -147,6 +194,10 @@ final class Permissions
         'backup_restore' => 'backups',
         // Notifications hold the Mailgun API key and recipients, so Owner only.
         'notifications_save' => 'notifications',
+        // Notifications on a grown-up's own phone or computer.
+        'push_subscribe' => 'notifications',
+        'push_test' => 'notifications',
+        'push_remove' => 'notifications',
         'notifications_toggle' => 'notifications',
         'notifications_test_email' => 'notifications',
         'notifications_test_kuma' => 'notifications',

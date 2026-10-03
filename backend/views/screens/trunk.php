@@ -87,7 +87,7 @@ $low = $store->isLowCredit();
         </div>
         <div class="tc-card tc-card--sm">
           <div class="tc-card__hint" style="font-weight:700">Auto top-up</div>
-          <div style="font:800 24px var(--tc-display);color:var(--tc-lav)"><?= $trunk['autoTopUp'] ? 'On' : 'Off' ?></div>
+          <div style="font:800 24px var(--tc-display);color:var(--tc-lav-ink)"><?= $trunk['autoTopUp'] ? 'On' : 'Off' ?></div>
         </div>
       </div>
     <?php endif; ?>

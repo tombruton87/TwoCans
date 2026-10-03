@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 /**
- * Profile pictures for contacts and phones.
+ * Profile pictures for contacts and phones, and wallpapers for a phone's screen.
  *
  * Uploads are never stored as received. Every image is decoded, cropped square
  * and re-encoded, which:
@@ -45,6 +45,42 @@ final class PhotoStore
      */
     public function store(array $upload): array
     {
+        return $this->keep($upload, fn(GdImage $image): GdImage => $this->squareCrop($image));
+    }
+
+    /**
+     * Take an uploaded picture and store it as a phone's wallpaper: cropped
+     * to fill its screen exactly, $width × $height, from the middle.
+     *
+     * @param  array $upload one entry from $_FILES
+     * @return array{file:?string,error:?string}
+     */
+    public function storeWallpaper(array $upload, int $width, int $height): array
+    {
+        return $this->keep($upload, static function (GdImage $source) use ($width, $height): GdImage {
+            $sw = imagesx($source);
+            $sh = imagesy($source);
+            // The largest part of it with the screen's shape, from the middle.
+            $scale = min($sw / $width, $sh / $height);
+            $cw = (int) round($width * $scale);
+            $ch = (int) round($height * $scale);
+            $target = imagecreatetruecolor($width, $height);
+            imagefill($target, 0, 0, imagecolorallocate($target, 255, 255, 255));
+            imagecopyresampled($target, $source, 0, 0, (int) (($sw - $cw) / 2), (int) (($sh - $ch) / 2), $width, $height, $cw, $ch);
+
+            return $target;
+        });
+    }
+
+    /**
+     * Check an upload is a real picture of a sensible size, shape it, and keep
+     * it as a JPEG under a name of our own.
+     *
+     * @param callable(GdImage):GdImage $shape
+     * @return array{file:?string,error:?string}
+     */
+    private function keep(array $upload, callable $shape): array
+    {
         $error = (int) ($upload['error'] ?? UPLOAD_ERR_NO_FILE);
 
         if ($error === UPLOAD_ERR_NO_FILE) {
@@ -76,7 +112,7 @@ final class PhotoStore
             return ['file' => null, 'error' => "That picture couldn't be read."];
         }
 
-        $square = $this->squareCrop($image);
+        $square = $shape($image);
         imagedestroy($image);
 
         $name = bin2hex(random_bytes(16)) . '.jpg';
