@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-10-03
+
+twocans gets a window of its own in DSM: how it's doing, the calls going on
+now, its phones to ring or pause, charts and recent calls, its phone line,
+what it takes, and its settings — HTTPS from DSM's own certificates among
+them — in eight languages. A watchdog starts parts that stop, and DSM's
+notifications say when something needs you.
+
 ### Added
 - A twocans window in DSM, for the Synology package, laid out like
   Synology's own apps, with a button that opens the app itself:
@@ -870,7 +878,8 @@ that play through the speaker instead of as a call.
   **Numbers the kids tried** log on the call log, one card per number with the
   same two buttons. Both leave out anyone who has since been added as a contact.
 
-[Unreleased]: https://github.com/tombruton87/TwoCans/compare/v0.1.8...HEAD
+[Unreleased]: https://github.com/tombruton87/TwoCans/compare/v0.1.9...HEAD
+[0.1.9]: https://github.com/tombruton87/TwoCans/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/tombruton87/TwoCans/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/tombruton87/TwoCans/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/tombruton87/TwoCans/compare/v0.1.5...v0.1.6
