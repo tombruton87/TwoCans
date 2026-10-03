@@ -21,9 +21,12 @@ Rocky, AlmaLinux and CentOS; Arch and Manjaro; openSUSE; Alpine (`apk add bash c
 first). If something stops it, it says what to do — and `./twocans report` makes a
 report, private details taken out, for an issue.
 
-**On a Synology** (DSM 7, a model that runs Container Manager): install Container
-Manager and Git Server from Package Center, sign in over SSH as an
-administrator, and run it with `sudo`, as twocans runs as root there:
+**On a Synology** (DSM 7.2.1 or later, a model that runs Container Manager):
+there's a package to install in Package Center, with a wizard for the questions
+— see [synology/](synology/README.md). It has run on one Synology so far;
+reports welcome. Or, over SSH: install Container Manager and Git Server from
+Package Center, sign in as an administrator, and run it with `sudo`, as twocans
+runs as root there:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/tombruton87/TwoCans/main/get.sh | sudo bash

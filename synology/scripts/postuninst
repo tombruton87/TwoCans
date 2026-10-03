@@ -1,0 +1,4 @@
+#!/bin/sh
+. "$(dirname "$0")/common"
+log "${SYNOPKG_PKG_STATUS:-} ${SYNOPKG_PKGVER:-}"
+exit 0

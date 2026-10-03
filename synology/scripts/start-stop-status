@@ -1,0 +1,17 @@
+#!/bin/sh
+. "$(dirname "$0")/common"
+
+# Starting and stopping are Container Manager's (conf/resource): it starts the
+# setup container after "start", and stops it — which takes twocans down —
+# after "stop". The setup container says how it's going in $VAR/state.
+case "$1" in
+  start) log "starting"; exit 0 ;;
+  stop) log "stopping"; exit 0 ;;
+  status)
+    case "$(cat "$VAR/state" 2>/dev/null)" in
+      failed|stopped) exit 3 ;;   # not running
+      *) exit 0 ;;                # running, or still setting up
+    esac ;;
+  log) echo "$VAR/package.log"; exit 0 ;;
+  *) exit 1 ;;
+esac

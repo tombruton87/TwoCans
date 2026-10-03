@@ -1,0 +1,26 @@
+#!/bin/sh
+. "$(dirname "$0")/common"
+log "${SYNOPKG_PKG_STATUS:-} ${SYNOPKG_PKGVER:-}"
+
+# The install wizard's answers (WIZARD_UIFILES/install_uifile.sh), for the
+# setup container to give ./install.sh. The wizard checked them; they're
+# narrowed to their own characters again here, as a shell will read them.
+only() { printf '%s' "$1" | tr -cd "$2"; }
+if [ -n "${wizard_lan_ip:-}" ]; then
+  {
+    echo "TWOCANS_LAN_IP='$(only "$wizard_lan_ip" '0-9.')'"
+    echo "TWOCANS_TZ='$(only "${wizard_tz:-}" 'A-Za-z0-9_/+-')'"
+    echo "TWOCANS_COUNTRY='$(only "${wizard_country:-}" '0-9')'"
+    echo "TWOCANS_WHISPER_MODEL='$(only "${wizard_whisper_model:-}" 'a-z')'"
+    echo "TWOCANS_HTTP_PORT='$(only "${wizard_http_port:-8083}" '0-9')'"
+    echo "TWOCANS_HTTPS_PORT='$(only "${wizard_https_port:-8443}" '0-9')'"
+    echo "TWOCANS_SIP_PORT='$(only "${wizard_sip_port:-5060}" '0-9')'"
+    echo "TWOCANS_TRUNK_SIP_PORT='$(only "${wizard_trunk_sip_port:-5062}" '0-9')'"
+    echo "TWOCANS_RTP_START='$(only "${wizard_rtp_start:-10000}" '0-9')'"
+    # twocans' files are the package's: the app runs as its user.
+    echo "TWOCANS_HOST_UID='$(id -u)'"
+    echo "TWOCANS_HOST_GID='$(id -g)'"
+  } > "$VAR/answers.env"
+  log "wizard: address $wizard_lan_ip, time zone ${wizard_tz:-}, country code ${wizard_country:-}, speech-to-text ${wizard_whisper_model:-}, ports ${wizard_http_port:-}/${wizard_https_port:-} web, ${wizard_sip_port:-}/${wizard_trunk_sip_port:-} SIP"
+fi
+exit 0

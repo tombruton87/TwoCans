@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and Asterisk, Docker and the app's router instructions all follow.
 - `./install.sh` takes ready-made answers (`TWOCANS_LAN_IP` and the rest), for
   installs nobody's at the keyboard for.
+- A Synology package (`synology/build.sh` makes the `.spk`): installed from
+  Package Center, with a wizard for the installer's questions that finds free
+  ports, twocans' ports in DSM's firewall list, and an icon in the main menu
+  that opens it. It has run on one Synology so far (DSM 7.3.2).
 
 ### Fixed
 - Times stamped by the app and checked by the database (or the other way round)

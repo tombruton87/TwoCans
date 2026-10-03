@@ -1,0 +1,49 @@
+# The Synology package's one Container Manager project (see conf/resource): a
+# container that sets twocans up and looks after it — run.sh, beside this.
+# twocans itself runs as a compose project of its own, from the twocans shared
+# folder, exactly as ./install.sh leaves it anywhere else.
+#
+# DSM's third-party packages can't run as root, and Docker needs it, so this
+# is how the package reaches Docker: Container Manager runs this project for
+# it, and this container has Docker's socket.
+services:
+  setup:
+    build: .
+    image: twocans-setup:local
+    container_name: twocans-setup
+    # Container Manager runs a package's containers as the package's own user
+    # unless told otherwise, and Docker's socket is root's.
+    user: "0:0"
+    # On the Synology's own network, so ./install.sh sees its addresses and
+    # which ports are taken, as it would run there.
+    network_mode: host
+    # Not restarted by Docker: a setup that fails should stay stopped until
+    # someone has fixed what it says, and pressed Run in Package Center.
+    restart: "no"
+    # Taking twocans down, when the package stops, takes a little while.
+    stop_grace_period: 3m
+    entrypoint: ["bash", "/pkg/setup/run.sh"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # The package's files, and its own state (the wizard's answers, the log).
+      - /var/packages/twocans/target:/pkg:ro
+      - /var/packages/twocans/var:/pkgvar
+      # The twocans shared folder, at the path DSM keeps for it — the same path
+      # inside as out, so the paths ./install.sh gives Docker are ones the
+      # Synology has. Never made here: if DSM hasn't, this stops instead of
+      # filling the system partition.
+      - type: bind
+        source: /var/packages/twocans/shares/twocans
+        target: /var/packages/twocans/shares/twocans
+        bind:
+          create_host_path: false
+      # Where DSM looks for the main menu icon's address, and for the firewall's
+      # list of applications: both are brought into line with the ports
+      # twocans ended up on.
+      - /var/packages/twocans/target/ui:/pkgui
+      # (Its folder, whose name the documentation and DSM don't agree on, is
+      # found inside this one.)
+      - /usr/local/etc:/dsm-etc
+      # So ./install.sh knows it's a Synology, and its time zone.
+      - /etc.defaults/VERSION:/etc.defaults/VERSION:ro
+      - /etc/synoinfo.conf:/etc/synoinfo.conf:ro

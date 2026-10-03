@@ -1,0 +1,8 @@
+# twocans' Synology package: what its scripts share. Package Center runs them
+# as the package's own user, which can't use Docker — the work is done by the
+# setup container (setup/run.sh), which these leave answers and notes for.
+
+VAR="${SYNOPKG_PKGVAR:-/var/packages/twocans/var}"
+
+# A line in the package's log, which the setup container's lines join.
+log() { echo "$(date '+%Y-%m-%d %H:%M:%S')  [$(basename "$0")] $*" >> "$VAR/package.log" 2>/dev/null; }

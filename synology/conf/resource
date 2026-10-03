@@ -1,0 +1,28 @@
+{
+    "data-share": {
+        "shares": [
+            {
+                "name": "twocans",
+                "permission": {
+                    "rw": ["twocans"]
+                }
+            }
+        ]
+    },
+    "port-config": {
+        "protocol-file": "twocans.sc"
+    },
+    "docker-project": {
+        "projects": [
+            {
+                "name": "twocans-setup",
+                "path": "setup",
+                "build_params": {
+                    "force_pull": false,
+                    "force_recreate": true,
+                    "build": true
+                }
+            }
+        ]
+    }
+}

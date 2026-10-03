@@ -52,3 +52,6 @@ docker/nginx/acme/*
 
 # Asterisk's control passwords, written by install.sh from .env — never in git.
 docker/asterisk/etc/secrets/
+
+# Built packages (synology/build.sh).
+dist/

@@ -1,0 +1,6 @@
+[{
+    "step_title": "Removing twocans",
+    "items": [{
+        "desc": "twocans stops and its containers are removed. Your data stays: recordings, voicemails, photos, backups and settings in the <b>twocans</b> shared folder, and the call history in Container Manager's volumes. Install twocans again and it picks up where it left off.<br><br>To remove everything for good: delete the <b>twocans</b> shared folder (Control Panel → Shared Folder), and the volumes whose names start <b>twocans_</b> (Container Manager → Volume)."
+    }]
+}]
