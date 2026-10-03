@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-10-03
+
+Many more phones — Yealink, Poly, Cisco and Fanvil — each with the settings it
+actually has; a line full of things to call, from games and the radio to Santa;
+diagnostics to send when a phone won't come online; and an installer that
+works on far more Linux, and says what to do when it can't.
+
 ### Added
 
 - **Yealink desk phones: T31G, T33G, T42U/T42S, T43U, T44U/T44W, T46U,
@@ -797,7 +804,8 @@ that play through the speaker instead of as a call.
   **Numbers the kids tried** log on the call log, one card per number with the
   same two buttons. Both leave out anyone who has since been added as a contact.
 
-[Unreleased]: https://github.com/tombruton87/TwoCans/compare/v0.1.6...HEAD
+[Unreleased]: https://github.com/tombruton87/TwoCans/compare/v0.1.7...HEAD
+[0.1.7]: https://github.com/tombruton87/TwoCans/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/tombruton87/TwoCans/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/tombruton87/TwoCans/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/tombruton87/TwoCans/compare/v0.1.3...v0.1.4
