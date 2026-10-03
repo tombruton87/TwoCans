@@ -1,0 +1,13 @@
+[app]
+title="twocans"
+
+[notification]
+title="twocans"
+restarted="twocans heeft zijn onderdeel ‘{0}’ opnieuw gestart, omdat het niet meer werkte."
+failing="Het onderdeel ‘{0}’ van twocans blijft stoppen — het is het afgelopen uur {1} keer opnieuw gestart. Open twocans in DSM om te zien waarom."
+setup_failed="Het installeren van twocans is niet afgerond. Open twocans in DSM om te zien waarom."
+phone_offline="De telefoon {0} is al een dag offline. Zit de stekker erin en is hij verbonden met het netwerk?"
+line_down="De telefoonlijn van twocans is niet geregistreerd bij {0}, dus gesprekken van buiten komen niet binnen."
+line_up="De telefoonlijn van twocans is weer geregistreerd bij {0}."
+update="twocans {0} is uit. Open twocans in DSM om het te downloaden."
+cert_expiring="Het HTTPS-certificaat van twocans verloopt over {0} dagen. DSM verlengt zijn Let's Encrypt-certificaten zelf — is dit er geen, verleng het dan via Configuratiescherm → Beveiliging → Certificaat."

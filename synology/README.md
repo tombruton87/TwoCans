@@ -31,8 +31,46 @@ root can use Docker. So the package does no Docker work itself:
   folder, its own compose project. On later starts it just starts twocans;
   when the package stops, it takes twocans down. A new version is set up
   again the first time it starts.
-- **The firewall** gets twocans' ports as named entries (`target/twocans.sc`),
-  and **the main menu** an icon that opens the web app (`target/ui/config`).
+- **The firewall** gets twocans' ports as named entries (`target/twocans.sc`).
+- **Its window in DSM** (`target/ui`): the main menu's twocans opens a DSM
+  window (`twocans.js`) showing `panel.html` — how each part is, the address
+  and ports, the setup log, Restart and Run setup again, and the settings the
+  wizard asked, to change. It asks `api.cgi`, which DSM runs as the package's
+  user, for administrators only; the setup container writes how twocans is
+  (`var/status.json`, and `stats.json`, `resources.json`, `update.json` and
+  each part's log — every few seconds while the window's open, once a minute
+  otherwise) and carries out requests (`var/request`), reading them as data.
+  The household's numbers come from `setup/stats.php`, the calls going on now
+  from `setup/live.php`, ending one, ringing or pausing phones and retrying
+  transcriptions from `setup/act.php`, and a locked-out Owner's new password from
+  `setup/reset-owner.php` — all run inside the web container, so they work
+  with any app from 0.1.6 on. **Open twocans** opens the app itself in a tab.
+- **Its languages**: the window follows DSM's (or one chosen in its
+  Settings). Its words are English in `panel.js` and `panel.html`, and in
+  `target/ui/lang/<DSM's code>.json` for German, French, Spanish, Dutch,
+  Italian, Portuguese (Brazil's, for Portugal's too) and Polish — each text
+  once, by its English, with plural forms where it counts. DSM's
+  notifications have theirs in `target/ui/texts/<code>/strings`. twocans' own
+  screens are named in English in them, as the app itself is English.
+- **Who sees the window**: administrators, for everything; DSM users an
+  administrator names in its Settings, to look (`var/viewers`) — without
+  transcripts or recordings. It's listed
+  under Control Panel → Application Privileges too.
+- **The watchdog** (in `setup/run.sh`) starts a part again when it's stopped
+  working for a minute and a half, three times an hour at most.
+- **HTTPS from DSM's certificates**: DSM 7 keeps third-party packages out of
+  its own Certificate settings, so twocans does what others do: the setup
+  container reads DSM's certificates (`/usr/syno/etc/certificate`, mounted
+  read-only), lists them in the window — names, issuer, expiry, never keys —
+  and copies the chosen one to `docker/nginx/certs`, checking every few
+  minutes for DSM's renewals. "DSM's default" follows whichever DSM uses.
+  Stopping puts back the certificate (and address) twocans had before.
+- **DSM notifications** use DSM's own `synodsmnotify`, with words from
+  `target/ui/texts`. It only runs as root on the Synology, so the setup
+  container runs it through a short-lived container in the Synology's own
+  namespaces (`nsenter`) — the package's Docker access allows that, and
+  nothing else of twocans' runs that way. The window's Settings switch them
+  off.
 
 The wizard looks at which ports are already taken on the Synology, suggests
 free ones for the web app, HTTPS and the two SIP ports, and won't take one in

@@ -1,14 +1,35 @@
 {
-    ".url": {
-        "SYNO.SDS.twocans.Application": {
+    "twocans.js": {
+        "TwoCans.AppInstance": {
+            "type": "app",
             "title": "twocans",
             "desc": "Your family phone line",
+            "version": "1",
             "icon": "images/{0}.png",
-            "type": "url",
-            "protocol": "http",
-            "port": "8083",
-            "url": "/",
-            "allUsers": false
+            "texts": "texts",
+            "preloadTexts": [
+                "notification:title",
+                "notification:restarted",
+                "notification:failing",
+                "notification:setup_failed",
+                "notification:phone_offline",
+                "notification:line_down",
+                "notification:line_up",
+                "notification:update",
+                "notification:cert_expiring"
+            ],
+            "allowMultiInstance": false,
+            "allUsers": true,
+            "grantPrivilege": "local",
+            "advanceGrantPrivilege": true,
+            "appWindow": "TwoCans.AppWindow",
+            "depend": ["TwoCans.AppWindow"]
+        },
+        "TwoCans.AppWindow": {
+            "type": "lib",
+            "title": "twocans",
+            "icon": "images/{0}.png",
+            "texts": "texts"
         }
     }
 }

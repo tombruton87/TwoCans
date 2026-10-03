@@ -1,0 +1,13 @@
+[app]
+title="twocans"
+
+[notification]
+title="twocans"
+restarted="twocans ponownie uruchomił swoją część „{0}”, która przestała działać."
+failing="Część „{0}” twocans ciągle się zatrzymuje — w ostatniej godzinie uruchamiano ją ponownie {1} razy. Otwórz twocans w DSM, żeby sprawdzić dlaczego."
+setup_failed="Instalacja twocans nie została ukończona. Otwórz twocans w DSM, żeby sprawdzić dlaczego."
+phone_offline="Telefon {0} jest offline od doby. Czy jest podłączony do prądu i do sieci?"
+line_down="Linia telefoniczna twocans nie jest zarejestrowana u {0}, więc połączenia z zewnątrz nie mogą dotrzeć."
+line_up="Linia telefoniczna twocans jest znowu zarejestrowana u {0}."
+update="Wyszedł twocans {0}. Otwórz twocans w DSM, żeby go pobrać."
+cert_expiring="Certyfikat HTTPS twocans wygasa za {0} dni. DSM sam odnawia swoje certyfikaty Let's Encrypt — jeśli ten do nich nie należy, odnów go w Panel sterowania → Zabezpieczenia → Certyfikat."

@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- A twocans window in DSM, for the Synology package, laid out like
+  Synology's own apps, with a button that opens the app itself:
+  - **Overview** — how twocans is, each part, the address and ports, Restart
+    and Run setup again, when a newer release (and its package) is out, and a
+    getting-started list that ticks itself off.
+  - **Live calls** — who's on the phone now, with whom and for how long, and
+    a button to end a call.
+  - **Phones** — each phone, online or paused; ring one with a test call, or
+    pause one or all of them for an hour, two, or until the morning (0.1.7 on).
+  - **Activity** — calls a day over the last 30 days, the last 20 calls with
+    their recordings to play, and calls all told; voicemail and the last backup.
+  - **Phone line** — the provider, its numbers and registration (and a button
+    to register again), what to forward on the router, and twocans' own checks.
+  - **Resources** — memory over the last day, processor and space, and
+    speech-to-text switched off or on, or its failed transcriptions sent back.
+  - **Settings** — the wizard's settings; the watchdog and notifications;
+    which other DSM users may look (view only); an export of everything; and a
+    new password for a locked-out Owner, shown once.
+  - **Logs** — the setup log and each part's own, and a support report.
+
+  It speaks DSM's language: English, German, French, Spanish, Dutch, Italian,
+  Portuguese and Polish, and so do its DSM notifications.
+- HTTPS from DSM's own certificates, in the Synology package: choose one of
+  the Synology's certificates — the Let's Encrypt one DSM keeps for its DDNS
+  name, say — in twocans' window, and twocans serves it, follows it through
+  DSM's renewals, and can take its name as its address. DSM is told if it's
+  close to running out.
+- A watchdog, in the Synology package: a part that's stopped working for a
+  minute and a half is started again — three times in an hour, then left for
+  you to look at.
+- DSM notifications, in the Synology package: when a part stopped, setup
+  didn't finish, the phone line stopped registering, a phone's been offline
+  for a day, or a new release is out.
+
 ## [0.1.8] - 2026-10-03
 
 twocans on a Synology: a package to install from Package Center, with a

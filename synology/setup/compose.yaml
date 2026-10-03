@@ -37,13 +37,13 @@ services:
         target: /var/packages/twocans/shares/twocans
         bind:
           create_host_path: false
-      # Where DSM looks for the main menu icon's address, and for the firewall's
-      # list of applications: both are brought into line with the ports
-      # twocans ended up on.
-      - /var/packages/twocans/target/ui:/pkgui
-      # (Its folder, whose name the documentation and DSM don't agree on, is
-      # found inside this one.)
+      # Where DSM looks for the firewall's list of applications, which is
+      # brought into line with the ports twocans ended up on. (Its folder,
+      # whose name the documentation and DSM don't agree on, is found in here.)
       - /usr/local/etc:/dsm-etc
+      # DSM's own certificates — its Let's Encrypt ones among them — for twocans'
+      # HTTPS, if you choose one in its window. Read only; only root can.
+      - /usr/syno/etc/certificate:/dsm-certs:ro
       # So ./install.sh knows it's a Synology, and its time zone.
       - /etc.defaults/VERSION:/etc.defaults/VERSION:ro
       - /etc/synoinfo.conf:/etc/synoinfo.conf:ro

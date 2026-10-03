@@ -33,6 +33,8 @@ for f in docker/asterisk/etc/voicemail.conf; do git show "HEAD:$f" > "$target/ap
 cp -r synology/target/. "$target/"
 cp -r synology/setup "$target/setup"
 echo "$SPK_VERSION" > "$target/build-id"
+# DSM keeps a window's script until its version changes.
+sed -i "s/\"version\": \"1\"/\"version\": \"$SPK_VERSION\"/" "$target/ui/config"
 
 # Icons: Package Center's, and the main menu's, from the app's own.
 python3 - "$target/ui/images" "$spk" <<'PY'
@@ -49,7 +51,7 @@ PY
 
 find "$target" -type d -exec chmod 755 {} +
 find "$target" -type f -exec chmod 644 {} +
-chmod 755 "$target/setup/run.sh" "$target/app/install.sh" "$target/app/twocans" "$target/app/get.sh"
+chmod 755 "$target/ui/api.cgi" "$target/setup/run.sh" "$target/app/install.sh" "$target/app/twocans" "$target/app/get.sh"
 tar -C "$target" --owner=0 --group=0 --numeric-owner -czf "$spk/package.tgz" .
 
 cp -r synology/scripts synology/conf synology/WIZARD_UIFILES "$spk/"

@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: The shell scripts parse
-        run: for f in install.sh twocans get.sh scripts/ui.sh scripts/platform.sh synology/build.sh synology/setup/run.sh synology/WIZARD_UIFILES/install_uifile.sh synology/scripts/*; do bash -n "$f" && echo "ok $f"; done
+        run: for f in install.sh twocans get.sh scripts/ui.sh scripts/platform.sh synology/build.sh synology/setup/run.sh synology/target/ui/api.cgi synology/WIZARD_UIFILES/install_uifile.sh synology/scripts/*; do bash -n "$f" && echo "ok $f"; done
       - name: The ones you run are executable
         run: for f in install.sh twocans get.sh; do test -x "$f" && echo "ok $f"; done
 

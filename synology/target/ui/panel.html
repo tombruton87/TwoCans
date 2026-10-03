@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>twocans</title>
+<!--
+  twocans' window in DSM: shown by twocans.js inside a DSM window, served by
+  DSM itself, and talking to api.cgi beside it. Laid out as Synology's own
+  apps are. What it does is in panel.js; its words, in other languages, in
+  lang/ — anything marked data-t here is one of them.
+-->
+<style>
+  :root {
+    --text: #333f4d; --muted: #6b7a89; --faint: #98a4b0; --line: #e2e7ec; --soft: #f6f8fa; --side: #f2f5f8;
+    --blue: #057feb; --blue-dark: #006ad1; --blue-soft: #e6f1fd;
+    --green: #26a65b; --green-soft: #e5f6ec; --amber: #e58e00; --amber-soft: #fff4de; --red: #e5383b; --red-soft: #fdeaea;
+    --font: "Noto Sans", "Segoe UI", -apple-system, "Helvetica Neue", Arial, sans-serif;
+    --mono: Menlo, Consolas, "DejaVu Sans Mono", monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { font: 13px/1.5 var(--font); color: var(--text); background: #fff; display: flex; overflow: hidden; }
+  svg { flex: none; }
+  a { color: var(--blue); text-decoration: none; } a:hover { text-decoration: underline; }
+  [hidden] { display: none !important; }
+
+  /* ---------------------------------------------------------- sidebar */
+  aside { width: 196px; background: var(--side); border-right: 1px solid var(--line); display: flex; flex-direction: column; flex: none; }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 16px 16px 14px; }
+  .brand img { width: 32px; height: 32px; border-radius: 6px; }
+  .brand b { display: block; font-size: 14px; font-weight: 600; line-height: 1.2; }
+  .brand span { color: var(--muted); font-size: 11.5px; }
+  aside nav { padding: 4px 8px; display: flex; flex-direction: column; gap: 2px; }
+  aside nav button { display: flex; align-items: center; gap: 10px; width: 100%; font: inherit; color: var(--text); background: none; border: 0; border-radius: 4px; padding: 7px 10px; cursor: pointer; text-align: left; }
+  aside nav button svg { width: 18px; height: 18px; color: var(--muted); }
+  aside nav button:hover { background: #e8edf2; }
+  aside nav button[aria-selected="true"] { background: var(--blue-soft); color: var(--blue); font-weight: 600; }
+  aside nav button[aria-selected="true"] svg { color: var(--blue); }
+  aside nav .badge { margin-left: auto; background: var(--red); color: #fff; font-size: 11px; font-weight: 600; border-radius: 9px; padding: 0 6px; line-height: 18px; min-width: 18px; text-align: center; }
+  aside .foot { margin-top: auto; padding: 12px 16px; color: var(--muted); font-size: 11.5px; border-top: 1px solid var(--line); }
+
+  /* ------------------------------------------------------------- page */
+  main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .bar { display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-bottom: 1px solid var(--line); min-height: 53px; flex-wrap: wrap; }
+  .bar h1 { font-size: 15px; font-weight: 600; margin: 0 auto 0 0; }
+  .page { flex: 1; overflow: auto; padding: 18px 20px 24px; }
+  section[hidden] { display: none; }
+
+  .btn { font: inherit; height: 28px; padding: 0 14px; border-radius: 3px; border: 1px solid #c8d1db; background: #fff; color: var(--text); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .btn:hover:not(:disabled) { border-color: var(--blue); color: var(--blue); text-decoration: none; }
+  .btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  .btn.primary:hover:not(:disabled) { background: var(--blue-dark); color: #fff; }
+  .btn.danger { color: var(--red); border-color: #f0b5b6; }
+  .btn.danger:hover:not(:disabled) { background: var(--red); border-color: var(--red); color: #fff; }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .btn svg { width: 14px; height: 14px; }
+
+  .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; white-space: nowrap; }
+  .chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+  .chip.ok i { background: var(--green); } .chip.warn i { background: var(--amber); } .chip.bad i { background: var(--red); }
+  .chip.ok { color: #1c7a44; } .chip.warn { color: #9a5e00; } .chip.bad { color: #b42326; }
+  .tag { font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 10px; background: var(--soft); color: var(--muted); border: 1px solid var(--line); }
+
+  .note { margin: 0 0 14px; padding: 9px 12px 9px 12px; border-radius: 4px; background: var(--soft); border: 1px solid var(--line); display: flex; gap: 8px; align-items: flex-start; }
+  .note.good { background: var(--green-soft); border-color: #bfe6cf; } .note.warn { background: var(--amber-soft); border-color: #f4d9a6; } .note.bad { background: var(--red-soft); border-color: #f4c4c5; }
+  .note a { font-weight: 600; }
+
+  /* ------------------------------------------------------------ cards */
+  .card { border: 1px solid var(--line); border-radius: 6px; margin-bottom: 16px; background: #fff; }
+  .card > h2 { font-size: 13px; font-weight: 600; margin: 0; padding: 11px 16px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px; }
+  .card > h2 .right { margin-left: auto; font-weight: normal; }
+  .card > .in { padding: 14px 16px; }
+  .card > table { margin: 0; }
+  .muted { color: var(--muted); } .small { font-size: 12px; }
+
+  .hero { display: flex; align-items: center; gap: 18px; padding: 18px 20px; }
+  .hero .icon { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; flex: none; }
+  .hero .icon svg { width: 34px; height: 34px; color: #fff; }
+  .hero .icon.ok { background: var(--green); } .hero .icon.warn { background: var(--amber); } .hero .icon.bad { background: var(--red); } .hero .icon.idle { background: var(--faint); }
+  .hero b { display: block; font-size: 18px; font-weight: 600; }
+  .hero .actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .tile { border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; display: flex; gap: 12px; align-items: center; }
+  .tile .ic { width: 36px; height: 36px; border-radius: 8px; background: var(--blue-soft); color: var(--blue); display: grid; place-items: center; flex: none; }
+  .tile .ic svg { width: 19px; height: 19px; }
+  .tile b { display: block; font-size: 19px; font-weight: 600; line-height: 1.15; }
+  .tile span { color: var(--muted); font-size: 12px; }
+
+  /* ----------------------------------------------------------- tables */
+  table { border-collapse: collapse; width: 100%; }
+  th { text-align: left; font-weight: normal; color: var(--muted); font-size: 12px; background: var(--soft); padding: 7px 16px; border-bottom: 1px solid var(--line); }
+  td { padding: 9px 16px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  tr:last-child td { border-bottom: 0; }
+  tbody tr:hover td { background: #f8fbfe; }
+  td.k { color: var(--muted); width: 40%; }
+  td.n, th.n { text-align: right; white-space: nowrap; }
+  code { font: 12px/1.4 var(--mono); background: var(--soft); border: 1px solid var(--line); padding: 1px 5px; border-radius: 3px; }
+
+  .meter { height: 6px; border-radius: 3px; background: #e9eef3; overflow: hidden; min-width: 80px; }
+  .meter i { display: block; height: 100%; background: var(--blue); border-radius: 3px; }
+  .meter i.warn { background: var(--amber); } .meter i.bad { background: var(--red); }
+
+  .gauges { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .gauge { border: 1px solid var(--line); border-radius: 6px; padding: 14px; display: flex; align-items: center; gap: 14px; }
+  .gauge svg { width: 72px; height: 72px; transform: rotate(-90deg); }
+  .gauge .track { stroke: #e9eef3; } .gauge .val { stroke: var(--blue); transition: stroke-dasharray .4s; }
+  .gauge .val.warn { stroke: var(--amber); } .gauge .val.bad { stroke: var(--red); }
+  .gauge b { display: block; font-size: 18px; font-weight: 600; } .gauge span { color: var(--muted); font-size: 12px; }
+
+  /* ------------------------------------------------------------ calls */
+  .call { display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .call:last-child { border-bottom: 0; }
+  .avatar { width: 38px; height: 38px; border-radius: 50%; background: var(--blue-soft); color: var(--blue); display: grid; place-items: center; font-weight: 600; flex: none; }
+  .call .who b { font-weight: 600; } .call .who div { color: var(--muted); font-size: 12px; }
+  .call .time { margin-left: auto; font: 600 14px var(--mono); color: var(--text); }
+  .empty { text-align: center; color: var(--muted); padding: 34px 16px; }
+  .empty svg { width: 40px; height: 40px; color: #c3ccd5; display: block; margin: 0 auto 8px; }
+
+  /* ------------------------------------------------------------ forms */
+  .form .row { display: grid; grid-template-columns: 38% 1fr; gap: 10px; align-items: center; padding: 6px 0; }
+  .form .hint { grid-column: 2; color: var(--muted); font-size: 12px; margin-top: -4px; }
+  input:not([type=checkbox]):not([type=radio]), select { font: inherit; color: var(--text); height: 28px; padding: 0 8px; border: 1px solid #c8d1db; border-radius: 3px; width: 100%; max-width: 280px; background: #fff; }
+  input:focus, select:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 2px var(--blue-soft); }
+  label.check { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; cursor: pointer; }
+  label.check input { margin-top: 3px; accent-color: var(--blue); }
+  label.check span small { display: block; color: var(--muted); font-size: 12px; }
+  .switch { position: relative; width: 34px; height: 18px; flex: none; margin-top: 1px; }
+  .switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .switch i { position: absolute; inset: 0; background: #c8d1db; border-radius: 9px; transition: .15s; cursor: pointer; }
+  .switch i::after { content: ""; position: absolute; width: 14px; height: 14px; left: 2px; top: 2px; background: #fff; border-radius: 50%; transition: .15s; box-shadow: 0 1px 2px #0003; }
+  .switch input:checked + i { background: var(--blue); } .switch input:checked + i::after { left: 18px; }
+  .switch input:disabled + i { opacity: .5; cursor: default; }
+  .setting { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--line); }
+  .setting:first-child { border-top: 0; padding-top: 0; }
+  .setting div small { display: block; color: var(--muted); font-size: 12px; }
+  .certs td { padding: 8px 10px; } .certs td:first-child { width: 28px; padding-left: 0; } .certs tr { cursor: pointer; }
+  .certs .names { font-weight: 600; } .certs .tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+  .secret { font: 600 17px/1.4 var(--mono); letter-spacing: .05em; user-select: all; background: #fff; border: 1px dashed #9fb7cc; padding: 4px 12px; display: inline-block; margin: 6px 0; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+  /* ------------------------------------------------------------- logs */
+  .seg { display: inline-flex; border: 1px solid #c8d1db; border-radius: 4px; overflow: hidden; flex-wrap: wrap; }
+  .seg button { font: inherit; font-size: 12px; padding: 4px 12px; border: 0; border-right: 1px solid #c8d1db; background: #fff; cursor: pointer; color: var(--text); }
+  .seg button:last-child { border-right: 0; }
+  .seg button[aria-pressed="true"] { background: var(--blue); color: #fff; }
+  pre { font: 11.5px/1.5 var(--mono); background: #fbfcfd; border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; margin: 12px 0; white-space: pre-wrap; word-break: break-word; height: calc(100vh - 230px); min-height: 220px; overflow: auto; }
+
+  @media (max-width: 640px) {
+    aside { width: 56px; } .brand div, aside nav button span, aside .foot { display: none; } aside nav button { justify-content: center; padding: 8px; }
+    aside nav .badge { position: absolute; margin: -16px 0 0 18px; }
+    .form .row { display: block; } .form .hint { grid-column: auto; } td.k { width: auto; } .hero { flex-wrap: wrap; } .hero .actions { margin-left: 0; }
+  }
+
+  /* ---------------------------------------------------------- charts */
+  .chart { width: 100%; height: 150px; display: block; }
+  .chart .axis { stroke: var(--line); } .chart text { font: 10.5px var(--font); fill: var(--faint); }
+  .chart .bar-a { fill: var(--blue); } .chart .bar-m { fill: #f3a3a4; }
+  .chart .bar-g:hover rect { opacity: .8; }
+  .chart .area { fill: var(--blue-soft); } .chart .line { fill: none; stroke: var(--blue); stroke-width: 1.6; }
+  .chart .line2 { fill: none; stroke: var(--amber); stroke-width: 1.6; }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); padding: 0 16px 12px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+
+  /* ------------------------------------------------------- checklist */
+  .steps { list-style: none; margin: 0; padding: 0; }
+  .steps li { display: flex; gap: 12px; align-items: center; padding: 8px 16px; border-top: 1px solid var(--line); }
+  .steps li:first-child { border-top: 0; }
+  .steps .tick { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #c8d1db; display: grid; place-items: center; flex: none; }
+  .steps .tick svg { width: 13px; height: 13px; color: #fff; }
+  .steps li.done .tick { background: var(--green); border-color: var(--green); }
+  .steps li.done b { color: var(--muted); font-weight: normal; text-decoration: line-through; }
+  .steps li small { display: block; color: var(--muted); font-size: 12px; }
+  .progress { height: 6px; background: #e9eef3; border-radius: 3px; overflow: hidden; width: 140px; }
+  .progress i { display: block; height: 100%; background: var(--green); }
+
+  /* -------------------------------------------------- phones, calls */
+  .menu { position: relative; display: inline-block; }
+  .menu > div { position: absolute; right: 0; top: 32px; background: #fff; border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 6px 18px #0002; z-index: 5; min-width: 170px; padding: 4px 0; }
+  .menu > div button { display: block; width: 100%; text-align: left; font: inherit; border: 0; background: none; padding: 7px 14px; cursor: pointer; color: var(--text); }
+  .menu > div button:hover { background: var(--blue-soft); color: var(--blue); }
+  td .actions { justify-content: flex-end; flex-wrap: nowrap; }
+  .btn.small { height: 24px; padding: 0 10px; font-size: 12px; }
+  .play { width: 26px; height: 26px; border-radius: 50%; border: 1px solid #c8d1db; background: #fff; display: inline-grid; place-items: center; cursor: pointer; color: var(--blue); }
+  .play:hover { border-color: var(--blue); } .play svg { width: 12px; height: 12px; }
+  .dir { width: 14px; height: 14px; color: var(--faint); vertical-align: -2px; }
+  tr.transcript td { color: var(--muted); font-size: 12px; padding-top: 0; font-style: italic; }
+  .lang { display: flex; gap: 8px; align-items: center; }
+</style>
+
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-overview" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5"/></symbol>
+    <symbol id="i-live" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h3.5l1.8 4.5-2.3 1.4a11 11 0 0 0 6.1 6.1l1.4-2.3L20 15.5V19a1.5 1.5 0 0 1-1.6 1.5A16.5 16.5 0 0 1 3.5 5.6 1.5 1.5 0 0 1 5 4z"/><path d="M15 3.5a6 6 0 0 1 5.5 5.5M15 7a2.5 2.5 0 0 1 2 2"/></symbol>
+    <symbol id="i-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></symbol>
+    <symbol id="i-line" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/></symbol>
+    <symbol id="i-resources" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9.5 2.5v3M14.5 2.5v3M9.5 18.5v3M14.5 18.5v3M2.5 9.5h3M2.5 14.5h3M18.5 9.5h3M18.5 14.5h3"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+    <symbol id="i-logs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 3v5h5M8.5 12.5h7M8.5 16h7"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 6.5v7M12 17.5v.1"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M9 7v10M15 7v10"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M5 4h3.5l1.8 4.5-2.3 1.4a11 11 0 0 0 6.1 6.1l1.4-2.3L20 15.5V19a1.5 1.5 0 0 1-1.6 1.5A16.5 16.5 0 0 1 3.5 5.6 1.5 1.5 0 0 1 5 4z"/></symbol>
+    <symbol id="i-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
+    <symbol id="i-in" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 7L7 17M7 9v8h8"/></symbol>
+    <symbol id="i-out" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></symbol>
+    <symbol id="i-voicemail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6.5" cy="12" r="3.5"/><circle cx="17.5" cy="12" r="3.5"/><path d="M6.5 15.5h11"/></symbol>
+    <symbol id="i-phones" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M7 7V5.5A1.5 1.5 0 0 1 8.5 4h7A1.5 1.5 0 0 1 17 5.5V7"/><circle cx="12" cy="13.5" r="3"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1.5"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></symbol>
+  </defs>
+</svg>
+
+
+<aside>
+  <div class="brand"><img src="images/72.png" alt=""><div><b>twocans</b><span id="version">&nbsp;</span></div></div>
+  <nav role="tablist">
+    <button role="tab" data-tab="overview" aria-selected="true"><svg><use href="#i-overview"/></svg><span data-t>Overview</span></button>
+    <button role="tab" data-tab="live"><svg><use href="#i-live"/></svg><span data-t>Live calls</span><b class="badge" id="live-badge" hidden></b></button>
+    <button role="tab" data-tab="phones"><svg><use href="#i-phones"/></svg><span data-t>Phones</span></button>
+    <button role="tab" data-tab="activity"><svg><use href="#i-activity"/></svg><span data-t>Activity</span></button>
+    <button role="tab" data-tab="line"><svg><use href="#i-line"/></svg><span data-t>Phone line</span></button>
+    <button role="tab" data-tab="resources"><svg><use href="#i-resources"/></svg><span data-t>Resources</span></button>
+    <button role="tab" data-tab="settings" data-admin><svg><use href="#i-settings"/></svg><span data-t>Settings</span></button>
+    <button role="tab" data-tab="logs" data-admin><svg><use href="#i-logs"/></svg><span data-t>Logs</span></button>
+  </nav>
+  <div class="foot" id="foot">&nbsp;</div>
+</aside>
+
+<main>
+  <div class="bar">
+    <h1 id="title">Overview</h1>
+    <span class="tag" id="viewonly" data-t hidden>View only</span>
+    <a class="btn primary" id="open" target="_blank" rel="noopener"><svg><use href="#i-open"/></svg><span data-t>Open twocans</span></a>
+  </div>
+
+  <div class="page">
+    <div class="note" id="message" hidden></div>
+
+    <!-- ============================================================ overview -->
+    <section id="overview">
+      <div class="card">
+        <div class="hero">
+          <div class="icon idle" id="hero-icon"><svg><use href="#i-check"/></svg></div>
+          <div><b id="hero-title">…</b><span class="muted" id="hero-text"></span></div>
+          <div class="actions" data-admin>
+            <button class="btn" data-action="restart" data-t>Restart</button>
+            <button class="btn" data-action="setup" data-t>Run setup again</button>
+          </div>
+        </div>
+      </div>
+      <div class="note good" id="update" hidden></div>
+      <div class="card" id="checklist" hidden>
+        <h2><span data-t>Getting started</span> <span class="muted small" id="steps-done"></span>
+          <span class="right" style="display:flex;gap:12px;align-items:center"><span class="progress"><i id="steps-bar"></i></span><a href="#" id="steps-hide" class="small" data-t>Hide</a></span></h2>
+        <ul class="steps" id="steps"></ul>
+      </div>
+      <div class="tiles" id="summary"></div>
+      <div class="card"><h2 data-t>Parts</h2><table><thead><tr><th data-t>Part</th><th data-t>Status</th><th class="n" data-t>Up for</th></tr></thead><tbody id="parts"></tbody></table></div>
+      <div class="card"><h2 data-t>Connecting</h2><table><tbody id="connect"></tbody></table></div>
+      <p class="muted small" id="checked"></p>
+    </section>
+
+    <!-- ================================================================ live -->
+    <section id="live" hidden>
+      <div class="card"><div id="calls"></div></div>
+      <p class="muted small" data-t>Shows the calls going on now, as twocans' Live screen does.</p>
+    </section>
+
+    <!-- ============================================================== phones -->
+    <section id="phones" hidden>
+      <div class="note warn" id="pause-unsupported" hidden></div>
+      <div class="actions" data-admin id="phones-all" style="margin-bottom:14px">
+        <span class="menu"><button class="btn" data-menu><span data-t>Pause every phone</span> ▾</button><div hidden>
+          <button data-pause-all="60" data-t>For an hour</button>
+          <button data-pause-all="120" data-t>For two hours</button>
+          <button data-pause-all="morning" data-t>Until the morning</button>
+        </div></span>
+        <button class="btn" id="resume-all" data-t>Every phone back on</button>
+      </div>
+      <div class="card"><table><thead><tr><th data-t>Phone</th><th data-t>Extension</th><th data-t>Status</th><th class="n" data-admin></th></tr></thead><tbody id="phone-list"></tbody></table></div>
+      <p class="muted small" data-t>Paused, a phone makes and takes no calls until the time's up. Ring sends it a test call: answered, it says “hello world”.</p>
+    </section>
+
+    <!-- ============================================================ activity -->
+    <section id="activity" hidden>
+      <div class="tiles" id="call-tiles"></div>
+      <div class="card"><h2 data-t>Calls a day, the last 30 days</h2><div class="in" style="padding-bottom:4px"><svg class="chart" id="day-chart"></svg></div>
+        <div class="legend"><span><i style="background:var(--blue)"></i><span data-t>Calls</span></span><span><i style="background:#f3a3a4"></i><span data-t>Missed</span></span></div></div>
+      <div class="card"><h2 data-t>Recent calls</h2><table><thead><tr><th data-t>When</th><th data-t>Phone</th><th data-t>With</th><th data-t>How it went</th><th class="n" data-t>Length</th><th class="n" data-admin></th></tr></thead><tbody id="recent"></tbody></table></div>
+      <div class="card"><h2 data-t>Calls, all told</h2><table><tbody id="call-detail"></tbody></table></div>
+      <div class="card"><h2 data-t>The household</h2><table><tbody id="household"></tbody></table></div>
+      <p class="muted small" id="activity-note" data-t hidden>The numbers come from twocans itself, so they appear once it's running.</p>
+    </section>
+
+    <!-- ========================================================== phone line -->
+    <section id="line" hidden>
+      <div class="card">
+        <h2><span data-t>Your phone line</span> <span class="right" data-admin><button class="btn" data-action="reregister" id="reregister" data-t>Register again</button></span></h2>
+        <table><tbody id="line-detail"></tbody></table>
+      </div>
+      <div class="card"><h2 data-t>Your router</h2><div class="in" id="router"></div></div>
+      <div class="card"><h2 id="checks-title"></h2><table><tbody id="checks"></tbody></table></div>
+    </section>
+
+    <!-- =========================================================== resources -->
+    <section id="resources" hidden>
+      <div class="gauges" id="gauges"></div>
+      <div class="card"><h2 data-t>Memory, the last day</h2><div class="in" style="padding-bottom:4px"><svg class="chart" id="mem-chart"></svg></div>
+        <div class="legend"><span><i style="background:var(--blue)"></i><span data-t>The Synology</span></span><span><i style="background:var(--amber)"></i><span data-t>twocans</span></span></div></div>
+      <div class="card"><h2 data-t>Each part</h2><table><thead><tr><th data-t>Part</th><th class="n" data-t>Processor</th><th data-t>Memory</th><th class="n"></th></tr></thead><tbody id="usage"></tbody></table></div>
+      <div class="card">
+        <h2 data-t>Speech-to-text</h2>
+        <div class="in">
+          <div class="setting">
+            <label class="switch"><input type="checkbox" id="transcribe"><i></i></label>
+            <div><b data-t>Write down voicemails and calls</b><small id="transcribe-note"></small></div>
+          </div>
+          <div class="setting" id="retry-row" hidden>
+            <div style="flex:1"><b id="retry-text"></b><small data-t>Speech-to-text gave up on these — sending them back tries again.</small></div>
+            <button class="btn" data-action="retry" data-t>Try again</button>
+          </div>
+        </div>
+      </div>
+      <div class="card"><h2 data-t>Space</h2><table><tbody id="space"></tbody></table></div>
+      <p class="muted small" data-t>Sizes are counted every ten minutes.</p>
+    </section>
+
+    <!-- ============================================================ settings -->
+    <section id="settings" hidden>
+      <div class="card">
+        <h2 data-t>Network and region</h2>
+        <form class="in form" id="form" autocomplete="off">
+          <div class="row"><label for="address" data-t>This Synology's address</label><input id="address" name="address" required pattern="([0-9]{1,3}\.){3}[0-9]{1,3}"></div>
+          <div class="hint" data-t>Where phones find twocans. If the Synology's address changes, put the new one here.</div>
+          <div class="row"><label for="web_port" data-t>Web app port</label><input id="web_port" name="web_port" required inputmode="numeric" pattern="[0-9]{2,5}"></div>
+          <div class="row"><label for="https_port" data-t>HTTPS port</label><input id="https_port" name="https_port" required inputmode="numeric" pattern="[0-9]{2,5}"></div>
+          <div class="row"><label for="tz" data-t>Time zone</label><input id="tz" name="tz" required pattern="([A-Z][A-Za-z_]+(/[A-Za-z0-9_+\-]+)+|UTC)"></div>
+          <div class="hint" data-t>Bedtime and call hours follow it — like Europe/London.</div>
+          <div class="row"><label for="country" data-t>Country calling code</label><input id="country" name="country" required inputmode="numeric" pattern="[0-9]{1,4}"></div>
+          <div class="row"><label for="model" data-t>Speech-to-text model</label>
+            <select id="model" name="model"><option value="base" data-t>base — quicker, lighter</option><option value="small" data-t>small — better on noisy lines</option></select></div>
+          <div class="actions" style="margin-top:10px"><button class="btn primary" type="submit" data-t>Save and apply</button><span class="muted small" data-t>twocans restarts with these; the phones' and phone line's ports are kept.</span></div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2 data-t>HTTPS</h2>
+        <div class="in">
+          <div class="note" id="https-now" style="margin-bottom:12px"></div>
+          <p class="muted" style="margin:0 0 10px" data-t>twocans can use one of this Synology's own certificates — like the Let's Encrypt one DSM keeps for your DDNS name — and follow it through DSM's renewals. Face ID sign-in and adding twocans to a phone's home screen need one. To make one, go to Control Panel → Security → Certificate → Add.</p>
+          <form class="form" id="https-form" autocomplete="off">
+            <table class="certs"><tbody id="cert-list"></tbody></table>
+            <div class="row" style="margin-top:10px"><label for="https-name" data-t>Name to use</label><input id="https-name" name="domain" list="https-names" placeholder="phone.example.com" pattern="([A-Za-z0-9-]{1,63}\.)+[A-Za-z]{2,63}"><datalist id="https-names"></datalist></div>
+            <div class="hint" id="https-hint"></div>
+            <label class="check"><input type="checkbox" name="address" value="1" checked><span><span id="https-make"></span><small data-t>For the Open twocans button, and the links twocans sends — phones' setup links among them.</small></span></label>
+            <div class="actions" style="margin-top:8px">
+              <button class="btn primary" type="submit" data-t>Use this certificate</button>
+              <button class="btn" type="button" id="https-stop" data-t hidden>Stop using DSM's certificate</button>
+              <span class="muted small" id="https-note"></span>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 data-t>Looking after twocans</h2>
+        <div class="in">
+          <div class="setting"><label class="switch"><input type="checkbox" data-pref="watchdog"><i></i></label><div><b data-t>Start parts again when they stop working</b><small data-t>A part that's stopped, or stopped answering, for a minute and a half is started again. After three times in an hour, it's left for you to look at.</small></div></div>
+          <div class="setting"><label class="switch"><input type="checkbox" data-pref="notify"><i></i></label><div><b data-t>Tell DSM when something needs you</b><small data-t>In DSM's notifications: a part that stopped, setup that didn't finish, the phone line dropping, a new release.</small></div></div>
+          <div class="setting"><label class="switch"><input type="checkbox" data-pref="notify_phones"><i></i></label><div><b data-t>…and when a phone's been offline for a day</b><small data-t>So an unplugged phone doesn't go unnoticed.</small></div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 data-t>Who else can look</h2>
+        <form class="in form" id="viewers-form" autocomplete="off">
+          <p class="muted" style="margin:0 0 8px" data-t>DSM users who aren't administrators can see this window — how twocans is, its calls and its numbers — but change nothing. Administrators always can.</p>
+          <div class="row"><label for="viewers" data-t>DSM user names</label><input id="viewers" name="users" placeholder="alex, sam"></div>
+          <div class="hint" data-t>Separated by commas. In Control Panel → Application Privileges, they also need to be allowed twocans.</div>
+          <div class="actions" style="margin-top:8px"><button class="btn" type="submit" data-t>Save</button><span class="muted small" id="viewers-saved"></span></div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2 data-t>Your data</h2>
+        <div class="in">
+          <p class="muted" style="margin:0 0 10px" data-t>Everything twocans holds, in one zip: the call log, contacts and voicemails as spreadsheets, and the recordings and voicemails as audio. It holds your family's voices, so keep it somewhere private.</p>
+          <div class="actions">
+            <button class="btn" data-export="1" data-t>Export everything</button>
+            <button class="btn" data-export="0" data-t>Export without audio</button>
+            <a class="btn primary" id="get-export" data-t hidden>Download</a>
+            <span class="muted small" id="export-note"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 data-t>Locked out of twocans?</h2>
+        <form class="in form" id="owner-form" autocomplete="off">
+          <p class="muted" style="margin:0 0 8px" data-t>Gives the Owner account a new password, shown here once. Being a DSM administrator is all the proof it asks for.</p>
+          <div class="row"><label for="owner-email" data-t>New sign-in email</label><input id="owner-email" name="email" type="email" data-t-placeholder="Leave empty to keep it"></div>
+          <label class="check"><input type="checkbox" name="passkeys" value="1"><span><span data-t>Remove its passkeys</span><small data-t>Face ID and fingerprint sign-ins — for a lost phone.</small></span></label>
+          <label class="check"><input type="checkbox" name="signout" value="1" checked><span data-t>Sign out every browser already signed in to it</span></label>
+          <div class="actions" style="margin-top:6px"><button class="btn" type="submit" data-t>Reset the Owner's password</button></div>
+          <div class="note" id="owner-result" style="margin:12px 0 0" hidden></div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2 data-t>Language</h2>
+        <div class="in lang">
+          <select id="lang" style="max-width:240px"></select>
+          <span class="muted small" data-t>This window follows DSM's language unless you choose one here — just for this browser.</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================ logs -->
+    <section id="logs" hidden>
+      <div class="actions">
+        <div class="seg" id="log-parts">
+          <button data-part="setup" aria-pressed="true" data-t>Setup</button>
+          <button data-part="asterisk" data-t>Phone service</button>
+          <button data-part="web" data-t>Web app</button>
+          <button data-part="mariadb" data-t>Database</button>
+          <button data-part="transcriber" data-t>Transcription</button>
+          <button data-part="whisper" data-t>Speech-to-text</button>
+          <button data-part="pager" data-t>Announcements</button>
+        </div>
+      </div>
+      <pre id="logtext">…</pre>
+      <div class="actions">
+        <a class="btn" href="api.cgi?action=download" id="download" data-t>Download the setup log</a>
+        <button class="btn" id="make-report" data-t>Make a support report</button>
+        <a class="btn primary" id="get-report" data-t hidden>Download the report</a>
+        <span class="muted small" id="report-note"></span>
+      </div>
+      <p class="muted small" data-t>A support report gathers versions, checks and every part's log, with names, numbers, emails and passwords taken out — to attach to an issue on GitHub.</p>
+    </section>
+  </div>
+</main>
+
+<audio id="player" hidden></audio>
+<script src="panel.js"></script>
+</body>
+</html>

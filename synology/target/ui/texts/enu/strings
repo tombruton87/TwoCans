@@ -1,0 +1,13 @@
+[app]
+title="twocans"
+
+[notification]
+title="twocans"
+restarted="twocans started its {0} again, as it had stopped working."
+failing="twocans' {0} keeps stopping — it was started again {1} times in the last hour. Open twocans in DSM to see why."
+setup_failed="Setting twocans up didn't finish. Open twocans in DSM to see why."
+phone_offline="The phone {0} has been offline for a day. Is it plugged in, and on the network?"
+line_down="twocans' phone line isn't registered with {0}, so calls from outside can't come in."
+line_up="twocans' phone line is registered with {0} again."
+update="twocans {0} is out. Open twocans in DSM to download it."
+cert_expiring="twocans' HTTPS certificate runs out in {0} days. DSM renews its Let's Encrypt certificates itself — if this one isn't, renew it in Control Panel → Security → Certificate."
