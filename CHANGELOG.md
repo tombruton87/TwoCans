@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-10-03
+
+twocans on a Synology: a package to install from Package Center, with a
+wizard for its questions, or the installer over SSH. Getting it there made
+call audio's ports movable, and the installer surer-footed on small machines.
+
 ### Added
 - The installer knows a Synology (DSM 7): Docker from Package Center (Container
   Manager), run as root, on a storage volume, by the Synology's own name, and
@@ -829,7 +835,8 @@ that play through the speaker instead of as a call.
   **Numbers the kids tried** log on the call log, one card per number with the
   same two buttons. Both leave out anyone who has since been added as a contact.
 
-[Unreleased]: https://github.com/tombruton87/TwoCans/compare/v0.1.7...HEAD
+[Unreleased]: https://github.com/tombruton87/TwoCans/compare/v0.1.8...HEAD
+[0.1.8]: https://github.com/tombruton87/TwoCans/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/tombruton87/TwoCans/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/tombruton87/TwoCans/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/tombruton87/TwoCans/compare/v0.1.4...v0.1.5
