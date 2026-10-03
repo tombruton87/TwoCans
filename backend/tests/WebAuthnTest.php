@@ -141,7 +141,7 @@ return [
     }),
     test('passkeys need a name, not a bare IP address', function () {
         $_SERVER['HTTPS'] = 'on';
-        $_SERVER['HTTP_HOST'] = '192.168.1.151:443';
+        $_SERVER['HTTP_HOST'] = '192.168.50.23:443';
         assertSame(false, WebAuthn::available());
         $_SERVER['HTTP_HOST'] = 'phone.example.com';
         assertSame(true, WebAuthn::available());

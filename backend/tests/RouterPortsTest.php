@@ -76,7 +76,7 @@ return [
         }
     }),
     test('the router is guessed as .1 on the box\'s own network', function () {
-        assertSame('192.168.1.1', PortOpener::guessRouter('192.168.1.151'));
+        assertSame('192.168.50.1', PortOpener::guessRouter('192.168.50.23'));
         assertSame('', PortOpener::guessRouter(''));
         assertSame('', PortOpener::guessRouter('phone.example.com'));
     }),

@@ -822,7 +822,7 @@ section "Firewall"
 
 LAN_CIDR=$(ip -4 -o addr show 2>/dev/null | awk -v ip="$LAN_IP" '{split($4, a, "/"); if (a[1] == ip) print $4}' | head -1)
 lan_network() {
-  # 192.168.1.151/24 -> 192.168.1.0/24
+  # 192.168.50.23/24 -> 192.168.50.0/24
   local addr=${1%/*} bits=${1#*/} a b c d mask n
   IFS=. read -r a b c d <<< "$addr"
   n=$(( (a << 24) | (b << 16) | (c << 8) | d ))
