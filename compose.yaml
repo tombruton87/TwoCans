@@ -27,7 +27,10 @@ services:
       # router must forward the trunk port straight through. Which of the two
       # gets 5060 is a per-house choice — see SIP_PORT / TRUNK_SIP_PORT in .env.
       - "${TRUNK_SIP_PORT:-5062}:${TRUNK_SIP_PORT:-5062}/udp"
-      - "${RTP_PORT_START:-10000}-${RTP_PORT_END:-10100}:10000-10100/udp"
+      # The same range on both sides: Asterisk tells callers its own ports, so
+      # moving it (when something else holds part of it) moves rtp.conf's too —
+      # install.sh writes both from RTP_PORT_START/END.
+      - "${RTP_PORT_START:-10000}-${RTP_PORT_END:-10100}:${RTP_PORT_START:-10000}-${RTP_PORT_END:-10100}/udp"
     volumes:
       - ./docker/asterisk/etc:/etc/asterisk
       - ./docker/asterisk/cdr:/var/log/asterisk/cdr-csv
@@ -80,6 +83,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      # Its first start makes the database, which a small NAS can take a few
+      # minutes over; failed checks until then don't count.
+      start_period: 5m
     networks: [twocans]
 
   # ---------------------------------------------------------------------------
@@ -119,6 +125,9 @@ services:
       TRUNK_SIP_PORT: ${TRUNK_SIP_PORT:-5062}
       SIP_PORT: ${SIP_PORT:-5060}
       SIP_TLS_PORT: ${SIP_TLS_PORT:-5061}
+      # Call audio's range, for the app's router instructions.
+      RTP_PORT_START: ${RTP_PORT_START:-10000}
+      RTP_PORT_END: ${RTP_PORT_END:-10100}
       APP_URL: ${APP_URL:?set in .env}
       DEFAULT_COUNTRY_CODE: ${DEFAULT_COUNTRY_CODE:-44}
       CDR_CSV_PATH: /var/log/asterisk/cdr-csv/Master.csv
@@ -225,6 +234,7 @@ services:
       TZ: ${TZ:-Europe/London}
     volumes:
       - whisper-models:/data/whisper
+    # 0 is no cap, for a kernel without CPU quotas (install.sh decides).
     cpus: ${WHISPER_CPUS:-4.0}
     mem_limit: ${WHISPER_MEMORY:-2g}
     networks: [twocans]

@@ -21,6 +21,18 @@ Rocky, AlmaLinux and CentOS; Arch and Manjaro; openSUSE; Alpine (`apk add bash c
 first). If something stops it, it says what to do — and `./twocans report` makes a
 report, private details taken out, for an issue.
 
+**On a Synology** (DSM 7, a model that runs Container Manager): install Container
+Manager and Git Server from Package Center, sign in over SSH as an
+administrator, and run it with `sudo`, as twocans runs as root there:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tombruton87/TwoCans/main/get.sh | sudo bash
+```
+
+It goes on a storage volume (`/volume1/docker/twocans`), by the Synology's own
+name (`http://diskstation.local:8083`), and says which ports to open in its
+firewall.
+
 ![The installer](docs/screenshots/installer.png)
 
 ## What it looks like

@@ -76,9 +76,22 @@ case "$(uname -m)" in
     "twocans needs a 64-bit Intel/AMD PC or a 64-bit ARM board, like a Raspberry Pi 3, 4 or 5" ;;
 esac
 
+# A Synology (DSM): twocans runs as root there — Docker's socket is root's —
+# and lives on a storage volume, not the small system partition.
+DSM=false
+if [[ -r /etc.defaults/VERSION ]] && grep -q '^productversion=' /etc.defaults/VERSION; then
+  DSM=true
+  [[ ":$PATH:" == *:/usr/local/bin:* ]] || PATH="/usr/local/bin:$PATH"
+  [[ $EUID -eq 0 ]] || fail "On a Synology, twocans is installed as root." \
+    "Signed in as an administrator, run it with sudo: curl -fsSL https://raw.githubusercontent.com/tombruton87/TwoCans/main/get.sh | sudo bash"
+  ok "a Synology"
+fi
+
 # Root (a container or a minimal server, often): fine, without sudo.
 SUDO=sudo
-if [[ $EUID -eq 0 ]]; then
+if $DSM; then
+  SUDO=""
+elif [[ $EUID -eq 0 ]]; then
   SUDO=""
   echo "  ${dim}Running as root — fine. If this machine has a normal user, running it as them is tidier.${off}"
 elif ! command -v sudo >/dev/null 2>&1; then
@@ -88,9 +101,20 @@ fi
 # ------------------------------------------------------------------- where
 DIR=${TWOCANS_DIR:-}
 if [[ -z "$DIR" ]]; then
-  DIR=$(ask "Where should twocans live?" "$([[ $EUID -eq 0 ]] && echo /opt/twocans || echo "$HOME/twocans")")
+  if $DSM; then
+    # Beside Container Manager's own projects, in the docker shared folder, if there is one.
+    suggest=$(ls -d /volume[0-9]*/docker 2>/dev/null | head -1 || true)
+    suggest=${suggest:-$(ls -d /volume[0-9]* 2>/dev/null | head -1 || echo /volume1)}/twocans
+  else
+    suggest=$([[ $EUID -eq 0 ]] && echo /opt/twocans || echo "$HOME/twocans")
+  fi
+  DIR=$(ask "Where should twocans live?" "$suggest")
 fi
 DIR=${DIR/#\~/$HOME}
+if $DSM && [[ "$DIR" != /volume[0-9]*/* ]]; then
+  fail "On a Synology, twocans belongs on a storage volume, under /volume1 say, not $DIR: the system partition is only a few GB, and DSM updates replace it." \
+    "Run this again and pick a folder like /volume1/docker/twocans"
+fi
 
 run_there() { if [[ -n "$TTY" ]]; then exec "$@" < "$TTY"; else exec "$@"; fi; }
 
@@ -138,6 +162,9 @@ if ! command -v git >/dev/null 2>&1; then
   elif command -v zypper >/dev/null 2>&1; then install_git="$SUDO zypper -q install -y git"
   elif command -v apk >/dev/null 2>&1; then install_git="$SUDO apk add -q git"
   fi
+  $DSM && fail "git isn't installed — on a Synology, it comes with Git Server." \
+    "Open Package Center, search for Git Server, and install it" \
+    "Then run this again"
   [[ -n "$install_git" ]] || fail "git isn't installed, and this doesn't know your package manager." \
     "Install git with your package manager" "Then run this again"
   [[ $EUID -eq 0 || -n "$SUDO" ]] || fail "git isn't installed, and installing it needs sudo, which this machine hasn't got." \

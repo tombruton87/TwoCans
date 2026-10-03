@@ -22,11 +22,47 @@ if [[ -r "$OS_RELEASE" ]]; then
       "${ID:-}" "${ID_LIKE:-}" "${PRETTY_NAME:-${NAME:-Linux}}" "${VERSION_ID:-}" "${VERSION_CODENAME:-}" "${UBUNTU_CODENAME:-}" )"
 fi
 
+# A Synology runs DSM, which is Linux without a package manager: Docker comes
+# from Package Center — Container Manager on DSM 7.2 and later, the "Docker"
+# package before — its own web server holds ports 80 and 443, and Docker's
+# socket is root's alone. /etc.defaults/VERSION says which DSM.
+DSM=false; DSM_VERSION=""; DSM_MAJOR=0; DSM_MINOR=0; DSM_DOCKER_PKG=""
+DSM_VERSION_FILE=${DSM_VERSION_FILE:-/etc.defaults/VERSION}   # a test can point this elsewhere
+if [[ -r "$DSM_VERSION_FILE" ]] && grep -q '^productversion=' "$DSM_VERSION_FILE"; then
+  DSM=true
+  eval "$( . "$DSM_VERSION_FILE"
+    printf 'DSM_VERSION=%q DSM_MAJOR=%q DSM_MINOR=%q\n' "${productversion:-}" "${majorversion:-0}" "${minorversion:-0}" )"
+  OS_ID=dsm; OS_LIKE=""; OS_NAME="Synology DSM $DSM_VERSION"; OS_VERSION=$DSM_VERSION
+  DSM_DOCKER_PKG=Docker
+  (( DSM_MAJOR > 7 || (DSM_MAJOR == 7 && DSM_MINOR >= 2) )) && DSM_DOCKER_PKG=ContainerManager
+  # Docker is in /usr/local/bin, which sudo and some logins leave off the path.
+  [[ ":$PATH:" == *:/usr/local/bin:* ]] || PATH="/usr/local/bin:$PATH"
+fi
+
+# Package Center's name for the package that brings Docker, for messages.
+dsm_docker_name() { [[ "$DSM_DOCKER_PKG" == ContainerManager ]] && echo "Container Manager" || echo "Docker"; }
+
+# On a Synology, carry on as root: Docker's socket is root's, DSM has no docker
+# group to join, and files made by one user and updated by another trip git
+# up. Any administrator account can use sudo. Elsewhere, nothing.
+dsm_as_root() {
+  $DSM && [[ $EUID -ne 0 ]] || return 0
+  # The package's setup container has no sudo; whether it can reach Docker
+  # is the installer's own check to make.
+  [[ "${TWOCANS_PACKAGE:-}" == 1 ]] && return 0
+  command -v sudo >/dev/null 2>&1 || fail "On a Synology, twocans runs as root, and this account can't use sudo." \
+    "Sign in over SSH as an administrator (a member of the administrators group)" \
+    "Then run it again"
+  note "On a Synology, Docker needs root, so this carries on with sudo (it may ask for your password)."
+  exec sudo env "PATH=$PATH" bash "$0" "$@"
+}
+
 # Its family, for what to do: debian (apt), fedora/rhel (dnf), arch (pacman),
 # suse (zypper), alpine (apk), or unknown.
 os_family() {
   local all=" $OS_ID $OS_LIKE "
   case "$all" in
+    *" dsm "*) echo dsm ;;
     *" alpine "*) echo alpine ;;
     *" arch "*|*" archlinux "*|*" manjaro "*) echo arch ;;
     *" suse "*|*" opensuse "*|*" sles "*|*" opensuse-leap "*|*" opensuse-tumbleweed "*) echo suse ;;
@@ -96,7 +132,8 @@ need_root() {
 # systemd almost everywhere; OpenRC on Alpine (and some others); plain
 # 'service' scripts on a few older or smaller systems.
 INIT=other
-if [[ -d /run/systemd/system ]] && command -v systemctl >/dev/null 2>&1; then INIT=systemd
+if $DSM; then INIT=dsm   # its services are Package Center's packages
+elif [[ -d /run/systemd/system ]] && command -v systemctl >/dev/null 2>&1; then INIT=systemd
 elif command -v rc-service >/dev/null 2>&1; then INIT=openrc
 elif command -v service >/dev/null 2>&1; then INIT=sysv
 fi
@@ -107,6 +144,7 @@ service_enable_now() {
     systemd) $SUDO systemctl enable --now "$1" ;;
     openrc) $SUDO rc-update add "$1" default >/dev/null && $SUDO rc-service "$1" start ;;
     sysv) $SUDO service "$1" start ;;
+    dsm) [[ "$1" == docker ]] && $SUDO synopkg start "$DSM_DOCKER_PKG" >/dev/null ;;
     *) return 1 ;;
   esac
 }
@@ -116,6 +154,7 @@ service_on_boot() {
   case "$INIT" in
     systemd) [[ "$(systemctl is-enabled "$1" 2>/dev/null || true)" == enabled ]] && echo yes || echo no ;;
     openrc) rc-update show default 2>/dev/null | grep -qw "$1" && echo yes || echo no ;;
+    dsm) echo yes ;;   # a package that's running starts again when the Synology does
     *) echo unknown ;;
   esac
 }
@@ -126,6 +165,8 @@ service_start_text() {
     systemd) echo "sudo systemctl enable --now $1" ;;
     openrc) echo "sudo rc-update add $1 default && sudo rc-service $1 start" ;;
     sysv) echo "sudo service $1 start" ;;
+    dsm) [[ "$1" == docker ]] && echo "open Package Center and run $(dsm_docker_name) (or: sudo synopkg start $DSM_DOCKER_PKG)" \
+           || echo "start the $1 service" ;;
     *) echo "start the $1 service" ;;
   esac
 }
@@ -147,6 +188,7 @@ userland_bits() {
 # Docker's own packages the way its documentation does by hand, and the rest
 # from the distribution's own packages.
 docker_install_plan() {
+  $DSM && { echo dsm; return; }
   case "$OS_ID" in
     ubuntu|debian|raspbian|fedora|centos|rhel) echo getdocker; return ;;
   esac
@@ -168,6 +210,7 @@ docker_install_text() {
     getdocker) echo "with Docker's official install script (get.docker.com)" ;;
     apt-repo*|dnf-repo*) echo "from Docker's own packages, set up for $OS_NAME" ;;
     distro) echo "from $OS_NAME's own packages" ;;
+    dsm) echo "from Package Center ($(dsm_docker_name))" ;;
     *) echo "" ;;
   esac
 }
@@ -202,6 +245,8 @@ install_docker() {
         && { $SUDO dnf config-manager --add-repo "https://download.docker.com/linux/$base/docker-ce.repo" \
              || $SUDO dnf config-manager addrepo --from-repofile="https://download.docker.com/linux/$base/docker-ce.repo"; } \
         && $SUDO dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin ;;
+    dsm)
+      $SUDO synopkg install_from_server "$DSM_DOCKER_PKG" && $SUDO synopkg start "$DSM_DOCKER_PKG" ;;
     distro)
       case "$PKG" in
         apt) $SUDO apt-get update -qq && $SUDO apt-get install -y docker.io \
@@ -220,6 +265,13 @@ install_docker() {
 # distribution's package if it has one, otherwise Docker's own release, put
 # where Docker looks for plugins.
 install_compose() {
+  # A standalone docker-compose that's version 2 (a Synology's, say) is the
+  # plugin already: it only needs to be where Docker looks.
+  local standalone; standalone=$(command -v docker-compose 2>/dev/null || true)
+  if [[ -n "$standalone" ]] && "$standalone" version 2>/dev/null | grep -qE 'v?2\.'; then
+    mkdir -p "$HOME/.docker/cli-plugins" && ln -sf "$standalone" "$HOME/.docker/cli-plugins/docker-compose" \
+      && docker compose version >/dev/null 2>&1 && return 0
+  fi
   case "$PKG" in
     apt) $SUDO apt-get update -qq && { $SUDO apt-get install -y docker-compose-plugin || $SUDO apt-get install -y docker-compose-v2; } && return 0 ;;
     dnf|yum) $SUDO "$PKG" install -y docker-compose-plugin && return 0 ;;
@@ -232,4 +284,32 @@ install_compose() {
     && $SUDO curl -fsSL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-${arch}" \
          -o /usr/local/lib/docker/cli-plugins/docker-compose \
     && $SUDO chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+}
+
+# ------------------------------------------------------------------ ports
+# The ports something is listening on, tcp or udp, one per line: ss where
+# there is one, else netstat (all a Synology has).
+listening_ports() {
+  local t=${1:0:1}
+  { if command -v ss >/dev/null 2>&1; then ss -Hln"$t" 2>/dev/null | awk '{print $4}'
+    else netstat -ln"$t" 2>/dev/null | awk 'NR > 2 {print $4}'; fi
+  } | sed -E 's/.*:([0-9]+)$/\1/' | grep -E '^[0-9]+$' | sort -un || true
+}
+
+# --------------------------------------------------------------- time zone
+# This machine's time zone, as a name like Europe/London: what systemd or
+# /etc/timezone says, else where /etc/localtime points. A Synology has only
+# its own word for it (timezone="London" in /etc/synoinfo.conf), found among
+# the zone names if it's there. Empty when none of that works.
+detect_tz() {
+  local tz="" syno
+  tz=$(timedatectl show -p Timezone --value 2>/dev/null || true)
+  [[ -n "$tz" ]] || tz=$(cat /etc/timezone 2>/dev/null || true)
+  [[ -n "$tz" ]] || tz=$(readlink /etc/localtime 2>/dev/null | sed -n 's|.*zoneinfo/||p')
+  if [[ -z "$tz" ]] && $DSM; then
+    syno=$(sed -n 's/^timezone="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' /etc/synoinfo.conf 2>/dev/null | head -1)
+    [[ -n "$syno" && -d /usr/share/zoneinfo ]] \
+      && tz=$(cd /usr/share/zoneinfo && ls -d */"$syno" 2>/dev/null | grep -vE '^(posix|right)/' | head -1 || true)
+  fi
+  echo "$tz"
 }

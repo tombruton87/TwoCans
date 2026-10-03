@@ -7,10 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- The installer knows a Synology (DSM 7): Docker from Package Center (Container
+  Manager), run as root, on a storage volume, by the Synology's own name, and
+  which ports to open in its firewall.
+- Call audio's port range can move, as a whole, when something else holds part
+  of it (a UniFi controller's 10001, say): `./install.sh` offers a free one,
+  and Asterisk, Docker and the app's router instructions all follow.
+- `./install.sh` takes ready-made answers (`TWOCANS_LAN_IP` and the rest), for
+  installs nobody's at the keyboard for.
+
 ### Fixed
 - Times stamped by the app and checked by the database (or the other way round)
   could be hours out where the two run in different time zones — on a Synology,
   say. The database now keeps the app's time zone.
+- Speech-to-text no longer stops the install on a kernel that can't cap a
+  container's processor use (a Synology's): it runs uncapped there.
+- A slow first start of the database (a small NAS's) no longer stops the
+  install: it gets up to five minutes.
+- The folders for HTTPS certificates are made by the installer, as Docker on
+  some machines won't make them itself.
 
 ## [0.1.7] - 2026-10-03
 

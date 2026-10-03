@@ -22,10 +22,20 @@
 # suits this Linux (see scripts/platform.sh), and asks before anything that
 # uses sudo. When something can't be fixed here, it says what to do.
 #
+# The answers to its questions can come ready-made, for an install nobody's
+# at the keyboard for (the Synology package's, say). Each one set is taken
+# instead of the suggestion, with --yes taking the rest:
+#   TWOCANS_LAN_IP  TWOCANS_TZ  TWOCANS_COUNTRY  TWOCANS_WHISPER_MODEL
+#   TWOCANS_HTTP_PORT  TWOCANS_HTTPS_PORT  TWOCANS_SIP_PORT  TWOCANS_TRUNK_SIP_PORT
+#   TWOCANS_RTP_START (call audio's first port; it takes 101)
+#   TWOCANS_HOST_UID  TWOCANS_HOST_GID
+# TWOCANS_PACKAGE=1 says it's run by the Synology package (synology/).
+#
 set -euo pipefail
 
 cd "$(dirname "$0")"
 ENV_FILE=".env"
+PACKAGE=false; [[ "${TWOCANS_PACKAGE:-}" == 1 ]] && PACKAGE=true
 SECRETS_DIR="docker/asterisk/etc/secrets"
 TRANSPORTS="docker/asterisk/etc/generated/pjsip-transports.conf"
 
@@ -39,13 +49,14 @@ for arg in "$@"; do
     --write-secrets) SECRETS_ONLY=true ;;
     --uninstall) UNINSTALL=true ;;
     --reset-owner) RESET_OWNER=true ;;
-    -h|--help) sed -n '3,23p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '3,31p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown option: $arg (try --help)" >&2; exit 2 ;;
   esac
 done
 
 source "$(dirname "$0")/scripts/ui.sh"
 source "$(dirname "$0")/scripts/platform.sh"
+dsm_as_root "$@"
 
 # ---------------------------------------------------------------- validators
 is_ipv4() {
@@ -56,7 +67,13 @@ is_port() {
   [[ "$1" =~ ^[0-9]+$ ]] && (( $1 >= 1 && $1 <= 65535 )) || { echo "    A port is a number from 1 to 65535."; return 1; }
 }
 is_timezone() {
-  [[ -f "/usr/share/zoneinfo/$1" ]] || { echo "    Not a timezone this machine knows — something like Europe/London."; return 1; }
+  # Checked against the zone files where there are some; a Synology may have
+  # none, and then only the shape is. The containers bring their own.
+  if [[ -f /usr/share/zoneinfo/Europe/London ]]; then
+    [[ -f "/usr/share/zoneinfo/$1" ]] || { echo "    Not a timezone this machine knows — something like Europe/London."; return 1; }
+  else
+    [[ "$1" =~ ^[A-Z][A-Za-z_]+(/[A-Za-z0-9_+-]+)+$ || "$1" == UTC ]] || { echo "    A timezone looks like Europe/London."; return 1; }
+  fi
 }
 is_country_code() {
   [[ "$1" =~ ^[1-9][0-9]{0,2}$ ]] || { echo "    Just the digits, without + or 00 — 44 for the UK, 1 for the US."; return 1; }
@@ -85,6 +102,10 @@ env_set() {
   fi
 }
 
+# A file's mode, where it can be set: a Synology shared folder keeps its own
+# permissions (DSM's ACLs, which decide who gets in there) and may refuse.
+set_mode() { chmod "$@" 2>/dev/null || true; }
+
 secret() { head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n'; }
 
 # Asterisk reads its control passwords from files of its own. They live
@@ -100,7 +121,7 @@ write_secrets() {
     printf '; Written by install.sh from AMI_PASSWORD in .env. Not in git.\nsecret = %s\n' "$AMI_PASSWORD" > "$SECRETS_DIR/manager.conf" )
   # Explicitly: a folder with default ACLs ignores the umask and leaves them
   # writable by everyone. Asterisk only needs to read them.
-  chmod 644 "$SECRETS_DIR/ari.conf" "$SECRETS_DIR/manager.conf"
+  set_mode 644 "$SECRETS_DIR/ari.conf" "$SECRETS_DIR/manager.conf"
   SECRETS_CHANGED=false
   [[ "$(cat "$SECRETS_DIR"/*.conf | md5sum)" != "$before" ]] && SECRETS_CHANGED=true
   return 0
@@ -134,7 +155,7 @@ INSTALL_LOG=""
 if mkdir -p storage/reports 2>/dev/null; then
   INSTALL_LOG="storage/reports/install-$(date +%Y%m%d-%H%M%S)$($CHECK_ONLY && echo -check || true).log"
   if { : > "$INSTALL_LOG"; } 2>/dev/null; then
-    chmod 600 "$INSTALL_LOG"
+    set_mode 600 "$INSTALL_LOG"
     { echo "twocans install.sh $* — $(date '+%Y-%m-%d %H:%M %Z') — twocans $(cat backend/VERSION 2>/dev/null)"; echo; } >> "$INSTALL_LOG"
     # awk rather than sed -u / grep --line-buffered, which BusyBox (Alpine)
     # lacks. The spinner frames are matched whole: some awks see bytes, not
@@ -167,6 +188,27 @@ else
   [[ "$OS_FAMILY" == unknown ]] && note "twocans hasn't been tried on this Linux, but it should work if Docker does."
 fi
 
+if $DSM; then
+  (( DSM_MAJOR >= 7 )) || fail "This Synology runs DSM $DSM_VERSION, and twocans needs DSM 7 or later." \
+    "Update DSM: Control Panel → Update & Restore" \
+    "Then run ./install.sh again"
+  [[ "$DSM_DOCKER_PKG" == Docker ]] && note "On DSM 7.2 and later, Docker comes as Container Manager, which is newer — worth updating DSM for."
+  # The system partition is a few GB, and DSM updates replace it: twocans,
+  # its recordings and its backups belong on a storage volume.
+  case "$(pwd -P)" in
+    /volume[0-9]*) ok "on a storage volume ($(pwd -P | cut -d/ -f2))" ;;
+    /var/packages/*/shares/*) ok "in the package's shared folder" ;;
+    *)
+      if $CHECK_ONLY; then
+        warn "twocans isn't on a storage volume ($(pwd -P)) — on a Synology it should be, e.g. /volume1/docker/twocans"
+      else
+        fail "On a Synology, twocans belongs on a storage volume, and this folder isn't on one ($(pwd -P)): the system partition is only a few GB, and DSM updates replace it." \
+          "Move this folder onto a volume: mv $(pwd -P) /volume1/docker/" \
+          "Then run ./install.sh from there: cd /volume1/docker/twocans && ./install.sh"
+      fi ;;
+  esac
+fi
+
 # The published images come built for Intel/AMD and for ARM (a Raspberry Pi),
 # and Docker pulls the one that fits. Only if a release lacks an ARM build are
 # they built here, from the same Dockerfiles — checked once Docker is there.
@@ -176,6 +218,9 @@ case "$(uname -m)" in
   x86_64|amd64) ok "$(uname -m) — using the published images" ;;
   aarch64|arm64) ARM=true; ok "$(uname -m) (ARM)" ;;
   armv6l|armv7l|armhf)
+    $DSM && fail "This Synology has a 32-bit processor, and twocans needs a 64-bit one." \
+      "Its models with a 64-bit processor can run it — the ones Package Center offers Container Manager on" \
+      "Or run twocans on another machine, like a Raspberry Pi 4 or 5"
     fail "This is a 32-bit system, and twocans needs a 64-bit one." \
       "On a Raspberry Pi (3, 4 or 5): put the 64-bit Raspberry Pi OS on its card — in Raspberry Pi Imager, choose 'Raspberry Pi OS (64-bit)'" \
       "A Raspberry Pi 2 or older, or a Pi Zero (not Zero 2), can't run it — they're 32-bit only" \
@@ -205,7 +250,7 @@ need() {
 }
 need curl curl
 need tar tar
-need ss iproute2
+command -v netstat >/dev/null 2>&1 || need ss iproute2   # either will do
 need ip iproute2
 need awk gawk
 need od coreutils
@@ -223,6 +268,10 @@ if ((${#MISSING[@]})); then
     fail "Some tools twocans needs aren't installed: ${MISSING[*]}." \
       "Install them: ${INSTALL_TOOLS}" \
       "Then run ./install.sh again"
+  elif $DSM; then
+    fail "This Synology is missing some tools twocans needs: ${MISSING[*]}." \
+      "DSM comes with them, so it may need updating: Control Panel → Update & Restore" \
+      "If it's up to date, please report this, with your model and DSM version: https://github.com/tombruton87/TwoCans/issues"
   else
     fail "Some tools twocans needs aren't installed: ${MISSING[*]}." \
       "Install these with your package manager: ${MISSING_PKGS[*]}" \
@@ -239,9 +288,13 @@ if [[ -n "$FREE_MB" ]] && (( FREE_MB < 2500 )) && ! $CHECK_ONLY; then
     "Check how much is free with: df -h"
 fi
 
-ok "curl, tar, ss and ip"
-command -v git >/dev/null 2>&1 && ok "git — for updates (./twocans update)" \
-  || warn "git isn't installed — you'll need it to update twocans later"
+ok "curl, tar, ip and $(command -v ss >/dev/null 2>&1 && echo ss || echo netstat)"
+if $PACKAGE; then :   # updates come from Package Center
+elif command -v git >/dev/null 2>&1; then ok "git — for updates (./twocans update)"
+else
+  warn "git isn't installed — you'll need it to update twocans later"
+  $DSM && note "On a Synology, Git Server from Package Center brings it."
+fi
 
 # Who is running this. $USER isn't set everywhere (cron, docker exec, some
 # non-login shells), so ask the system.
@@ -277,17 +330,29 @@ if ! command -v docker >/dev/null 2>&1; then
       "Install Docker Engine and its compose plugin by hand: https://docs.docker.com/engine/install/" \
       "Then run ./install.sh again"
   fi
+  $DSM && note "On a Synology, Docker comes from Package Center, as $(dsm_docker_name)."
   if ! $CHECK_ONLY && $CAN_PROMPT && [[ "$(uname -s)" == Linux ]] \
-    && confirm "Install it now, $HOW? (uses sudo)" y; then
+    && confirm "Install it now, $HOW?${SUDO:+ (uses sudo)}" y; then
     need_root "Installing Docker"
     note "This takes a few minutes; sudo may ask for your password first."
     [[ "$SUDO" != sudo ]] || sudo -v || fail "Installing Docker needs your password for sudo." "Run ./install.sh again and type your password when asked"
     quietly "Installing Docker" install_docker
     service_enable_now docker >/dev/null 2>&1 || true
+    if $DSM && ! command -v docker >/dev/null 2>&1; then
+      fail "$(dsm_docker_name) couldn't be installed from here." \
+        "Install it yourself: open Package Center, search for $(dsm_docker_name), and install it" \
+        "If Package Center doesn't list it, this Synology model can't run Docker, so it can't run twocans" \
+        "Then run ./install.sh again"
+    fi
     command -v docker >/dev/null 2>&1 || fail "Docker still isn't there after installing it." \
       "Install it by hand: https://docs.docker.com/engine/install/" "Then run ./install.sh again"
     ok "Docker installed"
     join_docker_group "$@"
+  elif $DSM; then
+    fail "twocans needs Docker to run, which on a Synology is $(dsm_docker_name)." \
+      "Open Package Center, search for $(dsm_docker_name), and install it" \
+      "If Package Center doesn't list it, this Synology model can't run Docker, so it can't run twocans" \
+      "Then run ./install.sh again"
   else
     fail "twocans needs Docker to run." \
       "Run ./install.sh (in a terminal) and say yes when it offers to install it — it'll install it $HOW" \
@@ -298,7 +363,8 @@ ok "docker $(docker --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
 
 if ! docker compose version >/dev/null 2>&1; then
   bad "Docker Compose (the 'docker compose' command) is missing."
-  note "Docker from a distribution's own packages often comes without it."
+  $DSM && note "Older Docker packages for DSM came with an older docker-compose instead." \
+    || note "Docker from a distribution's own packages often comes without it."
   if ! $CHECK_ONLY && $CAN_PROMPT && $ROOT_OK && confirm "Install it now? (uses sudo)" y; then
     quietly "Installing Docker Compose" install_compose
   fi
@@ -323,7 +389,7 @@ if ! docker info >/dev/null 2>&1; then
   if ! $CHECK_ONLY && $CAN_PROMPT && $ROOT_OK && confirm "Start it, and have it start on boot? (uses sudo)" y; then
     service_enable_now docker >/dev/null 2>&1 || fail "Docker wouldn't start." \
       "Start it: $(service_start_text docker)" \
-      "If that fails, see why: $([[ $INIT == systemd ]] && echo 'sudo journalctl -u docker -n 50' || echo 'sudo cat /var/log/docker.log')" \
+      "If that fails, see why: $(case $INIT in systemd) echo 'sudo journalctl -u docker -n 50' ;; dsm) echo "Package Center → $(dsm_docker_name) → View log" ;; *) echo 'sudo cat /var/log/docker.log' ;; esac)" \
       "Then run ./install.sh again"
     wait_for "Waiting for Docker" 30 docker info || fail "Docker started, but isn't answering." \
       "Give it a minute, then run ./install.sh again" \
@@ -333,6 +399,16 @@ if ! docker info >/dev/null 2>&1; then
   fi
 fi
 ok "docker is running and usable"
+
+# Speech-to-text is held to a share of the processor, so calls stay smooth
+# while it works — which needs the kernel's CPU quotas. Some haven't got them
+# (a Synology's, for one), and Docker then refuses the container outright
+# rather than run it unlimited; there it goes without (WHISPER_CPUS=0).
+CPU_LIMITS=true
+if [[ "$(docker info --format '{{.CPUCfsQuota}}' 2>/dev/null || true)" == false ]]; then
+  CPU_LIMITS=false
+  note "this machine's kernel can't cap a container's processor use, so speech-to-text runs uncapped"
+fi
 
 # On ARM: are there published ARM builds of twocans' own images? Older
 # releases were Intel/AMD only; then (or offline) they're built here instead.
@@ -505,7 +581,6 @@ FIRST_INSTALL=true
 RUNNING=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -c '^twocans-' || true)
 
 detect_ip() { ip route get 1.1.1.1 2>/dev/null | grep -oE 'src [0-9.]+' | awk '{print $2}' | head -1 || true; }
-detect_tz() { timedatectl show -p Timezone --value 2>/dev/null || cat /etc/timezone 2>/dev/null || echo Europe/London; }
 country_for_tz() {
   case "$1" in
     Europe/London|Europe/Belfast) echo 44 ;; Europe/Dublin) echo 353 ;;
@@ -518,25 +593,33 @@ country_for_tz() {
 }
 
 # What we'd suggest, starting from what .env already says.
-LAN_IP=$(env_get SIP_DOMAIN); LAN_IP=${LAN_IP:-$(detect_ip)}
-TZ_NAME=$(env_get TZ); TZ_NAME=${TZ_NAME:-$(detect_tz)}
-COUNTRY=$(env_get DEFAULT_COUNTRY_CODE); COUNTRY=${COUNTRY:-$(country_for_tz "$TZ_NAME")}
-HTTP_PORT=$(env_get HTTP_PORT); HTTP_PORT=${HTTP_PORT:-8083}
-HTTPS_PORT=$(env_get HTTPS_PORT); HTTPS_PORT=${HTTPS_PORT:-443}
-SIP_PORT=$(env_get SIP_PORT); SIP_PORT=${SIP_PORT:-5060}
-TRUNK_SIP_PORT=$(env_get TRUNK_SIP_PORT); TRUNK_SIP_PORT=${TRUNK_SIP_PORT:-5062}
-RTP_START=$(env_get RTP_PORT_START); RTP_START=${RTP_START:-10000}
-RTP_END=$(env_get RTP_PORT_END); RTP_END=${RTP_END:-10100}
-WHISPER_MODEL=$(env_get WHISPER_MODEL); WHISPER_MODEL=${WHISPER_MODEL:-base}
-MDNS_NAME=$(env_get MDNS_NAME); MDNS_NAME=${MDNS_NAME:-twocans}
+# Ready-made answers (see the top) come first.
+LAN_IP=${TWOCANS_LAN_IP:-$(env_get SIP_DOMAIN)}; LAN_IP=${LAN_IP:-$(detect_ip)}
+TZ_NAME=${TWOCANS_TZ:-$(env_get TZ)}; TZ_NAME=${TZ_NAME:-$(detect_tz)}; TZ_NAME=${TZ_NAME:-Europe/London}
+COUNTRY=${TWOCANS_COUNTRY:-$(env_get DEFAULT_COUNTRY_CODE)}; COUNTRY=${COUNTRY:-$(country_for_tz "$TZ_NAME")}
+HTTP_PORT=${TWOCANS_HTTP_PORT:-$(env_get HTTP_PORT)}; HTTP_PORT=${HTTP_PORT:-8083}
+HTTPS_PORT=${TWOCANS_HTTPS_PORT:-$(env_get HTTPS_PORT)}; HTTPS_PORT=${HTTPS_PORT:-443}
+SIP_PORT=${TWOCANS_SIP_PORT:-$(env_get SIP_PORT)}; SIP_PORT=${SIP_PORT:-5060}
+TRUNK_SIP_PORT=${TWOCANS_TRUNK_SIP_PORT:-$(env_get TRUNK_SIP_PORT)}; TRUNK_SIP_PORT=${TRUNK_SIP_PORT:-5062}
+RTP_START=${TWOCANS_RTP_START:-$(env_get RTP_PORT_START)}; RTP_START=${RTP_START:-10000}
+RTP_END=$(env_get RTP_PORT_END); RTP_END=${RTP_END:-$(( RTP_START + 100 ))}
+[[ -n "${TWOCANS_RTP_START:-}" ]] && RTP_END=$(( RTP_START + 100 ))
+WHISPER_MODEL=${TWOCANS_WHISPER_MODEL:-$(env_get WHISPER_MODEL)}; WHISPER_MODEL=${WHISPER_MODEL:-base}
+MDNS_NAME=$(env_get MDNS_NAME)
+# A Synology announces its own name on the network already (DiskStation.local,
+# say), so on one twocans goes by that.
+DSM_HOST=""
+$DSM && DSM_HOST=$(hostname 2>/dev/null | tr '[:upper:]' '[:lower:]') && { is_hostname "$DSM_HOST" >/dev/null || DSM_HOST=""; }
+MDNS_NAME=${DSM_HOST:-${MDNS_NAME:-twocans}}
 
 [[ -n "$LAN_IP" ]] || LAN_IP="192.168.1.10"
 
 # ------------------------------------------------------------------ ports
 # Who is listening where, gathered once. Our own running containers hold our
 # ports on an update, so a port they publish isn't a clash.
-LISTEN_TCP=$(ss -Hlnt 2>/dev/null | awk '{print $4}' | sed -E 's/.*:([0-9]+)$/\1/' | sort -un)
-LISTEN_UDP=$(ss -Hlnu 2>/dev/null | awk '{print $4}' | sed -E 's/.*:([0-9]+)$/\1/' | sort -un)
+LISTEN_TCP=$(listening_ports tcp)
+LISTEN_UDP=$(listening_ports udp)
+WHO_LISTENS="sudo $(command -v ss >/dev/null 2>&1 && echo ss || echo netstat) -lptun"
 OURS=$(docker ps --filter 'name=^twocans-' --format '{{.Ports}}' 2>/dev/null \
   | tr ',' '\n' | grep -oE ':[0-9]+(-[0-9]+)?->[0-9]+(-[0-9]+)?/(tcp|udp)' \
   | sed -E 's/^:([0-9]+)(-([0-9]+))?->[^/]*\/(.*)$/\4 \1 \3/' \
@@ -604,12 +687,31 @@ web_port_ok() {
   return 0
 }
 
+# The first port of call audio's range that something already uses, if any.
+rtp_busy_in() {
+  local p; for ((p = $1; p <= $2; p++)); do in_use udp "$p" && { echo "$p"; return; }; done
+  echo ""
+}
+
+# A free run of 101 ports for call audio, clear of twocans' other ports.
+free_rtp() {
+  local lo
+  for lo in 20000 30000 40000 11000 12000 13000 14000 15000 16000; do
+    [[ -z "$(rtp_busy_in "$lo" $(( lo + 100 )))" ]] || continue
+    local p clash=false
+    for p in "$HTTP_PORT" "$HTTPS_PORT" "$SIP_PORT" "$TRUNK_SIP_PORT"; do (( p >= lo && p <= lo + 100 )) && clash=true; done
+    $clash || { echo "$lo"; return; }
+  done
+  echo ""
+}
+
 # The web and HTTPS ports can move: offer another when something holds one.
-# The SIP ports and the call audio range can't — phones and your provider
-# expect them, and Asterisk tells callers those exact ports — so a clash there
-# is reported, and has to be freed.
+# So can call audio's range, as a whole — Asterisk is told the new one too —
+# though the router's forwarding has to follow. The SIP ports can't here:
+# phones and your provider expect them, so a clash there is reported, and has
+# to be freed.
 resolve_ports() {
-  local alt
+  local alt busy
   if in_use tcp "$HTTP_PORT"; then
     alt=$(free_port tcp 8083 8084 8090 8100 8180 8280 8380)
     warn "the web interface's port $HTTP_PORT is in use$(holder "$HTTP_PORT")"
@@ -627,6 +729,19 @@ resolve_ports() {
       OTHER_WEB_PORT=$HTTP_PORT
       ask HTTPS_PORT "HTTPS port" "${alt:-8443}" web_port_ok
       $CAN_ASK && ok "HTTPS will be on port $HTTPS_PORT"
+    fi
+  fi
+  busy=$(rtp_busy_in "$RTP_START" "$RTP_END")
+  if [[ -n "$busy" ]]; then
+    alt=$(free_rtp)
+    warn "call audio's ${RTP_START}–${RTP_END}/udp is partly in use: $busy$(holder "$busy")"
+    if [[ -n "$alt" ]]; then
+      note "It can move as a whole; Asterisk is told the new range, and your router"
+      note "then forwards that one instead (Phone line → Opening the router, in the app)."
+      if confirm "Use ${alt}–$(( alt + 100 ))/udp for call audio instead?" y; then
+        RTP_START=$alt; RTP_END=$(( alt + 100 ))
+        ok "call audio will use ${RTP_START}–${RTP_END}/udp"
+      fi
     fi
   fi
   return 0
@@ -649,15 +764,17 @@ if ! $CHECK_ONLY && { $FIRST_INSTALL || $RECONFIGURE; }; then
     warn "$LAN_IP isn't one of this machine's addresses — phones won't find it unless it forwards here"
   fi
 
-  explain "A name for it on your home network, so browsers can find it as" \
-          "http://<name>.local instead of an address. Change it if there's more than one."
-  ask MDNS_NAME "Name on your network" "$MDNS_NAME" is_hostname
+  if [[ -z "$DSM_HOST" ]]; then
+    explain "A name for it on your home network, so browsers can find it as" \
+            "http://<name>.local instead of an address. Change it if there's more than one."
+    ask MDNS_NAME "Name on your network" "$MDNS_NAME" is_hostname
+  fi
 
   explain "Bedtime and call hours follow this."
   ask TZ_NAME "Timezone" "$TZ_NAME" is_timezone
 
   explain "Numbers typed without a country code are taken to be from here."
-  if ! $RECONFIGURE; then COUNTRY=$(country_for_tz "$TZ_NAME"); fi
+  if ! $RECONFIGURE && [[ -z "${TWOCANS_COUNTRY:-}" ]]; then COUNTRY=$(country_for_tz "$TZ_NAME"); fi
   ask COUNTRY "Country calling code" "$COUNTRY" is_country_code
 
   explain "Speech-to-text writes down voicemails and calls, on this machine." \
@@ -671,8 +788,10 @@ if (( RUNNING > 0 )); then
   note "twocans is running — the ports its containers hold count as free."
 fi
 check_ports
-# Only the web ports can be moved, so only a clash there is worth a second look.
-if (( PORT_PROBLEMS > 0 )) && ! $CHECK_ONLY && { in_use tcp "$HTTP_PORT" || in_use tcp "$HTTPS_PORT"; }; then
+# Only the web ports and call audio can be moved, so only a clash there is
+# worth a second look.
+if (( PORT_PROBLEMS > 0 )) && ! $CHECK_ONLY \
+  && { in_use tcp "$HTTP_PORT" || in_use tcp "$HTTPS_PORT" || [[ -n "$(rtp_busy_in "$RTP_START" "$RTP_END")" ]]; }; then
   echo
   resolve_ports
   echo
@@ -682,18 +801,17 @@ if (( PORT_PROBLEMS > 0 )); then
   sip_clash=false
   { in_use udp "$SIP_PORT" || in_use tcp "$SIP_PORT" || in_use udp "$TRUNK_SIP_PORT" \
     || [[ "$SIP_PORT" == "$TRUNK_SIP_PORT" ]]; } && sip_clash=true
-  for ((p = RTP_START; p <= RTP_END; p++)); do in_use udp "$p" && { sip_clash=true; break; }; done
   if $sip_clash; then
     echo
-    note "The SIP ports and the call audio range can't move: phones and your phone line"
-    note "provider expect them, and Asterisk tells callers those exact ports. Stop whatever"
-    note "is using them above (often another phone system, or an old twocans), then run again."
+    note "The SIP ports can't move here: phones and your phone line provider expect them,"
+    note "and Asterisk tells callers those exact ports. Stop whatever is using them above"
+    note "(often another phone system, or an old twocans), then run again."
   fi
   if $CHECK_ONLY; then
     warn "Ports to sort out before installing — see above."
   else
     fail "Some ports twocans needs are already in use (see above)." \
-      "Stop whatever's using them — 'sudo ss -lptun' shows which program has each port" \
+      "Stop whatever's using them — '$WHO_LISTENS' shows which program has each port" \
       "If it's an old twocans or another phone system, stop it first" \
       "Then run ./install.sh again"
   fi
@@ -772,7 +890,9 @@ ufw_allowed() {
 FIREWALL=none
 FW_STATUS=""          # the rules, when we could read them
 FW_MISSING=()         # needs not covered, as FW_NEEDS entries
-if command -v ufw >/dev/null 2>&1; then
+if $DSM; then
+  FIREWALL=dsm        # its own, set in Control Panel; not one to read from here
+elif command -v ufw >/dev/null 2>&1; then
   FIREWALL=ufw
   can_sudo ufw && FW_STATUS=$($SUDO ufw status verbose 2>/dev/null || true)
   if [[ -n "$FW_STATUS" ]]; then
@@ -835,6 +955,11 @@ fix_commands() {
 
 needs_text="$SIP_PORT udp+tcp, $TRUNK_SIP_PORT udp, ${RTP_START}–${RTP_END} udp, $HTTP_PORT and $HTTPS_PORT tcp"
 case "$FIREWALL" in
+  dsm)
+    note "A Synology has its own firewall: Control Panel → Security → Firewall. If it's"
+    note "on, add rules there letting in $needs_text."
+    note "Phones and the web interface only need your home network${LAN_NET:+ ($LAN_NET)}; the phone"
+    note "line's ports and HTTPS need anywhere, as your provider calls in from outside." ;;
   none)
     ok "no firewall found on this machine"
     note "If you run one this didn't spot, let in: $needs_text." ;;
@@ -892,7 +1017,9 @@ fi
 # 2. Containers come back after a restart only if Docker itself starts at boot.
 #    Socket activation isn't enough: it waits for someone to run docker.
 DOCKER_BOOT=$(service_on_boot docker)
-if [[ "$DOCKER_BOOT" == yes ]]; then
+if $DSM; then
+  ok "$(dsm_docker_name) starts Docker when the Synology boots"
+elif [[ "$DOCKER_BOOT" == yes ]]; then
   ok "Docker starts when the machine boots"
 elif [[ "$DOCKER_BOOT" == no ]]; then
   warn "Docker doesn't start when the machine boots — after a power cut the line stays down"
@@ -922,6 +1049,9 @@ if command -v timedatectl >/dev/null 2>&1 && timedatectl show >/dev/null 2>&1; t
       note "To fix it: sudo timedatectl set-ntp true"
     fi
   fi
+elif $DSM; then
+  note "Keep the Synology's clock in time: Control Panel → Regional Options → Time →"
+  note "Synchronize with NTP server. Certificates and phone logins fail when it drifts."
 else
   note "Couldn't check the clock (no timedatectl here) — make sure it's kept in time."
 fi
@@ -946,7 +1076,14 @@ CAN_RESOLVE=false
 grep -qE '^hosts:.*mdns' /etc/nsswitch.conf 2>/dev/null && CAN_RESOLVE=true
 
 MDNS_OK=false
-if grep -qx "$LAN_IP" <<< "$(name_ips "$MDNS_FQDN")"; then
+if [[ -n "$DSM_HOST" && "$MDNS_NAME" == "$DSM_HOST" ]]; then
+  # DSM's own Avahi announces it, and DSM rewrites its settings: nothing to add.
+  MDNS_OK=true
+  ok "reachable by name as $MDNS_URL — the Synology announces that name itself"
+elif $DSM; then
+  note "On a Synology, twocans goes by the name it announces itself, and this one's"
+  note "isn't one browsers can use. Change it (Control Panel → Network), then run ./install.sh again."
+elif grep -qx "$LAN_IP" <<< "$(name_ips "$MDNS_FQDN")"; then
   MDNS_OK=true
   ok "reachable by name as $MDNS_URL"
 elif [[ -n "$(name_ips "$MDNS_FQDN")" ]]; then
@@ -996,7 +1133,7 @@ section "Configuration"
 
 # Whose files the app's are: yours. Run as root (or through sudo), that's the
 # person behind sudo, else 1000 — never root itself, which the app can't run as.
-APP_UID=$(id -u); APP_GID=$(id -g)
+APP_UID=${TWOCANS_HOST_UID:-$(id -u)}; APP_GID=${TWOCANS_HOST_GID:-$(id -g)}
 if (( APP_UID == 0 )); then
   APP_UID=${SUDO_UID:-1000}; APP_GID=${SUDO_GID:-1000}
   (( APP_UID == 0 )) && { APP_UID=1000; APP_GID=1000; }
@@ -1058,13 +1195,13 @@ AMI_PASSWORD=$(secret)
 WHISPER_MODEL=${WHISPER_MODEL}
 WHISPER_LANGUAGE=en
 WHISPER_THREADS=$(( CPUS > 4 ? 4 : CPUS ))
-WHISPER_CPUS=$(( CPUS > 5 ? 4 : (CPUS > 1 ? CPUS - 1 : 1) )).0
+WHISPER_CPUS=$($CPU_LIMITS && echo "$(( CPUS > 5 ? 4 : (CPUS > 1 ? CPUS - 1 : 1) )).0" || echo 0)
 WHISPER_MEMORY=2g
 
 # Only used by \`docker compose --profile tools up -d\`.
 ADMINER_PORT=8089
 EOF
-  chmod 600 "$ENV_FILE"
+  set_mode 600 "$ENV_FILE"
   ok "wrote .env with new passwords"
 else
   OLD_SIP_DOMAIN=$(env_get SIP_DOMAIN)
@@ -1083,16 +1220,17 @@ else
   env_set RTP_PORT_START "$RTP_START"
   env_set RTP_PORT_END "$RTP_END"
   env_set WHISPER_MODEL "$WHISPER_MODEL"
+  $CPU_LIMITS || env_set WHISPER_CPUS 0
   env_set MDNS_NAME "$MDNS_NAME"
   # An older install run as root recorded 0, which the app can't run as.
-  if [[ "$(env_get HOST_UID)" == 0 || -z "$(env_get HOST_UID)" ]]; then
+  if [[ "$(env_get HOST_UID)" == 0 || -z "$(env_get HOST_UID)" || -n "${TWOCANS_HOST_UID:-}" ]]; then
     env_set HOST_UID "$APP_UID"; env_set HOST_GID "$APP_GID"
   fi
   # A password missing from an older .env is made now; existing ones never change.
   for key in DB_PASSWORD DB_ROOT_PASSWORD APP_KEY ARI_PASSWORD AMI_PASSWORD; do
     [[ -n "$(env_get "$key")" && "$(env_get "$key")" != change-me ]] || env_set "$key" "$(secret)"
   done
-  chmod 600 "$ENV_FILE"
+  set_mode 600 "$ENV_FILE"
   ok "updated .env — your passwords are unchanged"
 fi
 
@@ -1101,7 +1239,19 @@ set -a; . "./$ENV_FILE"; set +a
 write_secrets
 ok "Asterisk passwords in place"
 
-mkdir -p docker/asterisk/{cdr,recordings,voicemail,asks} docker/{nginx,php,mariadb}/log storage/{photos,jokes,refusals,pager}
+# Call audio's range, as Asterisk is to use it (rtp.conf includes this). The
+# same range is what compose publishes, from .env.
+RTP_CONF=docker/asterisk/etc/generated/rtp-ports.conf
+RTP_BEFORE=$(cat "$RTP_CONF" 2>/dev/null || true)
+mkdir -p "$(dirname "$RTP_CONF")"
+printf '; Written by install.sh from RTP_PORT_START/END in .env.\nrtpstart = %s\nrtpend = %s\n' "$RTP_START" "$RTP_END" > "$RTP_CONF"
+RTP_CHANGED=false
+[[ "$(cat "$RTP_CONF")" != "$RTP_BEFORE" ]] && RTP_CHANGED=true
+
+# Every folder compose.yaml mounts, made here: Docker makes a missing one
+# itself on most machines, but a Synology's refuses to start the container.
+mkdir -p docker/asterisk/{cdr,recordings,voicemail,asks} docker/{nginx,php,mariadb}/log docker/nginx/{certs,acme} \
+  storage/{photos,jokes,refusals,pager}
 chmod 777 docker/asterisk/{cdr,recordings,voicemail,asks} storage/photos storage/jokes storage/refusals storage/pager 2>/dev/null || true
 ok "data folders ready"
 
@@ -1214,7 +1364,7 @@ ok "database up to date"
 # aren't reloadable, so Asterisk restarts only when they (or its passwords)
 # changed — a restart drops calls, and an ordinary update shouldn't.
 "${COMPOSE[@]}" exec -T web php /var/www/html/bin/apply-config.php >/dev/null 2>&1 || true
-if $FIRST_INSTALL || $SECRETS_CHANGED || [[ "$(transports_sum)" != "$TRANSPORTS_BEFORE" ]]; then
+if $FIRST_INSTALL || $SECRETS_CHANGED || $RTP_CHANGED || [[ "$(transports_sum)" != "$TRANSPORTS_BEFORE" ]]; then
   "${COMPOSE[@]}" restart asterisk >/dev/null 2>&1
   sleep 3
   "${COMPOSE[@]}" exec -T web php /var/www/html/bin/apply-config.php >/dev/null 2>&1 || true

@@ -57,6 +57,8 @@ fail() {
       echo "    What to do:"
       local i=1 step
       for step in "$@"; do
+        # The Synology package runs it again from Package Center, not a terminal.
+        [[ "${TWOCANS_PACKAGE:-}" == 1 ]] && step=${step//run .\/install.sh again/start twocans again in Package Center (twocans → Run)}
         echo "      ${bold}${i}.${off} ${step}"
         ((i++))
       done

@@ -21,12 +21,15 @@
 set -euo pipefail
 
 cd "$(dirname "$(readlink -f "$0")")"
-COMMAND=${1:-help}
-[[ $# -gt 0 ]] && shift
-
 ASSUME_YES=false; CHECK_ONLY=false
 # shellcheck source=scripts/ui.sh
 source scripts/ui.sh
+# shellcheck source=scripts/platform.sh
+source scripts/platform.sh
+dsm_as_root "$@"
+
+COMMAND=${1:-help}
+[[ $# -gt 0 ]] && shift
 
 GITHUB_REPO=$(git remote get-url origin 2>/dev/null | sed -nE 's#.*github\.com[:/]([^/]+/[^/.]+)(\.git)?$#\1#p' || true)
 GITHUB_REPO=${GITHUB_REPO:-tombruton87/TwoCans}
