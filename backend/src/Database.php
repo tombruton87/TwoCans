@@ -32,6 +32,12 @@ final class Database
             PDO::ATTR_STRINGIFY_FETCHES => false,
         ]);
 
+        // The database's clock in PHP's zone, so NOW() and date() agree. They
+        // don't on their own wherever MariaDB runs on UTC and PHP doesn't — a
+        // Synology, say, or CI — and anything stamped by one and checked by
+        // the other would be hours out.
+        self::$pdo->prepare('SET time_zone = ?')->execute([date('P')]);
+
         return self::$pdo;
     }
 

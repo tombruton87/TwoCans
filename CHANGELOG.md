@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Times stamped by the app and checked by the database (or the other way round)
+  could be hours out where the two run in different time zones — on a Synology,
+  say. The database now keeps the app's time zone.
+
 ## [0.1.7] - 2026-10-03
 
 Many more phones — Yealink, Poly, Cisco and Fanvil — each with the settings it
