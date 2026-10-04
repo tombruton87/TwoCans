@@ -1,7 +1,8 @@
 # twocans for Synology
 
 A Synology package (`.spk`) for DSM 7.2.1 or later, on a model that runs
-Container Manager. It has run on one Synology so far (DSM 7.3.2) — reports welcome.
+Container Manager. Installing and using it: [docs/install-synology.md](../docs/install-synology.md);
+this is how it's made. It has run on one Synology so far (DSM 7.3.2) — reports welcome.
 
 ## Building it
 

@@ -23,10 +23,10 @@ report, private details taken out, for an issue.
 
 **On a Synology** (DSM 7.2.1 or later, a model that runs Container Manager):
 there's a package to install in Package Center, with a wizard for the questions
-— see [synology/](synology/README.md). It has run on one Synology so far;
-reports welcome. Or, over SSH: install Container Manager and Git Server from
-Package Center, sign in as an administrator, and run it with `sudo`, as twocans
-runs as root there:
+and a window of its own in DSM — **[installing twocans on a Synology](docs/install-synology.md)**
+takes you through it. It has run on one Synology so far; reports welcome. Or,
+over SSH: install Container Manager and Git Server from Package Center, sign in
+as an administrator, and run it with `sudo`, as twocans runs as root there:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/tombruton87/TwoCans/main/get.sh | sudo bash
