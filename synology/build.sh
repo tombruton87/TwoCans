@@ -36,18 +36,10 @@ echo "$SPK_VERSION" > "$target/build-id"
 # DSM keeps a window's script until its version changes.
 sed -i "s/\"version\": \"1\"/\"version\": \"$SPK_VERSION\"/" "$target/ui/config"
 
-# Icons: Package Center's, and the main menu's, from the app's own.
-python3 - "$target/ui/images" "$spk" <<'PY'
-import sys, os
-from PIL import Image
-src = Image.open("backend/assets/pwa/icon-512.png").convert("RGBA")
-ui, spk = sys.argv[1], sys.argv[2]
-os.makedirs(ui, exist_ok=True)
-for size in (16, 24, 32, 48, 64, 72, 128, 256):
-    src.resize((size, size), Image.LANCZOS).save(f"{ui}/{size}.png")
-src.resize((64, 64), Image.LANCZOS).save(f"{spk}/PACKAGE_ICON.PNG")
-src.resize((256, 256), Image.LANCZOS).save(f"{spk}/PACKAGE_ICON_256.PNG")
-PY
+# Icons: Package Center's, and the main menu's. Drawn, not copied — DSM shows
+# a package icon exactly as given, and its own apps are rounded squares, so
+# the PWA's flat square tile looked out of place beside them. See synology/icon.py.
+python3 synology/icon.py "$spk" --ui "$target/ui/images" --sizes 16,24,32,48,64,72,128,256
 
 find "$target" -type d -exec chmod 755 {} +
 find "$target" -type f -exec chmod 644 {} +
