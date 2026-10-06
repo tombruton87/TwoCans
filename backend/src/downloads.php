@@ -334,6 +334,29 @@ switch ($download) {
         @unlink($zip);
         exit;
 
+    case 'transfer':
+        // The file is whichever export this session just made — the request
+        // names nothing, so there is no filename to get wrong or to guess.
+        if (!Auth::can('backups')) {
+            http_response_code(403);
+            exit('Not allowed');
+        }
+        $transfer = new Transfer();
+        $file = $transfer->exportFile((string) ($_SESSION['transfer_download'] ?? ''));
+        if ($file === null) {
+            http_response_code(404);
+            exit('That export has gone — make it again.');
+        }
+        header('Content-Type: application/zip');
+        header('Content-Disposition: attachment; filename="' . basename($file) . '"');
+        header('Content-Length: ' . filesize($file));
+        header('Cache-Control: no-store');
+        readfile($file);
+        // Downloaded once, then gone: it may hold the household's passwords.
+        @unlink($file);
+        unset($_SESSION['transfer_download']);
+        exit;
+
     case 'backup':
         if (!Auth::can('backups')) {
             http_response_code(403);

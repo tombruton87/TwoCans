@@ -2147,6 +2147,79 @@ switch ($action) {
         flash('Health checks refreshed');
         redirect(url(['screen' => 'system']));
 
+    // ------------------------------------------------- moving to another box
+    case 'transfer_export':
+        $result = (new Transfer())->export(
+            array_map('strval', (array) ($_POST['sections'] ?? [])),
+            (string) ($_POST['passphrase'] ?? '')
+        );
+        if (!$result['ok']) {
+            flash((string) $result['error']);
+            redirect(url(['screen' => 'system']));
+        }
+        $_SESSION['transfer_download'] = $result['name'];
+        flash($result['secrets'] > 0
+            ? 'Export ready — ' . $result['secrets'] . ' password' . ($result['secrets'] === 1 ? '' : 's') . ' and keys sealed under your passphrase.'
+            : 'Export ready — no passwords or keys inside; the line will need its credentials typed again.');
+        redirect(url(['screen' => 'system']) . '#move');
+
+    case 'transfer_upload':
+        $file = $_FILES['export'] ?? null;
+        if (!is_array($file) || (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            flash('Pick the export file first.');
+            redirect(url(['screen' => 'system']) . '#move');
+        }
+        $held = (new Transfer())->hold((string) $file['tmp_name']);
+        if ($held === null) {
+            flash('That upload was not accepted.');
+            redirect(url(['screen' => 'system']) . '#move');
+        }
+        $_SESSION['transfer_pending'] = $held;
+        redirect(url(['screen' => 'system']) . '#move');
+
+    case 'transfer_cancel':
+        $pending = (string) ($_SESSION['transfer_pending'] ?? '');
+        if ($pending !== '') {
+            (new Transfer())->discard($pending);
+        }
+        unset($_SESSION['transfer_pending']);
+        redirect(url(['screen' => 'system']) . '#move');
+
+    case 'transfer_apply':
+        // Owner-only (Permissions::ACTIONS) plus a typed confirmation, as for a
+        // restore: chosen sections are replaced, and that cannot be undone.
+        $pending = (string) ($_SESSION['transfer_pending'] ?? '');
+        if ($pending === '') {
+            flash('Upload the export first.');
+            redirect(url(['screen' => 'system']) . '#move');
+        }
+        if ((string) ($_POST['confirm'] ?? '') !== 'IMPORT') {
+            flash('Type IMPORT to confirm.');
+            redirect(url(['screen' => 'system']) . '#move');
+        }
+
+        $result = (new Transfer())->apply(
+            $pending,
+            array_map('strval', (array) ($_POST['sections'] ?? [])),
+            (string) ($_POST['passphrase'] ?? ''),
+            (int) (Auth::user()['id'] ?? 0)
+        );
+        if (!$result['ok']) {
+            flash('Import failed: ' . (string) $result['error']);
+            redirect(url(['screen' => 'system']) . '#move');
+        }
+        unset($_SESSION['transfer_pending']);
+
+        // The phones, line and rules now in the database have to reach Asterisk.
+        $applied = (new PjsipConfig($devices))->apply();
+        $parts = [];
+        foreach ($result['done'] as $section => $what) {
+            $parts[] = Transfer::SECTIONS[$section]['label'] . ': ' . $what;
+        }
+        flash('Imported — ' . implode(' · ', $parts)
+            . ($applied['error'] === null ? '' : ' (Asterisk did not reload: ' . $applied['error'] . ')'));
+        redirect(url(['screen' => 'system']));
+
     case 'backup_create':
         $result = (new Backup())->create();
         flash($result['ok']

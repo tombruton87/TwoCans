@@ -155,6 +155,120 @@ $canBackup = Auth::can('backups');
     </section>
   <?php endif; ?>
 
+  <?php if ($canBackup): ?>
+    <?php
+    /*
+     * Moving house. Export is a zip of chosen sections; import previews an
+     * uploaded one before replacing anything. Both live under the Owner-only
+     * `backups` permission, like restore.
+     */
+    $transfer = new Transfer();
+    $pendingName = (string) ($_SESSION['transfer_pending'] ?? '');
+    $pending = $pendingName !== '' ? $transfer->preview($pendingName) : null;
+    $readyName = (string) ($_SESSION['transfer_download'] ?? '');
+    $ready = $readyName !== '' && $transfer->exportFile($readyName) !== null;
+    ?>
+    <section class="tc-card" id="move">
+      <div class="tc-card__head">
+        <h2 class="tc-card__title">Move to another box</h2>
+      </div>
+      <p class="tc-card__hint">
+        Take the household to new hardware or a Synology, a piece at a time. A backup needs the
+        same APP_KEY on both sides; this doesn't — passwords and keys travel sealed under a
+        passphrase you choose, and are locked to the new box's key when they arrive.
+      </p>
+
+      <?php if ($ready): ?>
+        <div class="tc-row" style="gap:10px;align-items:center;flex-wrap:wrap;margin:12px 0">
+          <a class="tc-btn tc-btn--teal" href="<?= e(url(['download' => 'transfer'])) ?>">Download your export</a>
+          <span class="tc-micro">It's deleted once downloaded, or after an hour — it may hold your passwords.</span>
+        </div>
+      <?php endif; ?>
+
+      <form method="post" action="/" style="margin-top:12px">
+        <?= form_fields() ?>
+        <input type="hidden" name="action" value="transfer_export">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px 16px">
+          <?php foreach (Transfer::SECTIONS as $key => $meta): ?>
+            <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer">
+              <input type="checkbox" name="sections[]" value="<?= e($key) ?>"<?= $key === 'history' ? '' : ' checked' ?>>
+              <span><b><?= e($meta['label']) ?></b><br><span class="tc-micro"><?= e($meta['sub']) ?></span></span>
+            </label>
+          <?php endforeach; ?>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px">
+          <input class="tc-input" type="password" name="passphrase" placeholder="Passphrase for the passwords inside"
+                 autocomplete="new-password" style="max-width:300px">
+          <button class="tc-btn tc-btn--teal" type="submit">Export</button>
+        </div>
+        <p class="tc-micro" style="margin-top:8px">
+          Leave the passphrase blank and no passwords or keys go in the file at all — you'd run the
+          line wizard again on the other side. Phones keep their SIP passwords only if you set one.
+        </p>
+      </form>
+
+      <div class="tc-divider tc-divider--fine" style="margin:18px 0"></div>
+
+      <h3 style="font:800 15px var(--tc-display);margin:0 0 6px">Bring in from another box</h3>
+
+      <?php if ($pending === null): ?>
+        <form method="post" action="/" enctype="multipart/form-data" data-tc-ajax data-tc-ajax-go
+              data-tc-preparing="Uploading — then you'll see what's inside before anything changes…">
+          <?= form_fields() ?>
+          <input type="hidden" name="action" value="transfer_upload">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+            <input class="tc-input" type="file" name="export" accept=".zip,application/zip" aria-label="A twocans export" required style="max-width:360px">
+            <button class="tc-btn tc-btn--ghost" type="submit">Look inside</button>
+          </div>
+        </form>
+      <?php elseif (!$pending['ok']): ?>
+        <p class="tc-card__hint" style="color:var(--tc-coral-ink)"><?= e((string) $pending['error']) ?></p>
+        <form method="post" action="/"><?= form_fields() ?><input type="hidden" name="action" value="transfer_cancel">
+          <button class="tc-btn tc-btn--ghost tc-btn--sm" type="submit">Start again</button></form>
+      <?php else: ?>
+        <?php $m = $pending['manifest']; ?>
+        <p class="tc-card__hint">
+          Made <?= e(date('j M Y, H:i', strtotime((string) ($m['created_at'] ?? 'now')) ?: time())) ?>
+          <?= !empty($m['app_version']) ? 'by twocans ' . e((string) $m['app_version']) : '' ?>.
+          <?php if (!empty($m['has_secrets'])): ?>
+            It has passwords and keys sealed inside — you'll need its passphrase.
+          <?php elseif (!empty($m['secrets_left_out'])): ?>
+            It was made without passwords or keys; the line will need its credentials typed again.
+          <?php endif; ?>
+        </p>
+        <form method="post" action="/" data-tc-ajax data-tc-ajax-go data-tc-preparing="Bringing it in — this can take a moment…">
+          <?= form_fields() ?>
+          <input type="hidden" name="action" value="transfer_apply">
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px 16px">
+            <?php foreach (Transfer::SECTIONS as $key => $meta): ?>
+              <?php $counts = $pending['sections'][$key] ?? null; ?>
+              <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer;<?= $counts === null ? 'opacity:.45' : '' ?>">
+                <input type="checkbox" name="sections[]" value="<?= e($key) ?>"<?= $counts === null ? ' disabled' : ' checked' ?>>
+                <span><b><?= e($meta['label']) ?></b><br>
+                  <span class="tc-micro"><?= $counts === null ? 'not in this export' : e(implode(', ', array_map(static fn($t, $n) => $n . ' ' . str_replace('_', ' ', (string) $t), array_keys($counts), $counts))) ?></span>
+                </span>
+              </label>
+            <?php endforeach; ?>
+          </div>
+          <p class="tc-card__hint" style="color:var(--tc-coral-ink);margin-top:12px">
+            Each ticked section <b>replaces</b> what this box has for it — right for a fresh install, not for
+            merging two households. Grown-ups are the exception: matched by email, and your own account is
+            left alone. Settings merge, so this box's ports and address survive.
+          </p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px">
+            <?php if (!empty($m['has_secrets'])): ?>
+              <input class="tc-input" type="password" name="passphrase" placeholder="The export's passphrase" autocomplete="off" style="max-width:260px" required>
+            <?php endif; ?>
+            <input class="tc-input" type="text" name="confirm" placeholder="Type IMPORT to confirm" autocomplete="off" required style="max-width:240px">
+            <button class="tc-btn tc-btn--coral" type="submit">Import the ticked sections</button>
+          </div>
+        </form>
+        <form method="post" action="/" style="margin-top:8px"><?= form_fields() ?><input type="hidden" name="action" value="transfer_cancel">
+          <button class="tc-btn tc-btn--ghost tc-btn--sm" type="submit">Cancel</button></form>
+      <?php endif; ?>
+    </section>
+  <?php endif; ?>
+
   <?php $guide = new Onboarding(); ?>
   <?php if (Auth::can('devices') && !$guide->visible()): ?>
     <section class="tc-card">

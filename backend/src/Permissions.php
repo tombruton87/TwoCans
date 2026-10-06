@@ -191,6 +191,10 @@ final class Permissions
         'health_check' => 'system',
         'backup_create' => 'backups',
         'backup_delete' => 'backups',
+        'transfer_export' => 'backups',
+        'transfer_upload' => 'backups',
+        'transfer_apply' => 'backups',
+        'transfer_cancel' => 'backups',
         'backup_restore' => 'backups',
         // Notifications hold the Mailgun API key and recipients, so Owner only.
         'notifications_save' => 'notifications',

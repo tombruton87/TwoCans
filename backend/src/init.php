@@ -65,6 +65,7 @@ require __DIR__ . '/LiveCalls.php';
 require __DIR__ . '/Presenter.php';
 require __DIR__ . '/Store.php';
 require __DIR__ . '/Backup.php';
+require __DIR__ . '/Transfer.php';
 require __DIR__ . '/Mailgun.php';
 require __DIR__ . '/UptimeKuma.php';
 require __DIR__ . '/NotificationRepository.php';
