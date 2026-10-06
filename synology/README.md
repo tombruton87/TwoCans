@@ -57,6 +57,11 @@ root can use Docker. So the package does no Docker work itself:
   administrator names in its Settings, to look (`var/viewers`) — without
   transcripts or recordings. It's listed
   under Control Panel → Application Privileges too.
+- **Updating**: the window's Update button has the setup container download
+  the release's `.spk` from GitHub into `storage/updates`, check it's a newer
+  twocans, and hand it to DSM's own installer (`synopkg install`), which runs
+  as root — through a helper container of its own, as upgrading the package
+  stops the setup container. The new version reports how it went.
 - **The watchdog** (in `setup/run.sh`) starts a part again when it's stopped
   working for a minute and a half, three times an hour at most.
 - **HTTPS from DSM's certificates**: DSM 7 keeps third-party packages out of

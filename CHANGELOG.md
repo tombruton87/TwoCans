@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- An Update button in twocans' DSM window: when a newer release is out, it
+  downloads its Synology package from GitHub, checks it's a newer twocans,
+  and has DSM's Package Center install it — the new version reports how it
+  went. And Update the app, when the app's images are behind the package.
+
 ## [0.1.9] - 2026-10-03
 
 twocans gets a window of its own in DSM: how it's doing, the calls going on

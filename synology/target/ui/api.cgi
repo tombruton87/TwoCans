@@ -140,7 +140,7 @@ esac
 [[ -f "$VAR/request" ]] && error "409 Conflict" "twocans is still busy with the last request."
 
 case "$action" in
-  restart|setup|report|check|retry|reregister) lines="ACTION='$action'" ;;
+  restart|setup|report|check|retry|reregister|upgrade) lines="ACTION='$action'" ;;
   hangup)
     channel=$(decode "$(param channel "$body")")
     [[ "$channel" =~ ^(PJSIP|Local)/[A-Za-z0-9_.@-]+-[0-9a-f]{8}$ ]] || error "400 Bad Request" "Unknown call."

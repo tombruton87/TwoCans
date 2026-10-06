@@ -101,7 +101,7 @@ read_settings() {   # file, allowed names…
       TWOCANS_TZ) [[ "$value" =~ ^([A-Z][A-Za-z_]+(/[A-Za-z0-9_+-]+)+|UTC)$ ]] ;;
       TWOCANS_COUNTRY) [[ "$value" =~ ^[0-9]{1,4}$ ]] ;;
       TWOCANS_WHISPER_MODEL) [[ "$value" =~ ^(base|small)$ ]] ;;
-      ACTION) [[ "$value" =~ ^(restart|setup|settings|report|owner|check|hangup|retry|reregister|transcription|export|https|ring|pause|resume)$ ]] ;;
+      ACTION) [[ "$value" =~ ^(restart|setup|settings|report|owner|check|hangup|retry|reregister|transcription|export|https|ring|pause|resume|upgrade)$ ]] ;;
       PHONE) [[ "$value" =~ ^[0-9]{1,9}$ ]] ;;
       FOR) [[ "$value" =~ ^([0-9]{1,4}|morning)$ ]] ;;
       CERT) [[ "$value" =~ ^(default|none|[A-Za-z0-9]{1,32})$ ]] ;;
@@ -354,6 +354,60 @@ check_updates() {
     > "$VAR/update.json.tmp" && for_window "$VAR/update.json"
 }
 
+# ------------------------------------------------------- updating the package
+# A newer twocans, from the window's Update button: its package, from the
+# GitHub release, handed to DSM's own installer (synopkg) — which, like DSM's
+# notifications, only runs as root on the Synology itself. It runs in a helper
+# container of its own (Docker's own small image, whose BusyBox can step into
+# the Synology's namespaces), as upgrading the package stops this one and may
+# remove its image. The new version's setup container says how it went.
+UPDATES=storage/updates
+upgrade_package() {
+  local url latest file got
+  url=$(jq -r '.spk // empty' "$VAR/update.json" 2>/dev/null); latest=$(jq -r '.latest // empty' "$VAR/update.json" 2>/dev/null)
+  if [[ ! "$url" =~ ^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/releases/download/[A-Za-z0-9_./-]+\.spk$ || ! "$latest" =~ ^[0-9A-Za-z.-]+$ ]]; then
+    say "✗ there's no newer package to install — look for updates first"; return 1
+  fi
+  mkdir -p "$UPDATES"; rm -f "$UPDATES"/twocans-*.spk "$UPDATES"/upgrade.*
+  file="$UPDATES/twocans-$latest.spk"
+  say "downloading twocans $latest's package"
+  curl -fsSL --max-time 600 -o "$file" "$url" || { say "✗ the download didn't finish"; rm -f "$file"; return 1; }
+  # Only a twocans package, and only a newer one, is installed.
+  got=$(tar -xOf "$file" INFO 2>/dev/null | sed -n 's/^version="\([0-9A-Za-z.-]*\)"$/\1/p')
+  if ! tar -xOf "$file" INFO 2>/dev/null | grep -qx 'package="twocans"' || [[ -z "$got" || "$got" == "$BUILD" ]] \
+     || [[ "$(printf '%s\n%s\n' "$got" "$BUILD" | sort -V | tail -1)" != "$got" ]]; then
+    say "✗ that download isn't a newer twocans package (${got:-no version}), so it wasn't installed"; rm -f "$file"; return 1
+  fi
+  printf '%s\n' "$BUILD" > "$UPDATES/upgrade.from"; printf '%s\n' "$got" > "$UPDATES/upgrade.to"
+  say "handing twocans $got to DSM's Package Center — twocans stops, and starts again with it"
+  publish_log
+  docker rm -f twocans-upgrade >/dev/null 2>&1
+  docker run -d --rm --privileged --pid=host --network=host --name twocans-upgrade --entrypoint busybox docker:27-cli \
+      nsenter -t 1 -m -u -i -n -p -- sh -c '/usr/syno/bin/synopkg install "$1" > "$2" 2>&1; echo "exit $?" >> "$2"' \
+      sh "$APP/$file" "$APP/$UPDATES/upgrade.log" >> "$LOG" 2>&1 \
+    || { say "✗ DSM's installer couldn't be started"; return 1; }
+}
+
+# How the last update went, once DSM's installer has finished — said by the
+# version that's running now, and shown in the window.
+report_upgrade() {
+  local from to result
+  [[ -f "$APP/$UPDATES/upgrade.to" ]] || return 0
+  docker ps -q --filter name='^twocans-upgrade$' 2>/dev/null | grep -q . && return 0   # still installing
+  from=$(cat "$APP/$UPDATES/upgrade.from" 2>/dev/null); to=$(cat "$APP/$UPDATES/upgrade.to" 2>/dev/null)
+  result=$(tail -n 20 "$APP/$UPDATES/upgrade.log" 2>/dev/null)
+  if [[ "$BUILD" == "$to" ]]; then
+    say "✓ updated from twocans $from to $to"
+    LAST="{\"action\":\"upgrade\",\"ok\":true,\"at\":$(date +%s),\"by\":\"\"}"
+  else
+    say "✗ updating to twocans $to didn't finish — DSM's installer said:"
+    printf '%s\n' "${result:-(nothing)}" | sed 's/^/    /' | tee -a "$LOG"
+    LAST="{\"action\":\"upgrade\",\"ok\":false,\"at\":$(date +%s),\"by\":\"\"}"
+  fi
+  rm -f "$APP/$UPDATES"/twocans-*.spk "$APP/$UPDATES"/upgrade.*
+  write_status; publish_log
+}
+
 # A support report, as ./twocans report makes one — private details taken out
 # by the app — for the window to hand over.
 make_report() {
@@ -575,6 +629,15 @@ handle_request() {
       say "$action $([[ "${phone:-0}" == 0 ]] && echo "every phone" || echo "phone $phone")$([[ "$action" == pause ]] && echo " (${for:-60})"), as ${by:-someone} asked in DSM: $answer"
       [[ "$answer" == '{"ok":true'* ]]; rc=$?
       write_stats ;;
+    upgrade)
+      BUSY="updating twocans"; write_status
+      say "updating twocans, as ${by:-someone} asked in DSM"
+      if upgrade_package; then
+        # The installer has it now, and will stop this container: what
+        # happened is the new version's to say.
+        rm -f "$file"; write_status; return 0
+      fi
+      rc=1 ;;
     https)
       BUSY="setting up HTTPS"; write_status
       say "setting up HTTPS, as ${by:-someone} asked in DSM"
@@ -727,6 +790,7 @@ while true; do
   fi
   (( tick % 15 == 0 )) && { watchdog; watch_numbers; }
   (( tick % 150 == 0 )) && sample_memory
+  (( tick % 15 == 0 )) && report_upgrade
   # DSM's certificates: listed for the window, and the chosen one followed
   # through DSM's renewals — every few minutes, and at once when watched.
   if (( tick % 150 == 0 )) || { $watched && (( tick % 15 == 0 )); }; then apply_cert; write_certs; watch_cert; fi

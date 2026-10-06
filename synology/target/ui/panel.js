@@ -192,14 +192,15 @@
     "restarting": "Restarting", "setting up again": "Setting up again", "applying new settings": "Applying the new settings",
     "making a support report": "Making a support report", "resetting the Owner account": "Resetting the Owner account",
     "turning speech-to-text on": "Turning speech-to-text on", "turning speech-to-text off": "Turning speech-to-text off",
-    "making an export": "Making an export", "setting up HTTPS": "Setting up HTTPS"
+    "making an export": "Making an export", "setting up HTTPS": "Setting up HTTPS",
+    "updating twocans": "Updating twocans"
   };
   var DONE = {
     https: "Setting up HTTPS", restart: "Restarting", setup: "Setting up again", settings: "Applying the new settings",
     report: "Making the support report", owner: "Resetting the Owner account", check: "Looking for updates",
     hangup: "Ending the call", retry: "Sending transcriptions back", reregister: "Registering the phone line",
     transcription: "Switching speech-to-text", "export": "Making the export", ring: "Ringing the phone",
-    pause: "Pausing", resume: "Turning phones back on"
+    pause: "Pausing", resume: "Turning phones back on", upgrade: "Updating twocans"
   };
 
   var data = {}, filled = false, last = null;
@@ -221,6 +222,7 @@
     if (d.state === "failed") hero("bad", "alert", t("Setting twocans up stopped"), t("The Logs say why. Once it's sorted, start it again in Package Center (twocans → Run)."));
     else if (d.state === "stopped") hero("idle", "pause", t("twocans is stopped"), t("Start it in Package Center (twocans → Run)."));
     else if (d.state === "starting") hero("warn", "alert", t("Setting twocans up…"), t("The first time takes a while — the Logs show how it's going."));
+    else if (busy === "updating twocans") hero("warn", "alert", t("Updating twocans") + "…", t("twocans stops, and starts again with the new version. This window may close — open it again in a minute or two."));
     else if (busy) hero("warn", "alert", t(BUSY[busy] || busy) + "…", t("This takes a moment."));
     else if (d.pending) hero("warn", "alert", t("Starting your request…"), "");
     else if (stale || !s) hero("warn", "alert", t("twocans isn't answering"), t("Its setup container may be busy, or stopped — Package Center shows which."));
@@ -308,15 +310,27 @@
     box.innerHTML = ""; box.hidden = true;
     if (!s) return;
     var app = d.stats && d.stats.app_version;
+    var busy = !!(s.busy || d.pending) || d.state !== "running";
     if (u && u.latest && newer(u.latest, s.version)) {
       box.className = "note good"; box.hidden = false;
-      var tx = el("div"); tx.appendChild(el("b", t("twocans {v} is out.", { v: u.latest }) + " "));
-      if (u.spk && d.role === "admin") { var a = el("a", t("Download its package")); a.href = u.spk; tx.appendChild(a); tx.appendChild(el("span", ", " + t("then install it in Package Center → Manual Install.") + " ")); }
+      var tx = el("div", null, ""); tx.style.flex = "1";
+      tx.appendChild(el("b", t("twocans {v} is out.", { v: u.latest }) + " "));
       if (u.page) { var p = el("a", t("What's new")); p.href = u.page; p.target = "_blank"; p.rel = "noopener"; tx.appendChild(p); }
       box.appendChild(tx);
+      if (u.spk && d.role === "admin") {
+        var up = el("button", t("Update to {v}", { v: u.latest }), "btn primary"); up.disabled = busy;
+        up.addEventListener("click", function () {
+          ask({ action: "upgrade" }, t("Update twocans to {v}? DSM's Package Center installs its new package, and twocans restarts — this window may close; open it again in a minute or two.", { v: u.latest }) + "\n\n" + cutOff());
+        });
+        box.appendChild(up);
+      }
     } else if (app && newer(s.version, app) && d.role === "admin") {
       box.className = "note warn"; box.hidden = false;
-      box.textContent = t("The app is running {app}, older than this package ({pkg}). Run setup again to fetch the newest images, once they've been published.", { app: app, pkg: s.version });
+      var tw = el("div", t("The app is running {app}, older than this package ({pkg}). Run setup again to fetch the newest images, once they've been published.", { app: app, pkg: s.version }));
+      tw.style.flex = "1"; box.appendChild(tw);
+      var ua = el("button", t("Update the app"), "btn"); ua.disabled = busy;
+      ua.addEventListener("click", function () { ask({ action: "setup" }, t("Set twocans up again? It fetches the newest images and restarts.") + "\n\n" + cutOff()); });
+      box.appendChild(ua);
     }
     var line = $("checked"); line.innerHTML = "";
     line.appendChild(el("span", !u ? t("Not looked for updates yet.") + " " : u.error ? t("Couldn't look for updates.") + " " : t("Looked for updates {when}.", { when: ago(d.now - u.checked) }) + (box.hidden ? " " + t("This is the newest.") + " " : " ")));
