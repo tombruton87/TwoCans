@@ -65,6 +65,19 @@ function back(): string
     $path = parse_url((string) $ref, PHP_URL_PATH) ?: '/';
     $query = parse_url((string) $ref, PHP_URL_QUERY);
 
+    /*
+     * Somewhere on this site, or nowhere.
+     *
+     * Dropping the scheme and host is not enough on its own. A path beginning
+     * "//" is read as protocol-relative, and browsers fold a backslash into a
+     * slash before doing so — which makes "/\evil.com" an off-site redirect
+     * that parse_url hands back unchanged. Both _back and Referer are the
+     * caller's to set, so neither is trusted beyond being a plain path here.
+     */
+    if (!str_starts_with($path, '/') || str_starts_with($path, '//') || str_contains($path, '\\')) {
+        return '/';
+    }
+
     return $path . ($query ? '?' . $query : '');
 }
 

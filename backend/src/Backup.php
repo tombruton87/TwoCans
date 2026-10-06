@@ -150,9 +150,18 @@ final class Backup
         @mkdir($staging, 0777, true);
 
         try {
+            // Read the member list and judge it ourselves before anything is
+            // written. GNU tar does refuse `..` and strips a leading `/`, but
+            // that is the base image's behaviour rather than ours — busybox
+            // tar is laxer, and a rebuild onto a smaller base would quietly
+            // take the guard away. An uploaded tarball is attacker-shaped
+            // input, so the check belongs here.
+            if (($bad = $this->unsafeMember($path)) !== null) {
+                return ['ok' => false, 'error' => 'That backup contains an unsafe path (' . $bad . ') and was not restored.'];
+            }
+
             // --no-same-owner: an uploaded tarball's ownership bits are not ours
-            // to trust; extract as the pool user. Modern GNU tar also refuses
-            // `..` members, so nothing can escape the staging dir.
+            // to trust; extract as the pool user.
             $r = $this->run(['tar', '--no-same-owner', '-xzf', $path, '-C', $staging]);
             if ($r['code'] !== 0 || !is_file($staging . '/db.sql')) {
                 return ['ok' => false, 'error' => 'Not a valid twocans backup (missing db.sql)'];
@@ -307,6 +316,51 @@ final class Backup
     }
 
     /** @return array{code:int,stdout:string,stderr:string} */
+    /**
+     * The first member of $archive that must not be extracted, or null.
+     *
+     * Refuses anything that could land outside the staging directory: an
+     * absolute path, any `..` component, and links of either kind — a symlink
+     * pointing out of the tree turns a later, innocent-looking member into a
+     * write anywhere the pool user can reach.
+     */
+    private function unsafeMember(string $archive): ?string
+    {
+        $r = $this->run(['tar', '-tvzf', $archive]);
+        if ($r['code'] !== 0) {
+            return 'unreadable archive';
+        }
+
+        foreach (explode("\n", $r['stdout']) as $line) {
+            $line = trim($line);
+            if ($line === '') {
+                continue;
+            }
+
+            // "lrwxrwxrwx user/group 0 2026-01-01 00:00 name -> target"
+            if ($line[0] === 'l' || $line[0] === 'h') {
+                return 'a link';
+            }
+
+            $parts = preg_split('/\s+/', $line, 6);
+            $name = $parts[5] ?? '';
+            if ($name === '') {
+                continue;
+            }
+
+            if (str_starts_with($name, '/') || str_starts_with($name, '~')) {
+                return $name;
+            }
+            foreach (explode('/', $name) as $segment) {
+                if ($segment === '..') {
+                    return $name;
+                }
+            }
+        }
+
+        return null;
+    }
+
     private function run(array $cmd, array $extraEnv = []): array
     {
         $env = array_merge(getenv(), $extraEnv);

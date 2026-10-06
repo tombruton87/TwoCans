@@ -18,6 +18,25 @@ return [
     test('e() escapes HTML', function () {
         assertSame('&lt;script&gt;', e('<script>'));
     }),
+    test('back() keeps a path on this site', function () {
+        $_POST['_back'] = '/?screen=phones&device=3';
+        assertSame('/?screen=phones&device=3', back());
+    }),
+    test('back() refuses to send anyone off-site', function () {
+        // The last two are the ones parse_url alone lets through: browsers
+        // normalise the backslash to a slash, making it protocol-relative.
+        foreach ([
+            'https://evil.com/x' => '/x',
+            '//evil.com/x' => '/x',
+            '///evil.com/x' => '/',
+            '/\\evil.com' => '/',
+            '/\\/evil.com' => '/',
+        ] as $ref => $want) {
+            $_POST['_back'] = $ref;
+            assertSame($want, back());
+        }
+        unset($_POST['_back']);
+    }),
     test('highlight() escapes before it marks', function () {
         $out = highlight('<b>hello</b>', 'hello');
         assertContains('<mark class="tc-mark">hello</mark>', $out);

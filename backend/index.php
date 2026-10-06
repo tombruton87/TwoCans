@@ -41,6 +41,15 @@ if (isset($_GET['provision'])) {
 if (preg_match('#^/hook/announce/([a-f0-9]{32})/?(?:\?.*)?$#', $_SERVER['REQUEST_URI'] ?? '', $hookMatch)) {
     header('Content-Type: application/json');
     header('Cache-Control: no-store');
+    // A leaked trigger URL should not let a stranger ring every phone in the
+    // house on a loop. Generous enough for a doorbell automation, not for a
+    // prank. Counted before the token is looked up, so probing is limited too.
+    if (Throttle::tooMany('hook:' . $hookMatch[1], 12, 60)) {
+        http_response_code(429);
+        header('Retry-After: 60');
+        exit(json_encode(['ok' => false, 'error' => 'That trigger URL has been used too often just now. Try again in a minute.']));
+    }
+
     $announcements = new AnnouncementRepository();
     $announcement = $announcements->findByToken($hookMatch[1]);
     if ($announcement === null) {
@@ -71,7 +80,16 @@ if (preg_match('#^/hello/([a-f0-9]{32})/?(?:\?.*)?$#', $_SERVER['REQUEST_URI'] ?
     $person = $links->contactFor($helloMatch[1]);
     $helloErrors = [];
 
-    if ($person !== null && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+    // Uploads here are unauthenticated: anyone with the link may send a photo
+    // and a voice clip. A handful of goes is plenty for someone getting their
+    // picture right; beyond that it is a stranger filling the disk.
+    $helloFlooded = ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
+        && Throttle::tooMany('hello:' . $helloMatch[1], 10, 3600);
+    if ($helloFlooded) {
+        $helloErrors[] = "That's a lot of tries in one go — give it an hour and have another.";
+    }
+
+    if ($person !== null && !$helloFlooded && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         $id = (int) $person['id'];
         $contacts = new ContactRepository();
         $saved = [];

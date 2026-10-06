@@ -12,6 +12,7 @@ date_default_timezone_set(getenv('TZ') ?: 'Europe/London');
 
 require __DIR__ . '/helpers.php';
 require __DIR__ . '/Database.php';
+require __DIR__ . '/Throttle.php';
 require __DIR__ . '/Permissions.php';
 require __DIR__ . '/Auth.php';
 require __DIR__ . '/GuardianRepository.php';
