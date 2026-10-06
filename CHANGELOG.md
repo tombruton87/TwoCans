@@ -7,11 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.10] - 2026-10-06
+
+A household can now move house. Export the line, the phones, the people and
+the rest as a zip, bring chosen pieces into a twocans running somewhere else
+— a Synology, say — and its passwords travel sealed under a passphrase you
+choose. The DSM window gains an Update button, the Synology package a proper
+icon, and three edges found in a security pass are closed.
+
 ### Added
+- Move to another box, on the System screen: export the sections a family
+  would recognise — the line, the phones, the people, settings and rules,
+  sounds, grown-ups, and call history with its recordings — as a zip of plain
+  JSON and the files it names, and bring chosen ones into a twocans already
+  running elsewhere. Passwords and keys are sealed under a passphrase you
+  type and locked to the new box's own key when they arrive; leave it blank
+  and they stay behind. Import shows what is inside before replacing
+  anything. Grown-ups merge by email and your own account is left alone;
+  settings merge, so the new box keeps its ports and address.
+- A rounded icon for the Synology package, drawn from the two-cans mark, in
+  place of the flat square copied from the PWA icon.
 - An Update button in twocans' DSM window: when a newer release is out, it
   downloads its Synology package from GitHub, checks it's a newer twocans,
   and has DSM's Package Center install it — the new version reports how it
   went. And Update the app, when the app's images are behind the package.
+
+### Security
+- A return path could send someone off-site: `back()` dropped the scheme and
+  host but let `/\evil.com` through, which browsers read as `//evil.com`.
+  A return path is now a plain path on this site, or `/`.
+- Restoring a backup trusted GNU tar to refuse `..` members. The archive's
+  member list is now checked by twocans before anything is extracted: no
+  absolute paths, no `..`, and no links of either kind.
+- The trigger URL (`/hook/announce/…`) and a person's hello link (`/hello/…`)
+  are rate-limited per token — 12 a minute, and 10 uploads an hour — so a
+  leaked link cannot page the house on repeat or fill the disk.
 
 ## [0.1.9] - 2026-10-03
 
@@ -884,7 +914,8 @@ that play through the speaker instead of as a call.
   **Numbers the kids tried** log on the call log, one card per number with the
   same two buttons. Both leave out anyone who has since been added as a contact.
 
-[Unreleased]: https://github.com/tombruton87/TwoCans/compare/v0.1.9...HEAD
+[Unreleased]: https://github.com/tombruton87/TwoCans/compare/v0.1.10...HEAD
+[0.1.10]: https://github.com/tombruton87/TwoCans/compare/v0.1.9...v0.1.10
 [0.1.9]: https://github.com/tombruton87/TwoCans/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/tombruton87/TwoCans/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/tombruton87/TwoCans/compare/v0.1.6...v0.1.7
