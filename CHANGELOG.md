@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.11] - 2026-10-22
+
+A security release: please update. twocans' web image now runs PHP 8.3.36,
+which fixes two critical PHP flaws announced on 21 October that let anyone
+who can reach the web app run code on it without signing in, and that are
+already being used. Santa gets a new voice while we're here.
+
+### Security
+- PHP 8.3.33 → 8.3.36 in the web image, for CVE-2026-109618 (code execution
+  through out-of-memory corruption) and CVE-2026-109619 (code execution
+  through state left over between requests). Both affect PHP-FPM, which
+  twocans uses. A twocans reachable from outside the house over HTTPS was
+  exposed; update even if it isn't.
+
+### Changed
+- **A new voice for Santa.** The Christmas countdown (1225) is now a warm,
+  British Father Christmas, and after the count he has fifteen things to
+  say instead of four — the elves wrapping presents, the lists still coming
+  in, Mrs Claus's mince pies and more, one at random each call.
+
+### Added
+- **Hear Santa's Christmas Day message on a phone, before the day.** On the
+  Christmas page, pick a phone and *Ring it*: it rings now with the message
+  that'll play on Christmas Day — your own, if you've recorded one.
+
+### Fixed
+- A test that failed in the week before the clocks change: a link lasts a
+  week by the clock, which is an hour more or less than 168 hours then.
+
 ## [0.1.10] - 2026-10-06
 
 A household can now move house. Export the line, the phones, the people and
@@ -914,7 +943,8 @@ that play through the speaker instead of as a call.
   **Numbers the kids tried** log on the call log, one card per number with the
   same two buttons. Both leave out anyone who has since been added as a contact.
 
-[Unreleased]: https://github.com/tombruton87/TwoCans/compare/v0.1.10...HEAD
+[Unreleased]: https://github.com/tombruton87/TwoCans/compare/v0.1.11...HEAD
+[0.1.11]: https://github.com/tombruton87/TwoCans/compare/v0.1.10...v0.1.11
 [0.1.10]: https://github.com/tombruton87/TwoCans/compare/v0.1.9...v0.1.10
 [0.1.9]: https://github.com/tombruton87/TwoCans/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/tombruton87/TwoCans/compare/v0.1.7...v0.1.8

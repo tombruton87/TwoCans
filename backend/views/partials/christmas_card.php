@@ -61,6 +61,27 @@ $phones = Christmas::childPhones();
       <noscript><button class="tc-btn tc-btn--teal" type="submit">Save message</button></noscript>
     </form>
 
+    <?php
+    // Any phone that can ring, to hear the message on a handset before the day.
+    $ringable = array_values(array_filter(
+        array_map([DeviceRepository::class, 'toView'], (new DeviceRepository())->all()),
+        static fn(array $d): bool => $d['available'] && $d['sipUsername'] !== ''
+    ));
+    ?>
+    <?php if ($ringable !== []): ?>
+      <p class="tc-card__hint">Hear it on a phone, as it'll sound on Christmas Day — <?= $own ? 'yours' : "Santa's own" ?>, rung now.</p>
+      <form method="post" action="/" class="tc-row tc-row--wrap" data-tc-ajax>
+        <?= form_fields() ?>
+        <input type="hidden" name="action" value="santa_try">
+        <select class="tc-input" name="phone" aria-label="The phone to ring" style="max-width:220px">
+          <?php foreach ($ringable as $d): ?>
+            <option value="<?= (int) $d['id'] ?>"><?= e($d['name']) ?></option>
+          <?php endforeach; ?>
+        </select>
+        <button class="tc-btn tc-btn--ghost" type="submit"><i class="fa-solid fa-phone" aria-hidden="true"></i> Ring it</button>
+      </form>
+    <?php endif; ?>
+
     <h3 class="tc-card__subtitle tc-mt-14">The number, and Santa's call</h3>
     <form method="post" action="/" class="tc-stack tc-stack--tight" data-tc-ajax>
       <?= form_fields() ?>

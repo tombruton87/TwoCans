@@ -43,8 +43,9 @@ return [
             $links = new ContactLinkRepository();
             $id = $person();
             $links->create($id);
+            // A week by the clock: across the clocks changing that's an hour more or less than 168.
             $days = (strtotime($links->forContact($id)['expiresAt']) - time()) / 86400;
-            assertTrue($days > 6.9 && $days <= 7.0, "expires in {$days} days");
+            assertTrue($days > 6.9 && $days <= 7.0 + 1 / 24, "expires in {$days} days");
         });
     }),
     test('a link made when they lasted longer is held to a week too', function () use ($inTransaction, $person) {

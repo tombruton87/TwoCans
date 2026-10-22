@@ -57,15 +57,36 @@ run together.
 ## Sleeps till Christmas — `christmas/`
 
 Santa, counting down the sleeps (dial 1225, or whatever number the household
-picks), and his Christmas Day message — generated with Higgsfield's
-text-to-speech (Seed Audio, preset voice "Sterling") and converted as above.
-A household can record its own Christmas Day message instead; this one plays
-without one.
+picks), and his Christmas Day message — generated with ElevenLabs
+text-to-speech (model eleven_v4), voice "Father Christmas/Santa Claus Joe"
+(from ElevenLabs' Voice Library), and converted as above, with the silence
+trimmed from each end and every piece set to the same speech level, so the
+countdown's pieces run together. A household can record its own Christmas Day
+message instead; this one plays without one.
+
+`intro.wav` and `sleeps-until.wav` are cut from one take of "Ho ho ho! Hello
+there, it's Santa! There are fifty-seven sleeps until Christmas!", so the
+number lands in the middle of a sentence. After the count, Santa says one of
+the sign-offs at random (`Christmas::SIGNOFFS` of them).
 
 | Files | Say |
 |---|---|
 | `intro.wav`, `sleeps-until.wav` | "Ho ho ho! Hello there, it's Santa! There are" … "sleeps until Christmas!" |
-| `signoff-1.wav` … `signoff-4.wav` | "The reindeer are practising their flying!", "The elves are busy wrapping presents!", "I'm checking my list, and checking it twice!", "Be good, and I'll see you very soon. Ho ho ho!" |
+| `signoff-1.wav` | "The reindeer are practising their flying!" |
+| `signoff-2.wav` | "The elves are busy wrapping all the presents!" |
+| `signoff-3.wav` | "I'm checking my list, and checking it twice!" |
+| `signoff-4.wav` | "Be good, and I'll see you very soon. Ho ho ho!" |
+| `signoff-5.wav` | "I'm waiting for all the lists to come in. Have you sent yours yet?" |
+| `signoff-6.wav` | "Mrs Claus is baking mince pies, and they smell delicious!" |
+| `signoff-7.wav` | "Rudolph's nose is glowing brighter every day!" |
+| `signoff-8.wav` | "It's ever so snowy here at the North Pole today!" |
+| `signoff-9.wav` | "The elves are painting the toys in the workshop!" |
+| `signoff-10.wav` | "I'm polishing my sleigh, so it's nice and shiny!" |
+| `signoff-11.wav` | "Don't forget to leave a carrot out for the reindeer!" |
+| `signoff-12.wav` | "Remember to be kind, and help out at home. Ho ho ho!" |
+| `signoff-13.wav` | "The elves have been singing Christmas songs all day long!" |
+| `signoff-14.wav` | "I've been trying on my big red suit, and it still fits! Just about! Ho ho ho!" |
+| `signoff-15.wav` | "Sleep tight, and keep being good. Ho ho ho!" |
 | `christmas-eve.wav` | "Ho ho ho! It's Christmas Eve! Just one more sleep until Christmas! …" |
 | `christmas-day.wav` | "Ho ho ho! Merry Christmas! It's Santa here, calling all the way from the North Pole. …" |
 | `n-2.wav` … `n-20.wav`, `n-30.wav` … `n-90.wav`, `n-100.wav` … `n-300-and.wav` | The numbers, 2 to 365 — see `PjsipConfig::quizSay()` |

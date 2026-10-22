@@ -145,6 +145,7 @@ final class Permissions
         'radio_shuffle' => 'rules',
         'santa_audio' => 'rules',
         'santa_audio_remove' => 'rules',
+        'santa_try' => 'rules',
         'update_check' => 'system',
         // Jokes are part of what the line does, so they sit with the other rules:
         // an Admin may manage them, a Viewer may not.

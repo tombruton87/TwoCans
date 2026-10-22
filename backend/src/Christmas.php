@@ -22,6 +22,9 @@ final class Christmas
     /** Where Santa's own voice lives, as Asterisk sees it — see storage/defaults/README.md. */
     public const SOUNDS = PjsipConfig::DEFAULTS_DIR . '/christmas';
 
+    /** How many things Santa might say after the countdown: signoff-1 … signoff-15, one at random. */
+    public const SIGNOFFS = 15;
+
     /** Sleeps from $today until the next Christmas Day: 0 on the day itself. */
     public static function sleeps(DateTimeImmutable $today): int
     {
@@ -64,6 +67,42 @@ final class Christmas
      *
      * @return array<int,string> the phones rung
      */
+    /**
+     * Ring one phone with Santa's Christmas Day message now, any day — so a
+     * grown-up can hear it as a child will, on a handset, before the day.
+     * Any phone that can ring: a grown-up's own is the likeliest to try it on.
+     *
+     * @return string|null What went wrong, or null when it's ringing.
+     */
+    public static function ringToTry(int $deviceId): ?string
+    {
+        $devices = new DeviceRepository();
+        try {
+            (new PjsipConfig($devices))->syncRegistrations();
+        } catch (Throwable) {
+            // The last known state will do.
+        }
+        $row = $devices->find($deviceId);
+        if ($row === null) {
+            return 'No such phone';
+        }
+        $phone = DeviceRepository::toView($row);
+        if (!$phone['online'] || $phone['sipUsername'] === '') {
+            return $phone['name'] . " isn't online, so it can't ring";
+        }
+
+        try {
+            $ami = new Ami();
+            $ami->connect();
+            $reply = $ami->originate('PJSIP/' . $phone['sipUsername'], PjsipConfig::CHRISTMAS_CONTEXT, 'santa', self::CALLER, 45);
+            $ami->disconnect();
+        } catch (Throwable $e) {
+            return 'Could not reach Asterisk: ' . $e->getMessage();
+        }
+
+        return ($reply['response'] ?? '') === 'Success' ? null : 'Asterisk refused the call: ' . ($reply['message'] ?? 'no reply');
+    }
+
     public static function ringIfDue(?DateTimeImmutable $now = null, ?SettingsRepository $settings = null): array
     {
         $settings ??= new SettingsRepository();

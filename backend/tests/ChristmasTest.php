@@ -46,7 +46,18 @@ return [
             $c = Christmas::SOUNDS;
             assertContains("exten => 365,1,Return({$c}/n-300-and&{$c}/n-60&{$c}/n-5)", $plan);
             assertContains("exten => 200,1,Return({$c}/n-200)", $plan);
+            assertContains('/signoff-${RAND(1,' . Christmas::SIGNOFFS . ')})', $plan);
         });
+    }),
+    test('every sign-off Santa might pick is shipped', function () {
+        $dir = Christmas::SOUNDS;
+        if (!is_dir($dir)) {
+            return;   // No sounds mounted here (the image carries only the app).
+        }
+        foreach (range(1, Christmas::SIGNOFFS) as $n) {
+            assertTrue(is_file("{$dir}/signoff-{$n}.wav"), "signoff-{$n}.wav");
+        }
+        assertFalse(is_file("{$dir}/signoff-" . (Christmas::SIGNOFFS + 1) . '.wav'), 'one more than SIGNOFFS would never play');
     }),
     test('the household\'s own Santa message plays instead, when there is one', function () use ($fresh) {
         $fresh(function () {
@@ -90,6 +101,13 @@ return [
             assertSame([], Christmas::ringIfDue($at('2026-12-25 09:00'), $s), 'already rang');
             $s->setSantaRing(true, '25:00');
             assertSame('08:30', $s->santaRingTime(), 'not a time');
+        });
+    }),
+    test('trying the message on a phone rings only a phone that is there and online', function () use ($fresh) {
+        $fresh(function () {
+            assertSame('No such phone', Christmas::ringToTry(999999));
+            $phone = (new DeviceRepository())->create('Test landing', 'ghp621', 'udp');
+            assertSame("Test landing isn't online, so it can't ring", Christmas::ringToTry((int) $phone['id']));
         });
     }),
     test('Santa rings children\'s phones only: not adult mode, not incoming off', function () use ($fresh) {

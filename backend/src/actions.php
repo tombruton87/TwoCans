@@ -850,6 +850,13 @@ switch ($action) {
         flash("Santa's message saved ✓ — it plays on Christmas Day");
         break;
 
+    case 'santa_try':
+        $phoneId = (int) ($_POST['phone'] ?? 0);
+        $problem = Christmas::ringToTry($phoneId);
+        $row = $problem === null ? $devices->find($phoneId) : null;
+        flash($problem ?? ($row['name'] ?? 'The phone') . " should be ringing now — Santa's Christmas Day message 🎅");
+        break;
+
     case 'santa_audio_remove':
         $settings = new SettingsRepository();
         (new SantaStore())->delete($settings->santaMessage());

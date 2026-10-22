@@ -2908,7 +2908,7 @@ final class PjsipConfig
         $out .= " same => n,GotoIf(\$[\${SLEEPS} = 0]?santa,1)\n";
         $out .= " same => n,GotoIf(\$[\${SLEEPS} = 1]?eve)\n";
         $out .= " same => n,Gosub(" . self::CHRISTMAS_SAY_CONTEXT . ",\${SLEEPS},1)\n";
-        $out .= " same => n,Playback({$c}/intro&\${GOSUB_RETVAL}&{$c}/sleeps-until&{$c}/signoff-\${RAND(1,4)})\n";
+        $out .= " same => n,Playback({$c}/intro&\${GOSUB_RETVAL}&{$c}/sleeps-until&{$c}/signoff-\${RAND(1," . Christmas::SIGNOFFS . ")})\n";
         $out .= " same => n,Hangup()\n";
         $out .= " same => n(eve),Playback({$c}/christmas-eve)\n";
         $out .= " same => n,Hangup()\n";
