@@ -209,7 +209,7 @@
 "The Logs say why. Once it's sorted, start it again in Package Center (twocans → Run).": "De logboeken zeggen waarom. Als het opgelost is, start je hem opnieuw in het Pakketcentrum (twocans → Uitvoeren).",
 "The Synology": "De Synology",
 "The app is running {app}, older than this package ({pkg}). Run setup again to fetch the newest images, once they've been published.": "De app draait {app}, ouder dan dit pakket ({pkg}). Voer de installatie opnieuw uit om de nieuwste images op te halen, zodra die gepubliceerd zijn.",
-"The first time takes a while — the Logs show how it's going.": "De eerste keer duurt even — de logboeken laten zien hoe het gaat.",
+"The first time takes a while, and after an update the new version downloads first — a few minutes. The Logs show how it's going.": "De eerste keer duurt het even, en na een update wordt eerst de nieuwe versie gedownload – een paar minuten. De logboeken laten zien hoe het gaat.",
 "The household": "Het huishouden",
 "The numbers come from twocans itself, so they appear once it's running.": "De cijfers komen van twocans zelf, dus ze verschijnen zodra hij draait.",
 "The phone line": "De telefoonlijn",

@@ -157,7 +157,7 @@ notify() {   # key, hours between, values for its {0} {1}…
   mark="$VAR/notified/$key-$(printf '%s|' "${args[@]}" | md5sum | cut -c1-12)"
   fresh "$mark" $(( hours * 3600 )) && return 0
   touch "$mark"
-  if docker run --rm --privileged --pid=host --network=host --entrypoint nsenter twocans-setup:local \
+  if timeout -k 5 60 docker run --rm --privileged --pid=host --network=host --entrypoint nsenter twocans-setup:local \
        -t 1 -m -u -i -n -p -- /usr/syno/bin/synodsmnotify -c "$APP_ID" @administrators \
        "$APP_ID:notification:title" "$APP_ID:notification:$key" "${args[@]}" >> "$LOG" 2>&1; then
     say "told DSM: $key${args[*]:+ (${args[*]})}"
@@ -188,7 +188,7 @@ watchdog() {
       continue
     fi
     say "watchdog: the $(label "$name") $([[ "$state" == running ]] && echo "stopped answering" || echo "stopped") — starting it again"
-    if [[ "$state" == running ]]; then docker restart "twocans-$name" >> "$LOG" 2>&1
+    if [[ "$state" == running ]]; then timeout -k 5 120 docker restart "twocans-$name" >> "$LOG" 2>&1
     else docker compose up -d --no-deps "$name" >> "$LOG" 2>&1; fi
     RESTARTS[$name]="${RESTARTS[$name]:-} $now"; BAD_SINCE[$name]=""
     notify restarted 1 "$(label "$name")"
@@ -268,16 +268,16 @@ for_window() {   # file — moved into place whole
 # many calls are going on now, from the phone service.
 write_stats() {
   local active app version
-  active=$(docker exec twocans-asterisk asterisk -rx 'core show channels count' 2>/dev/null | sed -n 's/^\([0-9]*\) active call.*/\1/p' | head -1)
-  app=$(docker exec -i twocans-web php < "$PKG/setup/stats.php" 2>/dev/null | tail -1)
+  active=$(timeout -k 5 20 docker exec twocans-asterisk asterisk -rx 'core show channels count' 2>/dev/null | sed -n 's/^\([0-9]*\) active call.*/\1/p' | head -1)
+  app=$(timeout -k 5 90 docker exec -i twocans-web php < "$PKG/setup/stats.php" 2>/dev/null | tail -1)
   [[ "$app" == "{"*"}" ]] || app="{}"
-  version=$(docker exec twocans-web cat /var/www/html/VERSION 2>/dev/null | tr -cd '0-9A-Za-z.-')
+  version=$(timeout -k 5 20 docker exec twocans-web cat /var/www/html/VERSION 2>/dev/null | tr -cd '0-9A-Za-z.-')
   # The phone line's registrations, as Asterisk has them: a line that
   # registers says Registered; one the provider reaches by address has none.
   local regs="" rname rstatus
   while read -r rname rstatus; do
     regs+="${regs:+,}{\"name\":$(json "$rname"),\"status\":$(json "$rstatus")}"
-  done < <(docker exec twocans-asterisk asterisk -rx 'pjsip show registrations' 2>/dev/null \
+  done < <(timeout -k 5 20 docker exec twocans-asterisk asterisk -rx 'pjsip show registrations' 2>/dev/null \
              | awk '$1 ~ /\// && $1 !~ /^<Registration/ { for (i = 2; i <= NF; i++) if ($i ~ /^(Registered|Unregistered|Rejected|Failed|Stopped|Rejected)$/) { split($1, n, "/"); print n[1], $i; break } }')
   printf '{"updated":%s,"active_calls":%s,"app_version":%s,"transcription":%s,"registrations":[%s],"app":%s}\n' \
     "$(date +%s)" "${active:-null}" "$(json "$version")" "$(json "$(transcription)")" "$regs" "$app" > "$VAR/stats.json.tmp" && for_window "$VAR/stats.json"
@@ -427,7 +427,7 @@ reset_owner() {
   req=$(printf '{"password":%s,"email":%s,"passkeys":%s,"signout":%s}' "$(json "$password")" "$(json "${OWNER_EMAIL:-}")" \
     "$([[ ${OWNER_PASSKEYS:-0} == 1 ]] && echo true || echo false)" "$([[ ${OWNER_SIGNOUT:-0} == 1 ]] && echo true || echo false)")
   answer=$( { printf '<?php $req = json_decode(base64_decode("%s"), true); ?>' "$(printf '%s' "$req" | base64 -w0)"; cat "$PKG/setup/reset-owner.php"; } \
-    | docker exec -i twocans-web php 2>/dev/null | tail -1)
+    | timeout -k 5 60 docker exec -i twocans-web php 2>/dev/null | tail -1)
   if [[ "$answer" == '{"ok":true'* ]]; then
     printf '%s,"password":%s}\n' "${answer%\}}" "$(json "$password")" > "$VAR/owner-reset.json.tmp" && for_window "$VAR/owner-reset.json"
     say "the Owner account was reset"
@@ -441,7 +441,7 @@ reset_owner() {
 # The calls going on now, while the window's Live tab is open.
 write_live() {
   local live
-  live=$(docker exec -i twocans-web php < "$PKG/setup/live.php" 2>/dev/null | tail -1)
+  live=$(timeout -k 5 20 docker exec -i twocans-web php < "$PKG/setup/live.php" 2>/dev/null | tail -1)
   [[ "$live" == "{"*"}" ]] || live='{"calls":[]}'
   printf '%s\n' "$live" > "$VAR/live.json.tmp" && for_window "$VAR/live.json"
 }
@@ -450,7 +450,7 @@ write_live() {
 # failed transcriptions back. Prints its JSON answer.
 act() {   # JSON request
   { printf '<?php $req = json_decode(base64_decode("%s"), true); ?>' "$(printf '%s' "$1" | base64 -w0)"; cat "$PKG/setup/act.php"; } \
-    | docker exec -i twocans-web php 2>/dev/null | tail -1
+    | timeout -k 5 60 docker exec -i twocans-web php 2>/dev/null | tail -1
 }
 
 # Everything the household has, in a zip — as ./twocans export makes it,
@@ -519,7 +519,7 @@ apply_cert() {
     && mv "$TWOCANS_CERTS/fullchain.pem.new" "$TWOCANS_CERTS/fullchain.pem" && mv "$TWOCANS_CERTS/privkey.pem.new" "$TWOCANS_CERTS/privkey.pem" \
     || { CERT_ERROR="Couldn't copy the certificate into twocans."; return 1; }
   echo "$sum" > "$VAR/https.applied"
-  docker exec twocans-web nginx -s reload >> "$LOG" 2>&1
+  timeout -k 5 30 docker exec twocans-web nginx -s reload >> "$LOG" 2>&1
   say "HTTPS now uses DSM's certificate $id${domain:+ for $domain}, as DSM has it today"
 }
 
@@ -611,7 +611,7 @@ handle_request() {
       [[ "$answer" == '{"ok":true'* ]]; rc=$? ;;
     reregister)
       say "registering the phone line again, as ${by:-someone} asked in DSM"
-      docker exec twocans-asterisk asterisk -rx 'pjsip send register *all' 2>&1 | tee -a "$LOG" >/dev/null; rc=${PIPESTATUS[0]}
+      timeout -k 5 30 docker exec twocans-asterisk asterisk -rx 'pjsip send register *all' 2>&1 | tee -a "$LOG" >/dev/null; rc=${PIPESTATUS[0]}
       sleep 4; write_stats ;;
     transcription)
       local value

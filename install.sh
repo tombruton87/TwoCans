@@ -1276,6 +1276,18 @@ fi
 
 if $BUILD_LOCALLY; then
   quietly "Building the images for $(uname -m)" "${COMPOSE[@]}" build
+elif $PACKAGE; then
+  # The Synology package: nobody watches a spinner there, so Docker's own
+  # progress goes into the package's log, where people look. A download that
+  # stalls would otherwise wait for ever: each go gets half an hour, and a
+  # second one carries on from the layers the first finished.
+  echo "  Fetching the latest images — a few hundred MB after an update, so give it a few minutes…"
+  pulled=false
+  for try in 1 2; do
+    if timeout -k 10 1800 "${COMPOSE[@]}" pull; then pulled=true; break; fi
+    (( try == 1 )) && warn "the download stopped or stalled — trying again, from where it got to"
+  done
+  $pulled || { bad "${bold}Fetching the latest images didn't work.${off}"; note "Check the Synology can reach the internet (Docker Hub), then start twocans again: Package Center → twocans → Run."; exit 1; }
 else
   quietly "Fetching the latest images" "${COMPOSE[@]}" pull
 fi

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- The Synology package's setup could hang for good, leaving twocans' DSM
+  window on "Starting your request…" and its Update button gone, though
+  twocans itself was fine: each look it takes at the app and the phone
+  service now has a time limit, and the window says when setup isn't
+  answering. (In the 0.1.11-3 package.)
+- Updating on a Synology looked frozen while the new images downloaded, and
+  a stalled download waited for ever. Docker's progress now goes into the
+  package's log, each go at the download gets half an hour, and a second
+  one carries on from where the first got to. (In the 0.1.11-3 package.)
+
 ## [0.1.11] - 2026-10-22
 
 A security release: please update. twocans' web image now runs PHP 8.3.36,

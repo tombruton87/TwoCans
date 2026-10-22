@@ -209,7 +209,7 @@
 "The Logs say why. Once it's sorted, start it again in Package Center (twocans → Run).": "I registri dicono perché. Una volta risolto, riavvialo dal Centro pacchetti (twocans → Esegui).",
 "The Synology": "Il Synology",
 "The app is running {app}, older than this package ({pkg}). Run setup again to fetch the newest images, once they've been published.": "L'app usa la versione {app}, più vecchia di questo pacchetto ({pkg}). Esegui di nuovo l'installazione per scaricare le immagini più recenti, quando saranno pubblicate.",
-"The first time takes a while — the Logs show how it's going.": "La prima volta ci vuole un po': i registri mostrano come procede.",
+"The first time takes a while, and after an update the new version downloads first — a few minutes. The Logs show how it's going.": "La prima volta ci vuole un po', e dopo un aggiornamento si scarica prima la nuova versione: qualche minuto. I registri mostrano come procede.",
 "The household": "La famiglia",
 "The numbers come from twocans itself, so they appear once it's running.": "I numeri arrivano da twocans stesso, quindi compaiono quando è in funzione.",
 "The phone line": "La linea telefonica",

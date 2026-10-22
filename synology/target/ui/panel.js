@@ -221,11 +221,12 @@
 
     if (d.state === "failed") hero("bad", "alert", t("Setting twocans up stopped"), t("The Logs say why. Once it's sorted, start it again in Package Center (twocans → Run)."));
     else if (d.state === "stopped") hero("idle", "pause", t("twocans is stopped"), t("Start it in Package Center (twocans → Run)."));
-    else if (d.state === "starting") hero("warn", "alert", t("Setting twocans up…"), t("The first time takes a while — the Logs show how it's going."));
+    else if (d.state === "starting") hero("warn", "alert", t("Setting twocans up…"), t("The first time takes a while, and after an update the new version downloads first — a few minutes. The Logs show how it's going."));
     else if (busy === "updating twocans") hero("warn", "alert", t("Updating twocans") + "…", t("twocans stops, and starts again with the new version. This window may close — open it again in a minute or two."));
     else if (busy) hero("warn", "alert", t(BUSY[busy] || busy) + "…", t("This takes a moment."));
-    else if (d.pending) hero("warn", "alert", t("Starting your request…"), "");
+    // Stale before pending: a request nobody's picking up is the setup container not answering.
     else if (stale || !s) hero("warn", "alert", t("twocans isn't answering"), t("Its setup container may be busy, or stopped — Package Center shows which."));
+    else if (d.pending) hero("warn", "alert", t("Starting your request…"), "");
     else {
       var core = s.parts.filter(function (p) { return p.name !== "twocans-setup"; });
       var down = core.filter(function (p) { return partState(p, off)[1] === "bad"; });
