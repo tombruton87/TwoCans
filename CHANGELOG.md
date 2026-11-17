@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Jokes out of the box.** The joke line (258) now starts with 20 jokes of
+  its own — eight of them Paw Patrol — told in six voices, with their
+  transcripts. Existing households get them with their next update; one
+  deleted isn't added back, and one already there isn't doubled.
+
 ### Fixed
 - The Synology package's setup could hang for good, leaving twocans' DSM
   window on "Starting your request…" and its Update button gone, though

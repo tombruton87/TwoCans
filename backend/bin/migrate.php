@@ -63,6 +63,19 @@ foreach ($files as $file) {
 echo str_repeat('=', 52), "\n";
 echo $statusOnly ? "status only, nothing applied\n" : ($pending === 0 ? "already up to date\n" : "{$pending} migration(s) applied\n");
 
+// The jokes twocans ships with: any this household hasn't been offered yet.
+if (!$statusOnly) {
+    try {
+        $added = DefaultJokes::seed();
+        if ($added > 0) {
+            echo "{$added} of twocans' own jokes added to the joke line\n";
+        }
+    } catch (Throwable $e) {
+        // A joke line without them still works; the next update tries again.
+        echo "the default jokes weren't added: {$e->getMessage()}\n";
+    }
+}
+
 /**
  * Split a migration file into statements.
  *

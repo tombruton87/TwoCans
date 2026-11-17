@@ -58,6 +58,7 @@ require __DIR__ . '/PasskeyRepository.php';
 require __DIR__ . '/Mqtt.php';
 require __DIR__ . '/HomeAssistant.php';
 require __DIR__ . '/JokeRepository.php';
+require __DIR__ . '/DefaultJokes.php';
 require __DIR__ . '/DialplanRuleRepository.php';
 require __DIR__ . '/SettingsRepository.php';
 require __DIR__ . '/Retention.php';

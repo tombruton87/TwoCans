@@ -54,6 +54,25 @@ run together.
 | `bedtime-in.wav`, `bedtime-in-an-hour-and.wav`, `bedtime-in-an-hour.wav`, `bedtime-minutes.wav`, `bedtime-now.wav` | "Bedtime is in" (cut from the next one, the take that says its B) … "minutes!", "Bedtime is in an hour and", "Bedtime is in an hour.", "It's bedtime! Night night, sleep tight!" |
 | `silly-say.wav`, `silly-chipmunk.wav`, `silly-giant.wav`, `silly-again.wav` | Silly voices: "Say something silly after the beep. Then press the hash key.", "Here's you as a chipmunk!", "And here's you as a giant!", "Press 1 to have another go, or hang up to finish." |
 
+## The joke line — `jokes/`
+
+Jokes every household starts with (dial 258, or whatever number it picks),
+added to its own joke library when the database is updated — on install and
+on every update after (`DefaultJokes`, from `bin/migrate.php`). A joke the
+household deletes isn't added again, and one it already has isn't doubled.
+
+`jokes.json` pairs each clip with its transcript, written by hand: puns are
+homophones, and speech-to-text gets them wrong ("away for so long" for *a
+wafer so long*). The clips were generated with Higgsfield's text-to-speech
+(Seed Audio, preset voices Isla, Imogen, Tamsin, Archie, Alistair and Fraser
+— named in `jokes.json`) and are already in the line's format, so they're
+copied in as they are.
+
+| Files | Say |
+|---|---|
+| `01-chase-pizza.wav` … `08-chase-on-the-case.wav` | Paw Patrol jokes: Chase's pup-peroni, Rubble who digs it, Marshall's high school, Skye's high marks, Rocky who recycles, pup-corn, Zuma's letter C, Chase on the case |
+| `09-eggs-crack-up.wav` … `20-moon-eclipse.wav` | Eggs that crack up, a bulldozer, a stuffed teddy, a carrot that sounds like a parrot, a biscuit whose mum was a wafer so long, a sea that waved, a gummy bear, a karate pork chop, purr-ple, the lettuce knock-knock, a snowman puddle, and the moon's eclipse |
+
 ## Sleeps till Christmas — `christmas/`
 
 Santa, counting down the sleeps (dial 1225, or whatever number the household
